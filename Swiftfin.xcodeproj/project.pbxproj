@@ -911,7 +911,7 @@
 			baseConfigurationReferenceAnchor = E150B7D12DFF2E7C00DC7CF4 /* XcodeConfig */;
 			baseConfigurationReferenceRelativePath = Shared.xcconfig;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-dark-jellyfin AppIcon-dark-green AppIcon-dark-orange AppIcon-dark-red AppIcon-dark-yellow";
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-dark-khylo AppIcon-dark-green AppIcon-dark-orange AppIcon-dark-red AppIcon-dark-yellow";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
@@ -927,7 +927,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.4.1;
-				PRODUCT_NAME = Swiftfin;
+				PRODUCT_NAME = Khylo;
 				SDKROOT = appletvos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -942,7 +942,7 @@
 			baseConfigurationReferenceAnchor = E150B7D12DFF2E7C00DC7CF4 /* XcodeConfig */;
 			baseConfigurationReferenceRelativePath = Shared.xcconfig;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-dark-jellyfin AppIcon-dark-green AppIcon-dark-orange AppIcon-dark-red AppIcon-dark-yellow";
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-dark-khylo AppIcon-dark-green AppIcon-dark-orange AppIcon-dark-red AppIcon-dark-yellow";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
@@ -958,7 +958,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.4.1;
-				PRODUCT_NAME = Swiftfin;
+				PRODUCT_NAME = Khylo;
 				SDKROOT = appletvos;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -1101,7 +1101,7 @@
 		5377CC1C263B596B003A4E83 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-dark-jellyfin AppIcon-dark-green AppIcon-dark-orange AppIcon-dark-red AppIcon-dark-yellow";
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-dark-khylo AppIcon-dark-green AppIcon-dark-orange AppIcon-dark-red AppIcon-dark-yellow";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon-dark-blue";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
@@ -1126,7 +1126,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_CFLAGS = "";
-				PRODUCT_NAME = Swiftfin;
+				PRODUCT_NAME = Khylo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -1140,7 +1140,7 @@
 		5377CC1D263B596B003A4E83 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-dark-jellyfin AppIcon-dark-green AppIcon-dark-orange AppIcon-dark-red AppIcon-dark-yellow";
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-dark-khylo AppIcon-dark-green AppIcon-dark-orange AppIcon-dark-red AppIcon-dark-yellow";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon-dark-blue";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
@@ -1166,8 +1166,8 @@
 				);
 				MARKETING_VERSION = 1.0;
 				OTHER_CFLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = org.jellyfin.swiftfin;
-				PRODUCT_NAME = Swiftfin;
+				PRODUCT_BUNDLE_IDENTIFIER = org.khylo.app;
+				PRODUCT_NAME = Khylo;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;

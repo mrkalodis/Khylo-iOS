@@ -196,6 +196,8 @@ public struct KhyloMediaItem: Identifiable, Hashable, Sendable {
         }
         return comp?.url
     }
+}
+
 // MARK: - Library Model
 
 public struct KhyloMediaLibrary: Identifiable, Hashable, Sendable {

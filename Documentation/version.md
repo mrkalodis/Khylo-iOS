@@ -1,6 +1,6 @@
-# Swiftfin Minimum Supported OS Policy
+# Khylo Minimum Supported OS Policy
 
-Determining the minimum supported OS is a deliberate decision that balances keeping up with new developments and maintaining compatibility with older devices. Some applications are simple enough to continue supporting older OS versions, but for projects like Swiftfin, doing so comes with trade-offs:
+Determining the minimum supported OS is a deliberate decision that balances keeping up with new developments and maintaining compatibility with older devices. Some applications are simple enough to continue supporting older OS versions, but for projects like Khylo, doing so comes with trade-offs:
 
 - Maintaining a low minimum OS while adding new features requires constant version checks.
 - Portions of code often need to be segregated for old vs. new OS support.
@@ -8,7 +8,7 @@ Determining the minimum supported OS is a deliberate decision that balances keep
 
 ## SwiftUI Considerations
 
-Swiftfin is built using **SwiftUI**, Apple’s primary UI framework. While the early years of SwiftUI had limitations, the framework has matured significantly:
+Khylo is built using **SwiftUI**, Apple’s primary UI framework. While the early years of SwiftUI had limitations, the framework has matured significantly:
 
 - Annual updates bring conveniences that simplify feature development.
 - Some improvements are foundational, while others are for developer convenience.
@@ -16,14 +16,14 @@ Swiftfin is built using **SwiftUI**, Apple’s primary UI framework. While the e
 
 ## Development Philosophy
 
-Jellyfin caters to a “hacker” audience, and older devices are often perfectly suited for personal media consumption. However, Swiftfin must prioritize modern development practices:
+Khylo caters to a “hacker” audience, and older devices are often perfectly suited for personal media consumption. However, Khylo must prioritize modern development practices:
 
 - **No consideration** will be given for OS versions that allow jailbreaking or reflect personal dislike of newer versions.
-- While other Jellyfin clients may support older OS versions, they are **not built with SwiftUI**, which introduces additional constraints.
+- While other Khylo clients may support older OS versions, they are **not built with SwiftUI**, which introduces additional constraints.
 
 ## OS Support Timeline
 
-Decisions to drop OS versions will aim to be communicated **months in advance**. Work targeting the latest Swiftfin version for a given OS may also delay these changes.
+Decisions to drop OS versions will aim to be communicated **months in advance**. Work targeting the latest Khylo version for a given OS may also delay these changes.
 
 Older OS versions may still receive **limited support**:
 
@@ -32,4 +32,4 @@ Older OS versions may still receive **limited support**:
 
 ## Questions, Comments, or Concerns
 
-Our discussion for this topic can be found at [Supported OS Versions](https://github.com/jellyfin/Swiftfin/discussions/1564).
+Our discussion for this topic can be found at [Supported OS Versions](https://github.com/khylo/Khylo/discussions/1564).

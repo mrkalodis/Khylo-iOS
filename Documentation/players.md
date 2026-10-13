@@ -1,6 +1,6 @@
 # Player Differences
 
-Swiftfin offers two standard player options: **VLC** (SwiftVLC) and **Native** (AVPlayer). The Swiftfin team recommends using VLC for optimal compatibility and features, though Native (AVPlayer) is also available for certain cases that benefit from Apple's native capabilities. All video, audio, and subtitle formats listed are supported for direct playback but may be repackaged based on container support. If transcoding is enabled on your server, any unsupported formats will be converted automatically.
+Khylo offers two standard player options: **VLC** (SwiftVLC) and **Native** (AVPlayer). The Khylo team recommends using VLC for optimal compatibility and features, though Native (AVPlayer) is also available for certain cases that benefit from Apple's native capabilities. All video, audio, and subtitle formats listed are supported for direct playback but may be repackaged based on container support. If transcoding is enabled on your server, any unsupported formats will be converted automatically.
 
 ---
 
@@ -46,7 +46,7 @@ Swiftfin offers two standard player options: **VLC** (SwiftVLC) and **Native** (
 
 **Notes:**
 
-- [1] Requires that files conform to very limited codecs and HDR profiles. [See device profiles](https://github.com/jellyfin/Swiftfin/blob/main/Shared/Objects/VideoPlayerType/VideoPlayerType%2BNative.swift) for a full, up-to-date list of requirements.
+- [1] Requires that files conform to very limited codecs and HDR profiles. [See device profiles](https://github.com/khylo/Khylo/blob/main/Shared/Objects/VideoPlayerType/VideoPlayerType%2BNative.swift) for a full, up-to-date list of requirements.
 
 - Unsupported containers will require transcoding or remuxing to play.
 
@@ -123,7 +123,7 @@ Swiftfin offers two standard player options: **VLC** (SwiftVLC) and **Native** (
 
 - [1] AV1 requires A17 Pro, M3, or newer for acceptable performance. Older devices that do not report AV1 capabilities have AV1 disabled by default.
 
-- [2] HEVC requires A8X Pro, M1, or newer for acceptable performance. Older devices that do not report HEVC capabilities have HEVC disabled by default. All devices supported by Swiftfin should have HEVC available.
+- [2] HEVC requires A8X Pro, M1, or newer for acceptable performance. Older devices that do not report HEVC capabilities have HEVC disabled by default. All devices supported by Khylo should have HEVC available.
 
 - [3] VVC has mixed reports of support by VLC. Apple does not provide an API to check VVC capabilities, so VVC is disabled by default.
 
@@ -183,7 +183,7 @@ Swiftfin offers two standard player options: **VLC** (SwiftVLC) and **Native** (
 
 - [1] Uses fallback layers and ignores dynamic metadata.
 
-- [2] May cause playback issues on [Jellyfin Server 10.11.5 and earlier](https://github.com/jellyfin/jellyfin/pull/15835) when using MKV containers.
+- [2] May cause playback issues on [Khylo Server 10.11.5 and earlier](https://github.com/khylo/khylo/pull/15835) when using MKV containers.
 
 - [3] Requires an AV1 compatible device (Apple A17 Pro or M3 and above).
 

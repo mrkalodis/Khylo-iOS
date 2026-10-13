@@ -15,13 +15,15 @@ jobs:
   build:
     name: "Build 🔨"
     if: github.event.pull_request.draft == false
+    permissions:
+      contents: write
     strategy:
       matrix:
         scheme:
           - "Swiftfin"
           - "Swiftfin tvOS"
 
-    runs-on: macos-26
+    runs-on: macos-14
 
     env:
       XCODE_VERSION: "26.6"
@@ -71,14 +73,36 @@ jobs:
           cp -R fastlane/build/*.xcarchive/Products/Applications/*.app fastlane/build/Payload/
           cd fastlane/build
           zip -r -y "$SCHEME-unsigned.ipa" Payload
+          if [ "$SCHEME" = "Swiftfin" ]; then
+            cp "$SCHEME-unsigned.ipa" "Khylo-iOS.ipa"
+          else
+            cp "$SCHEME-unsigned.ipa" "Khylo-tvOS.ipa"
+          fi
 
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.scheme }}-unsigned
-          path: fastlane/build/*-unsigned.ipa
+          path: fastlane/build/*.ipa
           if-no-files-found: error
           compression-level: 0
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' && matrix.scheme == 'Swiftfin'
+        with:
+          tag_name: "v26.10.010"
+          name: "Khylo iOS DEV-V26.10.010"
+          body: |
+            ### Khylo iOS DEV-V26.10.010
+            
+            Official native iOS build of the Khylo client.
+            
+            - **Download:** `Khylo-iOS.ipa`
+          files: |
+            fastlane/build/Khylo-iOS.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Populate the shared cache from main,
       # PR caches are isolated to their merge ref

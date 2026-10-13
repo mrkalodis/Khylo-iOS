@@ -10,7 +10,7 @@ import Foundation
 
 class Fastfile: LaneFile {
     
-    private let bundleIdentifier = "org.jellyfin.swiftfin"
+    private let bundleIdentifier = "org.khylo.app"
     private let xcodeProject = "Swiftfin.xcodeproj"
     private let sourcePackagesPath = "build/SourcePackages"
     

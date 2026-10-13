@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Khylo</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Khylo</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -25,8 +25,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>swiftfin</string>
-				<string>jellyfin</string>
+				<string>khylo</string>
 			</array>
 		</dict>
 	</array>
@@ -53,11 +52,11 @@
 		<string>_F007D354._googlecast._tcp</string>
 	</array>
 	<key>NSFaceIDUsageDescription</key>
-	<string>${PRODUCT_NAME} uses Face ID to lock and access local users.</string>
+	<string>Khylo uses Face ID to lock and access local profiles.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>${PRODUCT_NAME} uses the local network to connect to your Jellyfin server and discover Cast-enabled devices on your Wi-Fi network.</string>
+	<string>Khylo uses the local network to connect to your Khylo media server and discover Cast-enabled devices on your Wi-Fi network.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>${PRODUCT_NAME} uses your location to identify the current Wi-Fi network.</string>
+	<string>Khylo uses your location to identify the current Wi-Fi network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>${PRODUCT_NAME} uses the microphone to listen for ultrasonic tokens when pairing with nearby Cast devices.</string>
 	<key>UIAppFonts</key>

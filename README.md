@@ -1,60 +1,98 @@
 <div align="center">
-  <img alt="Swiftfin" src="./Resources/primary-wide.svg">
+  <img alt="Khylo" src="./Swiftfin/Khylo/Resources/khylo_wordmark.png" width="340">
 
-  <h1>Swiftfin</h1>
-  <img src="https://img.shields.io/badge/iOS-18+-red"/>
-  <img src="https://img.shields.io/badge/tvOS-26+-red"/>
-  <img src="https://img.shields.io/badge/Jellyfin-12.0-9962be"/>
-  
-  <a href="https://translate.jellyfin.org/engage/swiftfin/">
-    <img src="https://translate.jellyfin.org/widgets/swiftfin/-/svg-badge.svg"/>
-  </a>
-  <a href="https://matrix.to/#/#jellyfin:matrix.org">
-    <img src="https://img.shields.io/matrix/jellyfin:matrix.org">
-  </a>
-  <a href="https://discord.gg/zHBxVSXdBV">
-    <img src="https://img.shields.io/badge/Talk%20on-Discord-brightgreen">
-  </a>
+  <p align="center">
+    <b>The Next-Generation Native iOS Client for Khylo Media Ecosystem</b>
+  </p>
+
+  <p align="center">
+    <img src="https://img.shields.io/badge/Platform-iOS%2018%2B-D97732?style=flat-square&labelColor=08090A"/>
+    <img src="https://img.shields.io/badge/Architecture-Swift%206%20%2F%20SwiftUI-D97732?style=flat-square&labelColor=08090A"/>
+    <img src="https://img.shields.io/badge/Theme-Charcoal%20%26%20Amber-D97732?style=flat-square&labelColor=08090A"/>
+    <img src="https://img.shields.io/badge/License-MPL--2.0-D97732?style=flat-square&labelColor=08090A"/>
+    <img src="https://img.shields.io/badge/Version-DEV--V26.10.010-D97732?style=flat-square&labelColor=08090A"/>
+  </p>
 </div>
 
-<p align="center">
-  <b>Swiftfin</b> is a modern video client for the <a href="https://github.com/jellyfin/jellyfin">Jellyfin</a> media server. Made using Swift to maximize direct play with the power of <b>VLC</b> and look <b>native</b> on all classes of Apple devices.
-</p>
+---
 
-## ⚡️ Download
+## 🌟 Overview
 
-<a href="https://apps.apple.com/us/app/swiftfin/id1604098728">
-  <img height=75 alt="Download on the Apple App Store" src="./Resources/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg"/>
-</a>
+**Khylo for iOS** is a 100% native Apple client built to deliver complete feature parity with the Khylo Android TV ecosystem. Styled in our signature charcoal (`#08090A`) and warm amber accent (`#D97732`), it pairs high-fidelity media playback with a fluid, touch-optimized mobile experience designed specifically for iOS.
 
-## 🛠️ TestFlight
+---
 
-Use the TestFlight version to test new features and bug fixes before being published to the App Store. We are grateful for your time and resources for reporting new bugs.
+## 🚀 Key Features
 
-<a href="https://testflight.apple.com/join/SqNPfdxq">
-  <img height=75 alt="Get the beta on TestFlight" src="./Resources/testflight.svg"/>
-</a>
+### 🎬 Unified Video Player
+- **Direct Playback Engine:** High-performance playback powered by native AVPlayer and VLCKit with hardware-accelerated HEVC, AV1, and VP9 decoding.
+- **Intelligent Media Segments:** Auto-detects and offers one-tap skipping for Intros, Recaps, and Outros.
+- **Gesture HUDs:** Vertical swipe controls for Brightness (left) and Volume (right); horizontal scrub with millisecond-precision feedback.
+- **Up Next Countdown:** Non-intrusive 10-second end-credits transition card automatically queueing subsequent episodes.
+- **Advanced Stream Selector:** Instant switching between audio tracks (Dolby Atmos, TrueHD, 5.1) and subtitle streams (SRT, PGS, VTT) with offset synchronization.
 
-## 📖 Documentation
+### 📺 Live TV & Multi-View
+- **Multi-Stream Multi-View:** Watch up to **4 live streams simultaneously** with five distinct layout modes (Single, Split, Quad, 1+3 Focus PIP).
+- **One-Tap Audio Focus:** Instant tap to redirect primary audio to any active stream.
+- **24/7 Linear EPG:** Virtual linear channel guide with mid-program join and real-time progress indicators.
 
-Swiftfin provides detailed documentation to help you understand key aspects of the app and its development approach:
+### 🎵 Lossless Music Player
+- **Equalizer Visualization:** Real-time 5-band animated equalizer bars reflecting playback status.
+- **Ambient Ken Burns:** Dynamic artist backdrop motion creating a living music experience.
+- **Queue Management:** Interactive drag-to-reorder play queue with smart shuffle and repeat modes.
 
-- [🎞️ Library Support](https://github.com/jellyfin/Swiftfin/blob/main/Documentation/libraries.md) — Information on **library compatibility** and supported media types in Swiftin.
-- [🎬 Media Playback](https://github.com/jellyfin/Swiftfin/blob/main/Documentation/players.md) — Learn about Swiftfin's **Native** and **VLC** players and how their features vary.
-- [🧩 OS Version Support](https://github.com/jellyfin/Swiftfin/blob/main/Documentation/version.md) — Read about how we determine the **minimum supported OS** and which versions of iOS & tvOS are supported.
-- [🐞 Common Issues](https://github.com/jellyfin/Swiftfin/blob/main/Documentation/common_issues.md) — If you are experiencing an issue with Swiftfin, this is the best place to start.
-- [💜 Supporting Development](https://jellyfin.org/docs/general/contributing/direct-donations) — Learn how you can **support the project developers** and help keep Swiftfin improving.
+### 🎧 Warm Paper Audiobook Player
+- **Parchment Theme:** Specially tuned warm paper interface designed for comfortable long listening sessions.
+- **Dual Progress Metrics:** Real-time chapter progress and overall audiobook completion percentages.
+- **Narration Controls:** Variable playback speeds ($0.5\times$ to $2.5\times$), sleep timers (15m, 30m, 45m, 60m, end of chapter), and 10s rewind / 30s skip.
 
-## ⚙️ Development
+### 📖 Integrated EPUB Reader
+- **Paginated Reading Engine:** Fluid page flips with dynamic font scaling and margin adjustment.
+- **Reading Themes:** Dedicated Sepia, Paper, and Night modes.
+- **Interactive TOC:** Full chapter navigation drawer with reading progress bookmarks.
 
-Thank you for your interest in Swiftfin! Please check out the [Contribution Guidelines](https://github.com/jellyfin/Swiftfin/blob/main/Documentation/contributing.md) to get started.
+### 🛡️ Profiles & Family PIN Protection
+- **Multi-Profile Switcher:** Instant account and profile switching with personalized Continue Watching, Next Up, and Recommendations.
+- **Biometric Security:** PIN protection enhanced with **Face ID** and **Touch ID** authentication.
+- **Kids Mode:** Dedicated curated environment restricting content strictly to G, PG, TV-Y, and TV-G ratings.
 
-## 📚 Translations
+### 🥚 Klyrp Easter Egg
+- Hidden interactive easter egg accessible via 7 rapid taps on the app build version in Settings.
 
-**Don't see Swiftfin in your language?**
+---
 
-Check out our [Weblate instance](https://translate.jellyfin.org/projects/swiftfin/) to help translate Swiftfin and other Jellyfin projects.
+## 📱 Architecture & Tech Stack
 
-<a href="https://translate.jellyfin.org/engage/swiftfin/">
-<img src="https://translate.jellyfin.org/widgets/swiftfin/-/multi-auto.svg"/>
-</a>
+| Layer | Technology |
+| :--- | :--- |
+| **Language** | Swift 6.0 |
+| **UI Framework** | SwiftUI + UIKit Interop |
+| **Design Tokens** | Khylo Charcoal (`#08090A`), Khylo Amber (`#D97732`), Zinc Highlights |
+| **Media Engine** | AVFoundation + VLCKit |
+| **Authentication** | Direct Token Auth, QR Code Quick Connect, Face ID / Touch ID |
+| **EPUB Engine** | Native ZIP & XML / XHTML Parsing |
+
+---
+
+## 📦 Building & Development
+
+### Requirements
+- **macOS:** macOS 14.0 (Sonoma) or newer
+- **Xcode:** 15.4 or newer
+- **iOS Target:** iOS 18.0+
+
+### Setup
+```bash
+# Clone the repository
+git clone https://github.com/mrkalodis/Khylo-iOS.git
+cd Khylo-iOS
+
+# Open in Xcode
+open Swiftfin.xcodeproj
+```
+
+---
+
+## 📄 License
+
+Khylo iOS is licensed under the [Mozilla Public License 2.0 (MPL-2.0)](LICENSE).

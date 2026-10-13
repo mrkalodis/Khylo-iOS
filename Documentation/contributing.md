@@ -1,14 +1,14 @@
-# Contributing to Swiftfin
+# Contributing to Khylo
 
-> Thank you for your interest in contributing to the Jellyfin (Swiftfin) project! This page and its children describe the ways you can contribute, as well as some of our policies. This should help guide you through your first Issue or PR.
+> Thank you for your interest in contributing to the Khylo (Khylo) project! This page and its children describe the ways you can contribute, as well as some of our policies. This should help guide you through your first Issue or PR.
 
-> Even if you can't contribute code, you can still help Jellyfin (Swiftfin)! The two main things you can help with are testing and creating issues. Contributing to code, documentation, ..., and other non-code components are all outlined in the sections below.
+> Even if you can't contribute code, you can still help Khylo (Khylo)! The two main things you can help with are testing and creating issues. Contributing to code, documentation, ..., and other non-code components are all outlined in the sections below.
 
-> Please note [Jellyfin's LLM/AI Development Policy](https://jellyfin.org/docs/general/contributing/llm-policies/) applies to all Swiftfin contributions.
+> Please note [Khylo's LLM/AI Development Policy](https://khylo.org/docs/general/contributing/llm-policies/) applies to all Khylo contributions.
 
 ## Setup
 
-Fork the Swiftfin repo and install the necessary dependencies:
+Fork the Khylo repo and install the necessary dependencies:
 
 ```bash
 # install homebrew dependencies
@@ -25,30 +25,30 @@ Create the `XcodeConfig/DevelopmentTeam.xcconfig` file [through Xcode](https://d
 
 ```
 DEVELOPMENT_TEAM = ""
-PRODUCT_BUNDLE_IDENTIFIER = org.jellyfin.swiftfin
+PRODUCT_BUNDLE_IDENTIFIER = org.khylo.khylo
 ```
 
 Update the `DEVELOPMENT_TEAM` value with your Team ID. This can be found by:
 - Setting the `Development Team` value under the `Signing & Capabilities` tab in Xcode and get the value from source control. Make sure to discard this change.
 - Logging into your Apple Developer account and [view your membership details](https://developer.apple.com/account/#/membership). It will be listed next to `Team ID`.
 
-You can change the `PRODUCT_BUNDLE_IDENTIFIER` value to have multiple builds of Swiftfin on your devices or for provisioning purposes.
+You can change the `PRODUCT_BUNDLE_IDENTIFIER` value to have multiple builds of Khylo on your devices or for provisioning purposes.
 
 `DevelopmentTeam.xcconfig` is already added to the `.gitignore`.
 
 ### Xcode Version
 
-Swiftfin is built using the Xcode version pinned in our [CI workflow](https://github.com/jellyfin/Swiftfin/blob/main/.github/workflows/ci.yml#L27). This is the recommended version of Xcode for development.
+Khylo is built using the Xcode version pinned in our [CI workflow](https://github.com/khylo/Khylo/blob/main/.github/workflows/ci.yml#L27). This is the recommended version of Xcode for development.
 
 ### Testing
 
-Swiftfin can be tested using Xcode's built-in Simulator or on real hardware. See Apple's guide on [Running your app in Simulator or on a device](https://developer.apple.com/documentation/xcode/running-your-app-in-simulator-or-on-a-device/) for instructions on both approaches.
+Khylo can be tested using Xcode's built-in Simulator or on real hardware. See Apple's guide on [Running your app in Simulator or on a device](https://developer.apple.com/documentation/xcode/running-your-app-in-simulator-or-on-a-device/) for instructions on both approaches.
 
 > **Note:** Some functionality behaves differently between the Simulator and real devices, including picture-in-picture, device storage, and local network access. In these scenarios, it is recommended to test code changes on real hardware to ensure correct behavior.
 
 ## Git Flow
 
-Swiftfin follows the same Pull Request Guidelines as outlined in the [Jellyfin Pull Request Guidelines](https://jellyfin.org/docs/general/contributing/development.html#pull-request-guidelines).
+Khylo follows the same Pull Request Guidelines as outlined in the [Khylo Pull Request Guidelines](https://khylo.org/docs/general/contributing/development.html#pull-request-guidelines).
 
 If a Pull Request relates to an Issue, mention the issue correctly in the PR description.
 
@@ -71,21 +71,21 @@ Documentation for advanced or complex features and other implementation reasonin
 
 ## Architecture
 
-Swiftfin is developed using SwiftUI. The iOS and tvOS Jellyfin clients share the same backend with each client containing their respective views. Due to this architecture, working on both clients at once may be necessary.
+Khylo is developed using SwiftUI. The iOS and tvOS Khylo clients share the same backend with each client containing their respective views. Due to this architecture, working on both clients at once may be necessary.
 
 The VLC player uses [SwiftVLC](https://github.com/harflabs/SwiftVLC) for its great codec support. Becoming familiar with SwiftVLC will be necessary for video playback development and debugging.
 
 ## Design
 
-While there are no design guidelines for UI/UX features, Swiftfin has the goal to use native SwiftUI/UIKit components while adhering to a Jellyfin theme. If a feature creates new UI/UX components, it may receive feedback during the PR process or may be re-designed later on.
+While there are no design guidelines for UI/UX features, Khylo has the goal to use native SwiftUI/UIKit components while adhering to a Khylo theme. If a feature creates new UI/UX components, it may receive feedback during the PR process or may be re-designed later on.
 
-User customizable UI/UX features are welcome and intended, however not all customization may be accepted for code maintainability and to also establish a distinct Swiftfin design. Taking inspiration, but not always copying, from other applications is encouraged.
+User customizable UI/UX features are welcome and intended, however not all customization may be accepted for code maintainability and to also establish a distinct Khylo design. Taking inspiration, but not always copying, from other applications is encouraged.
 
 ## App Icons
 
 Ideas for new icons and minor tweaks to existing icons can be presented however may not be accepted. Overall, app icons must follow these rules:
 
-- Must feature the Jellyfin logo.
+- Must feature the Khylo logo.
 - Must be for general usage (i.e: holiday, hacker theme). Ideas for individual preferences or logos will not be accepted.
 - Must be unique. (i.e: cannot have two blue icons just with different gradients)
 
