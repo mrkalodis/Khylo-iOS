@@ -1,0 +1,125 @@
+name: "Build Khylo iOS IPA 📦"
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-ipa:
+    name: "Build Khylo IPA 📦"
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobachev/Xcode-select@v2
+        with:
+          xcode-version: '15.4'
+
+      - name: Install Homebrew dependencies
+        run: |
+          brew install swiftformat swiftlint || true
+
+      - name: Restore Swift packages cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            build/SourcePackages/checkouts
+            build/SourcePackages/repositories
+            build/SourcePackages/artifacts
+            build/SourcePackages/workspace-state.json
+          key: spm-${{ runner.os }}-${{ runner.arch }}-15.4-${{ hashFiles('Swiftfin.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ runner.arch }}-15.4-
+
+      - name: Build and Archive
+        run: |
+          xcodebuild archive \
+            -project Swiftfin.xcodeproj \
+            -scheme Swiftfin \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/Khylo.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            -clonedSourcePackagesDirPath build/SourcePackages
+
+      - name: Package into IPA
+        run: |
+          mkdir -p build/Payload
+          cp -r build/Khylo.xcarchive/Products/Applications/Swiftfin.app build/Payload/Khylo.app
+          cd build
+          zip -r -y Khylo-iOS.ipa Payload
+          cd ..
+
+      - name: Generate OTA Manifest Plist
+        run: |
+          cat << 'EOF' > build/manifest.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>items</key>
+              <array>
+                  <dict>
+                      <key>assets</key>
+                      <array>
+                          <dict>
+                              <key>kind</key>
+                              <string>software-package</string>
+                              <key>url</key>
+                              <string>https://github.com/mrkalodis/Khylo-iOS/releases/latest/download/Khylo-iOS.ipa</string>
+                          </dict>
+                      </array>
+                      <key>metadata</key>
+                      <dict>
+                          <key>bundle-identifier</key>
+                          <string>org.khylo.app</string>
+                          <key>bundle-version</key>
+                          <string>1.0.0</string>
+                          <key>kind</key>
+                          <string>software</string>
+                          <key>title</key>
+                          <string>Khylo</string>
+                      </dict>
+                  </dict>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Khylo-iOS-IPA
+          path: |
+            build/Khylo-iOS.ipa
+            build/manifest.plist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: "v26.10.010"
+          name: "Khylo iOS DEV-V26.10.010"
+          body: |
+            ### Khylo iOS DEV-V26.10.010
+            
+            Compiled native iOS build of the Khylo client.
+            
+            - **Download:** `Khylo-iOS.ipa`
+            - **Sideloading Instructions:**
+              1. Download `Khylo-iOS.ipa` to your computer.
+              2. Open **Sideloadly** or **AltServer**.
+              3. Select `Khylo-iOS.ipa`, enter your Apple ID, and install onto your connected iPhone.
+              4. On your iPhone, go to **Settings > General > VPN & Device Management > Trust**.
+          files: |
+            build/Khylo-iOS.ipa
+            build/manifest.plist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -29,7 +29,7 @@ struct SwiftfinApp: App {
             OverlayToastView {
                 PreferencesView {
                     WithLocalUserAuthentication {
-                        RootView()
+                        KhyloRootView()
                             .supportedOrientations(UIDevice.isPad ? .allButUpsideDown : .portrait)
                     }
                 }
