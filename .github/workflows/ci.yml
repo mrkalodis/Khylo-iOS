@@ -60,9 +60,7 @@ jobs:
           max_attempts: 3
           retry_on: error
           timeout_minutes: 60
-          command: bundle exec fastlane buildLane \
-            scheme:"\"${{ matrix.scheme }}\"" \
-            xcodeVersion:${{ env.XCODE_VERSION }}
+          command: bundle exec fastlane buildLane scheme:"\"${{ matrix.scheme }}\""
 
       - name: Package unsigned IPA
         env:
