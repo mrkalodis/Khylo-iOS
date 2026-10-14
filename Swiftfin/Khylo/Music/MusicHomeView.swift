@@ -18,6 +18,18 @@ public enum MusicHomeTab: String, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+// MARK: - Artist Summary Model
+
+public struct ArtistSummary: Identifiable, Hashable {
+    public let id: String
+    public let name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
 // MARK: - Music Home View
 
 public struct MusicHomeView: View {
@@ -25,19 +37,19 @@ public struct MusicHomeView: View {
     @State private var selectedTab: MusicHomeTab = .listenNow
     @State private var selectedTrackForPlayer: MusicTrack?
     @State private var selectedAlbum: AlbumSummary?
-    @State private var selectedArtist: (id: String, name: String)?
+    @State private var selectedArtist: ArtistSummary?
 
     private let sampleGenres = [
         "Electronic", "Soundtrack", "Ambient", "Classical", "Synthwave", "Rock"
     ]
 
-    private let sampleArtists = [
-        ("art-1", "Hans Zimmer"),
-        ("art-2", "Daft Punk"),
-        ("art-3", "Ludwig Göransson"),
-        ("art-4", "Trent Reznor"),
-        ("art-5", "Max Richter"),
-        ("art-6", "M83")
+    private let sampleArtists: [ArtistSummary] = [
+        ArtistSummary(id: "art-1", name: "Hans Zimmer"),
+        ArtistSummary(id: "art-2", name: "Daft Punk"),
+        ArtistSummary(id: "art-3", name: "Ludwig Göransson"),
+        ArtistSummary(id: "art-4", name: "Trent Reznor"),
+        ArtistSummary(id: "art-5", name: "Max Richter"),
+        ArtistSummary(id: "art-6", name: "M83")
     ]
 
     public init() {}
@@ -84,13 +96,8 @@ public struct MusicHomeView: View {
                 artworkURL: album.imageURL
             )
         }
-        .navigationDestination(isPresented: Binding(
-            get: { selectedArtist != nil },
-            set: { if !$0 { selectedArtist = nil } }
-        )) {
-            if let artist = selectedArtist {
-                ArtistView(artistId: artist.id, artistName: artist.name)
-            }
+        .navigationDestination(item: $selectedArtist) { artist in
+            ArtistView(artistId: artist.id, artistName: artist.name)
         }
     }
 
@@ -151,10 +158,10 @@ public struct MusicHomeView: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 20) {
-                        ForEach(sampleArtists, id: \.0) { id, name in
-                            Button(action: {
-                                selectedArtist = (id, name)
-                            }) {
+                        ForEach(sampleArtists) { artist in
+                            Button {
+                                selectedArtist = artist
+                            } label: {
                                 VStack(spacing: 8) {
                                     Circle()
                                         .fill(KhyloColors.accent.opacity(0.2))
@@ -166,7 +173,7 @@ public struct MusicHomeView: View {
                                         )
                                         .overlay(Circle().stroke(KhyloColors.border, lineWidth: 1))
 
-                                    Text(name)
+                                    Text(artist.name)
                                         .font(KhyloTypography.captionMedium)
                                         .foregroundColor(KhyloColors.textPrimary)
                                         .lineLimit(1)
@@ -232,11 +239,11 @@ public struct MusicHomeView: View {
                     .font(KhyloTypography.caption)
                     .foregroundColor(Color.white.opacity(0.8))
 
-                Button(action: {
+                Button {
                     if let first = sampleTracks.first {
                         selectedTrackForPlayer = first
                     }
-                }) {
+                } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "play.fill")
                             .font(.system(size: 13, weight: .bold))
@@ -257,12 +264,12 @@ public struct MusicHomeView: View {
     }
 
     private func recentTrackCard(track: MusicTrack) -> some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             selectedTrackForPlayer = track
-        }) {
+        } label: {
             VStack(alignment: .leading, spacing: 6) {
                 ZStack {
                     KhyloColors.surfaceElevated
@@ -303,9 +310,9 @@ public struct MusicHomeView: View {
             spacing: KhyloSpacing.md
         ) {
             ForEach(sampleAlbums) { album in
-                Button(action: {
+                Button {
                     selectedAlbum = album
-                }) {
+                } label: {
                     VStack(alignment: .leading, spacing: 6) {
                         ZStack {
                             KhyloColors.surfaceElevated
@@ -337,10 +344,10 @@ public struct MusicHomeView: View {
 
     private var artistsContent: some View {
         VStack(spacing: KhyloSpacing.sm) {
-            ForEach(sampleArtists, id: \.0) { id, name in
-                Button(action: {
-                    selectedArtist = (id, name)
-                }) {
+            ForEach(sampleArtists) { artist in
+                Button {
+                    selectedArtist = artist
+                } label: {
                     HStack(spacing: 14) {
                         Circle()
                             .fill(KhyloColors.accent.opacity(0.2))
@@ -352,7 +359,7 @@ public struct MusicHomeView: View {
                             )
 
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(name)
+                            Text(artist.name)
                                 .font(KhyloTypography.headline)
                                 .foregroundColor(KhyloColors.textPrimary)
 
@@ -410,7 +417,7 @@ private struct MusicGenreCard: View {
     }
 
     var body: some View {
-        Button(action: {}) {
+        Button {} label: {
             HStack {
                 Text(genre)
                     .font(KhyloTypography.headline)
