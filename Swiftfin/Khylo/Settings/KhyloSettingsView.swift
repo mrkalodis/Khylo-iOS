@@ -14,7 +14,7 @@ import UIKit
 
 // MARK: - Quality Option
 
-private struct QualityOption: Identifiable, Hashable {
+private struct SettingsQualityOption: Identifiable, Hashable {
     let id: Int
     let label: String
     let bitrateText: String
@@ -69,14 +69,14 @@ public struct KhyloSettingsView: View {
     // App constants
     public static let khyloBuildVersion: String = "DEV-V26.10.010"
 
-    private let qualityOptions: [QualityOption] = [
-        QualityOption(id: 0, label: "Auto (Recommended)", bitrateText: "Dynamic based on network"),
-        QualityOption(id: 1, label: "Maximum (120 Mbps)", bitrateText: "Original Remux 4K HDR"),
-        QualityOption(id: 2, label: "Very High (60 Mbps)", bitrateText: "High Bitrate 4K"),
-        QualityOption(id: 3, label: "High (20 Mbps)", bitrateText: "1080p Blu-ray Quality"),
-        QualityOption(id: 4, label: "Medium (10 Mbps)", bitrateText: "Fast 1080p Streaming"),
-        QualityOption(id: 5, label: "Low (4 Mbps)", bitrateText: "720p Cellular Quality"),
-        QualityOption(id: 6, label: "Data Saver (1.5 Mbps)", bitrateText: "480p Ultra-Low Bandwidth")
+    private let qualityOptions: [SettingsQualityOption] = [
+        SettingsQualityOption(id: 0, label: "Auto (Recommended)", bitrateText: "Dynamic based on network"),
+        SettingsQualityOption(id: 1, label: "Maximum (120 Mbps)", bitrateText: "Original Remux 4K HDR"),
+        SettingsQualityOption(id: 2, label: "Very High (60 Mbps)", bitrateText: "High Bitrate 4K"),
+        SettingsQualityOption(id: 3, label: "High (20 Mbps)", bitrateText: "1080p Blu-ray Quality"),
+        SettingsQualityOption(id: 4, label: "Medium (10 Mbps)", bitrateText: "Fast 1080p Streaming"),
+        SettingsQualityOption(id: 5, label: "Low (4 Mbps)", bitrateText: "720p Cellular Quality"),
+        SettingsQualityOption(id: 6, label: "Data Saver (1.5 Mbps)", bitrateText: "480p Ultra-Low Bandwidth")
     ]
 
     private let languages: [(code: String, name: String)] = [
