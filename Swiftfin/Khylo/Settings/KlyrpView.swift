@@ -91,6 +91,7 @@ public struct KlyrpView: View {
     @ObservedObject var counter: KlyrpCounter
     @State private var autoDismissTask: Task<Void, Never>?
 
+    @MainActor
     public init(counter: KlyrpCounter = .shared) {
         self.counter = counter
     }

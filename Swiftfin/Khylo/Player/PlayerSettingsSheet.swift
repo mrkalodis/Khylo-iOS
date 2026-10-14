@@ -94,155 +94,12 @@ public struct PlayerSettingsSheet: View {
 
                 ScrollView {
                     VStack(spacing: KhyloSpacing.lg) {
-                        // Playback Speed
-                        sectionContainer(title: "Playback Speed") {
-                            HStack(spacing: 8) {
-                                ForEach(playbackRates, id: \.self) { rate in
-                                    PlaybackRateButton(
-                                        rate: rate,
-                                        isSelected: abs(playbackRate - rate) < 0.05,
-                                        onSelect: { playbackRate = rate }
-                                    )
-                                }
-                            }
-                            .padding(KhyloSpacing.sm)
-                        }
-
-                        // Aspect Ratio / Scaling
-                        sectionContainer(title: "Aspect Ratio") {
-                            HStack(spacing: 8) {
-                                ForEach(VideoAspectRatioMode.allCases) { mode in
-                                    AspectRatioButton(
-                                        mode: mode,
-                                        isSelected: aspectRatioMode == mode,
-                                        onSelect: { aspectRatioMode = mode }
-                                    )
-                                }
-                            }
-                            .padding(KhyloSpacing.sm)
-                        }
-
-                        // Quality & Bitrate
-                        sectionContainer(title: "Stream Quality & Bitrate") {
-                            VStack(spacing: 0) {
-                                ForEach(QualityOption.allOptions) { option in
-                                    QualityOptionRow(
-                                        option: option,
-                                        isSelected: selectedQualityIndex == option.id,
-                                        isLast: option.id == QualityOption.allOptions.last?.id,
-                                        onSelect: {
-                                            selectedQualityIndex = option.id
-                                            KhyloPreferences.maxBitrateIndex = option.id
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        // Audio Stream Track
-                        sectionContainer(title: "Audio Track") {
-                            VStack(spacing: 0) {
-                                ForEach(Array(audioTracks.enumerated()), id: \.offset) { index, track in
-                                    AudioTrackRow(
-                                        track: track,
-                                        isSelected: selectedAudioTrackIndex == index,
-                                        isLast: index == audioTracks.count - 1,
-                                        onSelect: { selectedAudioTrackIndex = index }
-                                    )
-                                }
-                            }
-                        }
-
-                        // Subtitle Track
-                        sectionContainer(title: "Subtitles") {
-                            VStack(spacing: 0) {
-                                ForEach(Array(subtitleTracks.enumerated()), id: \.offset) { index, track in
-                                    SubtitleTrackRow(
-                                        index: index,
-                                        track: track,
-                                        isSelected: selectedSubtitleTrackIndex == index,
-                                        isLast: index == subtitleTracks.count - 1,
-                                        onSelect: { selectedSubtitleTrackIndex = index }
-                                    )
-                                }
-
-                                if selectedSubtitleTrackIndex > 0 {
-                                    Divider().background(KhyloColors.border)
-
-                                    // Subtitle Sync Offset
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack {
-                                            Text("Subtitle Delay / Offset")
-                                                .font(KhyloTypography.captionMedium)
-                                                .foregroundColor(KhyloColors.textSecondary)
-
-                                            Spacer()
-
-                                            Text(String(format: "%+.1fs", subtitleOffsetSeconds))
-                                                .font(KhyloTypography.captionBold)
-                                                .foregroundColor(KhyloColors.accent)
-
-                                            if abs(subtitleOffsetSeconds) > 0.05 {
-                                                Button("Reset") {
-                                                    subtitleOffsetSeconds = 0.0
-                                                }
-                                                .font(KhyloTypography.caption)
-                                                .foregroundColor(KhyloColors.textTertiary)
-                                                .padding(.leading, 8)
-                                            }
-                                        }
-
-                                        HStack(spacing: 12) {
-                                            Button(action: {
-                                                subtitleOffsetSeconds -= 0.1
-                                            }) {
-                                                Image(systemName: "minus")
-                                                    .font(.system(size: 12, weight: .bold))
-                                                    .frame(maxWidth: .infinity)
-                                                    .padding(.vertical, 8)
-                                                    .background(KhyloColors.surfaceElevated)
-                                                    .cornerRadius(KhyloRadius.xs)
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-
-                                            Button(action: {
-                                                subtitleOffsetSeconds += 0.1
-                                            }) {
-                                                Image(systemName: "plus")
-                                                    .font(.system(size: 12, weight: .bold))
-                                                    .frame(maxWidth: .infinity)
-                                                    .padding(.vertical, 8)
-                                                    .background(KhyloColors.surfaceElevated)
-                                                    .cornerRadius(KhyloRadius.xs)
-                                            }
-                                            .buttonStyle(PlainButtonStyle())
-                                        }
-                                    }
-                                    .padding(KhyloSpacing.md)
-                                }
-                            }
-                        }
-
-                        // Smart Automation Preferences
-                        sectionContainer(title: "Smart Features") {
-                            VStack(spacing: 0) {
-                                Toggle("Auto-Skip Intros", isOn: $autoSkipIntros)
-                                    .onChange(of: autoSkipIntros) { KhyloPreferences.autoSkipIntros = $0 }
-                                    .padding(KhyloSpacing.md)
-
-                                Divider().background(KhyloColors.border)
-
-                                Toggle("Auto-Skip Credits", isOn: $autoSkipCredits)
-                                    .onChange(of: autoSkipCredits) { KhyloPreferences.autoSkipCredits = $0 }
-                                    .padding(KhyloSpacing.md)
-
-                                Divider().background(KhyloColors.border)
-
-                                Toggle("Autoplay Next Episode", isOn: $autoPlayNext)
-                                    .onChange(of: autoPlayNext) { KhyloPreferences.autoPlayNextEpisode = $0 }
-                                    .padding(KhyloSpacing.md)
-                            }
-                        }
+                        playbackSpeedSection
+                        aspectRatioSection
+                        streamQualitySection
+                        audioTrackSection
+                        subtitlesSection
+                        smartFeaturesSection
                     }
                     .padding(KhyloSpacing.lg)
                     .padding(.bottom, 40)
@@ -257,6 +114,174 @@ public struct PlayerSettingsSheet: View {
                     }
                     .foregroundColor(KhyloColors.accent)
                 }
+            }
+        }
+    }
+
+    // MARK: - Subsections
+
+    @ViewBuilder
+    private var playbackSpeedSection: some View {
+        sectionContainer(title: "Playback Speed") {
+            HStack(spacing: 8) {
+                ForEach(playbackRates, id: \.self) { (rate: Float) in
+                    let isSelected: Bool = abs(playbackRate - rate) < Float(0.05)
+                    PlaybackRateButton(
+                        rate: rate,
+                        isSelected: isSelected
+                    ) {
+                        playbackRate = rate
+                    }
+                }
+            }
+            .padding(KhyloSpacing.sm)
+        }
+    }
+
+    @ViewBuilder
+    private var aspectRatioSection: some View {
+        sectionContainer(title: "Aspect Ratio") {
+            HStack(spacing: 8) {
+                ForEach(VideoAspectRatioMode.allCases) { mode in
+                    AspectRatioButton(
+                        mode: mode,
+                        isSelected: aspectRatioMode == mode
+                    ) {
+                        aspectRatioMode = mode
+                    }
+                }
+            }
+            .padding(KhyloSpacing.sm)
+        }
+    }
+
+    @ViewBuilder
+    private var streamQualitySection: some View {
+        sectionContainer(title: "Stream Quality & Bitrate") {
+            VStack(spacing: 0) {
+                ForEach(QualityOption.allOptions) { option in
+                    QualityOptionRow(
+                        option: option,
+                        isSelected: selectedQualityIndex == option.id,
+                        isLast: option.id == QualityOption.allOptions.last?.id
+                    ) {
+                        selectedQualityIndex = option.id
+                        KhyloPreferences.maxBitrateIndex = option.id
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var audioTrackSection: some View {
+        sectionContainer(title: "Audio Track") {
+            VStack(spacing: 0) {
+                ForEach(Array(audioTracks.enumerated()), id: \.offset) { index, track in
+                    AudioTrackRow(
+                        track: track,
+                        isSelected: selectedAudioTrackIndex == index,
+                        isLast: index == audioTracks.count - 1
+                    ) {
+                        selectedAudioTrackIndex = index
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var subtitlesSection: some View {
+        sectionContainer(title: "Subtitles") {
+            VStack(spacing: 0) {
+                ForEach(Array(subtitleTracks.enumerated()), id: \.offset) { index, track in
+                    SubtitleTrackRow(
+                        index: index,
+                        track: track,
+                        isSelected: selectedSubtitleTrackIndex == index,
+                        isLast: index == subtitleTracks.count - 1
+                    ) {
+                        selectedSubtitleTrackIndex = index
+                    }
+                }
+
+                if selectedSubtitleTrackIndex > 0 {
+                    Divider().background(KhyloColors.border)
+
+                    // Subtitle Sync Offset
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Subtitle Delay / Offset")
+                                .font(KhyloTypography.captionMedium)
+                                .foregroundColor(KhyloColors.textSecondary)
+
+                            Spacer()
+
+                            Text(String(format: "%+.1fs", subtitleOffsetSeconds))
+                                .font(KhyloTypography.captionBold)
+                                .foregroundColor(KhyloColors.accent)
+
+                            if abs(subtitleOffsetSeconds) > 0.05 {
+                                Button("Reset") {
+                                    subtitleOffsetSeconds = 0.0
+                                }
+                                .font(KhyloTypography.caption)
+                                .foregroundColor(KhyloColors.textTertiary)
+                                .padding(.leading, 8)
+                            }
+                        }
+
+                        HStack(spacing: 12) {
+                            Button {
+                                subtitleOffsetSeconds -= 0.1
+                            } label: {
+                                Image(systemName: "minus")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(KhyloColors.surfaceElevated)
+                                    .cornerRadius(KhyloRadius.xs)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+
+                            Button {
+                                subtitleOffsetSeconds += 0.1
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 12, weight: .bold))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(KhyloColors.surfaceElevated)
+                                    .cornerRadius(KhyloRadius.xs)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                    .padding(KhyloSpacing.md)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var smartFeaturesSection: some View {
+        sectionContainer(title: "Smart Features") {
+            VStack(spacing: 0) {
+                Toggle("Auto-Skip Intros", isOn: $autoSkipIntros)
+                    .onChange(of: autoSkipIntros) { KhyloPreferences.autoSkipIntros = $0 }
+                    .padding(KhyloSpacing.md)
+
+                Divider().background(KhyloColors.border)
+
+                Toggle("Auto-Skip Credits", isOn: $autoSkipCredits)
+                    .onChange(of: autoSkipCredits) { KhyloPreferences.autoSkipCredits = $0 }
+                    .padding(KhyloSpacing.md)
+
+                Divider().background(KhyloColors.border)
+
+                Toggle("Autoplay Next Episode", isOn: $autoPlayNext)
+                    .onChange(of: autoPlayNext) { KhyloPreferences.autoPlayNextEpisode = $0 }
+                    .padding(KhyloSpacing.md)
             }
         }
     }
@@ -284,17 +309,17 @@ public struct PlayerSettingsSheet: View {
 // MARK: - Row Subviews
 
 private struct PlaybackRateButton: View {
-    let rate: Double
+    let rate: Float
     let isSelected: Bool
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             onSelect()
-        }) {
+        } label: {
             Text(rate == 1.0 ? "1x" : "\(String(format: "%.2gx", rate))")
                 .font(isSelected ? KhyloTypography.captionBold : KhyloTypography.captionMedium)
                 .foregroundColor(isSelected ? .white : KhyloColors.textSecondary)
@@ -315,12 +340,12 @@ private struct AspectRatioButton: View {
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             onSelect()
-        }) {
+        } label: {
             HStack(spacing: 6) {
                 Image(systemName: mode.iconName)
                     .font(.system(size: 13, weight: .bold))
@@ -346,12 +371,12 @@ private struct QualityOptionRow: View {
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             onSelect()
-        }) {
+        } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(option.name)
@@ -387,12 +412,12 @@ private struct AudioTrackRow: View {
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             onSelect()
-        }) {
+        } label: {
             HStack {
                 Image(systemName: "waveform")
                     .font(.system(size: 14))
@@ -429,12 +454,12 @@ private struct SubtitleTrackRow: View {
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             onSelect()
-        }) {
+        } label: {
             HStack {
                 Image(systemName: index == 0 ? "captions.bubble" : "captions.bubble.fill")
                     .font(.system(size: 14))

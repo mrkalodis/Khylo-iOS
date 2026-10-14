@@ -11,21 +11,21 @@ import SwiftUI
 
 // MARK: - Ambient State
 
-@MainActor
 public final class KhyloAmbientState: ObservableObject {
-    @Published public private(set) var currentImageURL: URL?
-    @Published public private(set) var isBackdrop: Bool = false
-    @Published public private(set) var tintColor: Color?
+    @MainActor @Published public private(set) var currentImageURL: URL?
+    @MainActor @Published public private(set) var isBackdrop: Bool = false
+    @MainActor @Published public private(set) var tintColor: Color?
 
     private var debounceTask: Task<Void, Never>?
 
-    public init(currentImageURL: URL? = nil, isBackdrop: Bool = false, tintColor: Color? = nil) {
-        self.currentImageURL = currentImageURL
-        self.isBackdrop = isBackdrop
-        self.tintColor = tintColor
+    public nonisolated init(currentImageURL: URL? = nil, isBackdrop: Bool = false, tintColor: Color? = nil) {
+        self._currentImageURL = Published(initialValue: currentImageURL)
+        self._isBackdrop = Published(initialValue: isBackdrop)
+        self._tintColor = Published(initialValue: tintColor)
     }
 
     /// Sets the ambient tint color.
+    @MainActor
     public func tint(_ color: Color?) {
         withAnimation(.easeInOut(duration: 0.5)) {
             self.tintColor = color
@@ -130,7 +130,7 @@ private struct AmbientContent: View {
 // MARK: - Environment
 
 private struct KhyloAmbientKey: EnvironmentKey {
-    @MainActor static let defaultValue: KhyloAmbientState = KhyloAmbientState()
+    static let defaultValue: KhyloAmbientState = KhyloAmbientState()
 }
 
 public extension EnvironmentValues {

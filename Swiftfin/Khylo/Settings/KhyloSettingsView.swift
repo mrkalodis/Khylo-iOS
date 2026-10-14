@@ -152,9 +152,9 @@ public struct KhyloSettingsView: View {
             }
         }
         .sheet(isPresented: $showKidsSetupSheet) {
-            KidsSetupView {
+            KidsSetupView(onCancel: {
                 showKidsSetupSheet = false
-            }
+            })
         }
         .alert("Sign Out of Khylo?", isPresented: $showSignOutAlert) {
             Button("Cancel", role: .cancel) {}

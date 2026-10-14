@@ -362,7 +362,7 @@ public struct KhyloVideoPlayer: View {
         checkSegments(at: currentSec)
 
         // Next-Up Card Trigger (During credits or in last 30s)
-        if let next = nextEpisode, !showNextUpCard {
+        if nextEpisode != nil, !showNextUpCard {
             let nearEnd = duration > 0 && (duration - currentSec) <= 30.0
             let inCredits = segments.contains { $0.type == .credits && currentSec >= $0.startSeconds }
             if nearEnd || inCredits {
@@ -399,7 +399,7 @@ public struct KhyloVideoPlayer: View {
                 return
             }
             if seg.type == .credits && KhyloPreferences.autoSkipCredits {
-                if let next = nextEpisode {
+                if nextEpisode != nil {
                     playNextEpisode()
                 } else {
                     skipSegment(seg)
