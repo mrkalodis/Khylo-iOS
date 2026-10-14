@@ -69,9 +69,9 @@ public struct MediaLibraryView: View {
             VStack(spacing: 0) {
                 // Top Custom Navigation Bar
                 HStack(spacing: KhyloSpacing.md) {
-                    Button(action: {
+                    Button {
                         navigator.pop()
-                    }) {
+                    } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.left")
                             Text("Libraries")
@@ -99,14 +99,14 @@ public struct MediaLibraryView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: KhyloSpacing.sm) {
                         ForEach(MediaLibraryTab.allCases) { tab in
-                            Button(action: {
+                            Button {
                                 #if os(iOS)
                                 UISelectionFeedbackGenerator().selectionChanged()
                                 #endif
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     selectedTab = tab
                                 }
-                            }) {
+                            } label: {
                                 Text(tab.rawValue)
                                     .font(selectedTab == tab ? KhyloTypography.bodyMedium : KhyloTypography.body)
                                     .foregroundColor(selectedTab == tab ? KhyloColors.textPrimary : KhyloColors.textSecondary)
@@ -240,9 +240,9 @@ public struct MediaLibraryView: View {
         ScrollView {
             VStack(spacing: KhyloSpacing.md) {
                 ForEach(["Criterion Collection", "Cinematic Sagas", "Oscar Winners", "Directors' Cuts"], id: \.self) { col in
-                    Button(action: {
+                    Button {
                         navigator.push(.libraryCollection(collectionId: col.lowercased(), title: col))
-                    }) {
+                    } label: {
                         HStack(spacing: KhyloSpacing.md) {
                             ZStack {
                                 RoundedRectangle(cornerRadius: KhyloRadius.sm)
@@ -458,7 +458,9 @@ private struct GenreExploreCard: View {
     }
 
     var body: some View {
-        Button(action: { onSelect() }) {
+        Button {
+            onSelect()
+        } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(genre)

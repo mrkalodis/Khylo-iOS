@@ -125,7 +125,7 @@ public struct LibraryTabView: View {
 
     @ViewBuilder
     private func libraryCard(_ library: KhyloMediaLibrary) -> some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
@@ -134,7 +134,7 @@ public struct LibraryTabView: View {
             } else {
                 navigator.push(.mediaLibrary(libraryId: library.id, title: library.name, type: library.collectionType))
             }
-        }) {
+        } label: {
             VStack(alignment: .leading, spacing: KhyloSpacing.sm) {
                 HStack {
                     ZStack {
@@ -195,12 +195,12 @@ public struct LibraryTabView: View {
         color: Color,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             action()
-        }) {
+        } label: {
             HStack(spacing: KhyloSpacing.md) {
                 ZStack {
                     Circle()

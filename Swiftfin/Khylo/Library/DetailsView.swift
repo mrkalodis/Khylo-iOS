@@ -23,12 +23,12 @@ public struct PersonCard: View {
     }
 
     public var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             onTap()
-        }) {
+        } label: {
             VStack(spacing: KhyloSpacing.xs) {
                 let photoUrl = person.imageURL(width: 200)
                 AsyncImage(url: photoUrl) { phase in
@@ -223,9 +223,9 @@ public struct DetailsView: View {
 
     private var topNavigationBar: some View {
         HStack {
-            Button(action: {
+            Button {
                 navigator.pop()
-            }) {
+            } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(KhyloColors.textPrimary)
@@ -236,14 +236,14 @@ public struct DetailsView: View {
 
             Spacer()
 
-            Button(action: {
+            Button {
                 if let item {
                     Task {
                         isFavorite.toggle()
                         await repository.toggleFavorite(itemId: item.id, isFavorite: isFavorite)
                     }
                 }
-            }) {
+            } label: {
                 Image(systemName: isFavorite ? "heart.fill" : "heart")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(isFavorite ? Color.red : KhyloColors.textPrimary)
@@ -297,11 +297,11 @@ public struct DetailsView: View {
     private var actionButtonsRow: some View {
         HStack(spacing: KhyloSpacing.md) {
             // Play / Resume Button
-            Button(action: {
+            Button {
                 if let item {
                     navigator.play(itemId: item.id, resumePositionTicks: item.playbackPositionTicks, title: item.name)
                 }
-            }) {
+            } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "play.fill")
                         .font(.system(size: 16, weight: .bold))
@@ -316,12 +316,12 @@ public struct DetailsView: View {
             }
 
             // Trailer Button
-            Button(action: {
+            Button {
                 // Trailer playback or secondary action
                 if let item {
                     navigator.play(itemId: item.id, resumePositionTicks: 0, title: "\(item.name) (Trailer)")
                 }
-            }) {
+            } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "film")
                         .font(.system(size: 15))
@@ -339,14 +339,14 @@ public struct DetailsView: View {
             }
 
             // My List Button
-            Button(action: {
+            Button {
                 if let item {
                     Task {
                         isFavorite.toggle()
                         await repository.toggleFavorite(itemId: item.id, isFavorite: isFavorite)
                     }
                 }
-            }) {
+            } label: {
                 Image(systemName: isFavorite ? "checkmark" : "plus")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(KhyloColors.textPrimary)
@@ -426,11 +426,11 @@ public struct DetailsView: View {
                     .foregroundColor(KhyloColors.textSecondary)
                     .lineLimit(isOverviewExpanded ? nil : 3)
 
-                Button(action: {
+                Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
                         isOverviewExpanded.toggle()
                     }
-                }) {
+                } label: {
                     Text(isOverviewExpanded ? "Show Less" : "See More")
                         .font(KhyloTypography.captionMedium)
                         .foregroundColor(KhyloColors.accent)

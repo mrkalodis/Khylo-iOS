@@ -220,9 +220,9 @@ public struct LiveChannelsView: View {
 
                 // Action buttons
                 HStack(spacing: KhyloSpacing.md) {
-                    Button(action: {
+                    Button {
                         tuneIn(to: channel, program: program)
-                    }) {
+                    } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "play.fill")
                                 .font(.system(size: 13, weight: .bold))
@@ -236,9 +236,9 @@ public struct LiveChannelsView: View {
                         .cornerRadius(KhyloRadius.sm)
                     }
 
-                    Button(action: {
+                    Button {
                         navigator.push(.multiView(channelIds: [channel.id]))
-                    }) {
+                    } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "square.grid.2x2")
                                 .font(.system(size: 12))
@@ -288,10 +288,10 @@ public struct LiveChannelsView: View {
     private func channelRowView(for channel: LiveChannel) -> some View {
         HStack(alignment: .center, spacing: 0) {
             // Left sticky channel info column
-            Button(action: {
+            Button {
                 selectedChannel = channel
                 selectedProgram = channel.currentProgram(at: currentTime)
-            }) {
+            } label: {
                 HStack(spacing: KhyloSpacing.xs) {
                     Text("\(channel.number)")
                         .font(KhyloTypography.captionBold)
@@ -356,9 +356,9 @@ public struct LiveChannelsView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, KhyloSpacing.xl)
 
-            Button(action: {
+            Button {
                 Task { await loadChannels() }
-            }) {
+            } label: {
                 Text("Refresh Guide")
                     .font(KhyloTypography.subheadlineMedium)
                     .foregroundColor(KhyloColors.accent)
@@ -464,7 +464,9 @@ private struct ProgramCellView: View {
     }
 
     var body: some View {
-        Button(action: { onSelect() }) {
+        Button {
+            onSelect()
+        } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(program.title)

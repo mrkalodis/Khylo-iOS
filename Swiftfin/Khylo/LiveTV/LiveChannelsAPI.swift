@@ -238,7 +238,8 @@ public struct LiveChannelStatus: Codable, Sendable {
 
 // MARK: - Live Channels API Client
 
-public final class LiveChannelsAPI: @unchecked Sendable {
+@MainActor
+public final class LiveChannelsAPI {
 
     public static let shared = LiveChannelsAPI()
 
@@ -250,7 +251,7 @@ public final class LiveChannelsAPI: @unchecked Sendable {
 
     // MARK: - Time Parser
 
-    public static func parseUtc(_ value: String) -> Date {
+    nonisolated public static func parseUtc(_ value: String) -> Date {
         let cleaned: String
         if value.hasSuffix("Z") || value.contains("+") {
             cleaned = value
@@ -295,7 +296,7 @@ public final class LiveChannelsAPI: @unchecked Sendable {
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                 return false
             }
-            let status = try JSONDecoder().decode(LiveChannelStatus.self, data: data)
+            let status = try JSONDecoder().decode(LiveChannelStatus.self, from: data)
             return status.enabled
         } catch {
             return false
@@ -324,7 +325,7 @@ public final class LiveChannelsAPI: @unchecked Sendable {
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
                 return sampleChannels()
             }
-            let channels = try JSONDecoder().decode([LiveChannel].self, data: data)
+            let channels = try JSONDecoder().decode([LiveChannel].self, from: data)
             return channels.isEmpty ? sampleChannels() : channels
         } catch {
             return sampleChannels()
@@ -360,7 +361,7 @@ public final class LiveChannelsAPI: @unchecked Sendable {
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
-        return try JSONDecoder().decode(LiveChannelTune.self, data: data)
+        return try JSONDecoder().decode(LiveChannelTune.self, from: data)
     }
 
     // MARK: - Logo URL
@@ -392,7 +393,7 @@ public final class LiveChannelsAPI: @unchecked Sendable {
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime]
 
-        func block(_ offsetMinutes: Int, duration: Int) -> (String, String) {
+        func block(_ offsetMinutes: Int, _ duration: Int) -> (String, String) {
             let start = floorDate.addingTimeInterval(Double(offsetMinutes) * 60)
             let end = start.addingTimeInterval(Double(duration) * 60)
             return (iso.string(from: start), iso.string(from: end))

@@ -117,14 +117,14 @@ public struct LiveTVView: View {
 
                 if selectedMode == .liveTV {
                     // Multi View Mode Toggle
-                    Button(action: {
+                    Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             isMultiSelectMode.toggle()
                             if !isMultiSelectMode {
                                 multiSelectChannelIds.removeAll()
                             }
                         }
-                    }) {
+                    } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "square.grid.2x2.fill")
                                 .font(.system(size: 13))
@@ -243,13 +243,13 @@ public struct LiveTVView: View {
                     Spacer()
 
                     // Watch Fullscreen Button
-                    Button(action: {
+                    Button {
                         navigator.play(
                             itemId: channel.id,
                             resumePositionTicks: 0,
                             title: "\(channel.number) · \(channel.name)"
                         )
-                    }) {
+                    } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.up.left.and.arrow.down.right")
                                 .font(.system(size: 11, weight: .bold))
@@ -278,9 +278,9 @@ public struct LiveTVView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: KhyloSpacing.sm) {
                 // Favorites Pill
-                Button(action: {
+                Button {
                     showOnlyFavorites.toggle()
-                }) {
+                } label: {
                     HStack(spacing: 4) {
                         Image(systemName: showOnlyFavorites ? "star.fill" : "star")
                             .font(.system(size: 12))
@@ -299,10 +299,10 @@ public struct LiveTVView: View {
 
                 ForEach(categories, id: \.self) { cat in
                     if cat != "Favorites" {
-                        Button(action: {
+                        Button {
                             selectedCategory = cat
                             if showOnlyFavorites { showOnlyFavorites = false }
-                        }) {
+                        } label: {
                             Text(cat)
                                 .font(KhyloTypography.captionMedium)
                                 .padding(.horizontal, 12)
@@ -329,9 +329,9 @@ public struct LiveTVView: View {
 
             Spacer()
 
-            Button(action: {
+            Button {
                 launchMultiView()
-            }) {
+            } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "play.tv.fill")
                     Text("Start Multi View")
@@ -355,13 +355,13 @@ public struct LiveTVView: View {
     private func channelRow(_ channel: IPTVChannel) -> some View {
         let isSelectedForMulti = multiSelectChannelIds.contains(channel.id)
 
-        return Button(action: {
+        return Button {
             if isMultiSelectMode {
                 toggleMultiSelect(for: channel)
             } else {
                 selectedChannel = channel
             }
-        }) {
+        } label: {
             HStack(spacing: KhyloSpacing.md) {
                 if isMultiSelectMode {
                     Image(systemName: isSelectedForMulti ? "checkmark.circle.fill" : "circle")
@@ -388,9 +388,9 @@ public struct LiveTVView: View {
                         Spacer()
 
                         // Star Favorite Button
-                        Button(action: {
+                        Button {
                             toggleFavorite(channel)
-                        }) {
+                        } label: {
                             Image(systemName: channel.isFavorite ? "star.fill" : "star")
                                 .font(.system(size: 13))
                                 .foregroundColor(channel.isFavorite ? Color.yellow : KhyloColors.textTertiary)
@@ -426,13 +426,13 @@ public struct LiveTVView: View {
 
                 // Quick Play Action
                 if !isMultiSelectMode {
-                    Button(action: {
+                    Button {
                         navigator.play(
                             itemId: channel.id,
                             resumePositionTicks: 0,
                             title: "\(channel.number) · \(channel.name)"
                         )
-                    }) {
+                    } label: {
                         Image(systemName: "play.circle.fill")
                             .font(.system(size: 28))
                             .foregroundColor(KhyloColors.accent)

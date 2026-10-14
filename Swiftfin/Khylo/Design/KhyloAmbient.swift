@@ -15,12 +15,21 @@ import SwiftUI
 public final class KhyloAmbientState: ObservableObject {
     @Published public private(set) var currentImageURL: URL?
     @Published public private(set) var isBackdrop: Bool = false
+    @Published public private(set) var tintColor: Color?
 
     private var debounceTask: Task<Void, Never>?
 
-    public init(currentImageURL: URL? = nil, isBackdrop: Bool = false) {
+    public init(currentImageURL: URL? = nil, isBackdrop: Bool = false, tintColor: Color? = nil) {
         self.currentImageURL = currentImageURL
         self.isBackdrop = isBackdrop
+        self.tintColor = tintColor
+    }
+
+    /// Sets the ambient tint color.
+    public func tint(_ color: Color?) {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            self.tintColor = color
+        }
     }
 
     /// Shows an ambient artwork image with 280ms debounce.

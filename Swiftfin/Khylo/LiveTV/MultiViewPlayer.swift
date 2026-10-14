@@ -58,6 +58,43 @@ public struct StreamTile: Identifiable, Hashable {
     }
 }
 
+// MARK: - Multi View Available Channel Model
+
+public struct MultiViewAvailableChannel: Identifiable, Hashable {
+    public let id: String
+    public let num: String
+    public let name: String
+    public let prog: String
+
+    public init(id: String, num: String, name: String, prog: String) {
+        self.id = id
+        self.num = num
+        self.name = name
+        self.prog = prog
+    }
+}
+
+// MARK: - Multi View Layout Button
+
+private struct MultiViewLayoutButton: View {
+    let layout: MultiViewLayout
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button {
+            onSelect()
+        } label: {
+            Image(systemName: layout.systemIcon)
+                .font(.system(size: 14))
+                .foregroundColor(isSelected ? KhyloColors.accent : .white)
+                .frame(width: 34, height: 32)
+                .background(isSelected ? Color.white.opacity(0.18) : Color.clear)
+                .cornerRadius(KhyloRadius.xs)
+        }
+    }
+}
+
 // MARK: - Multi View Player
 
 public struct MultiViewPlayer: View {
@@ -71,15 +108,15 @@ public struct MultiViewPlayer: View {
     @State private var showControls: Bool = true
     @State private var controlsTimer: AnyCancellable?
 
-    private let availableChannels: [(id: String, num: String, name: String, prog: String)] = [
-        ("ch-1", "04.1", "NBC Premier", "Today in America Live"),
-        ("ch-2", "07.1", "ABC Prime", "World News Tonight"),
-        ("ch-3", "11.1", "CBS Showcase", "60 Minutes Investigative"),
-        ("ch-4", "28.1", "PBS North", "Nova: Wonders of the Cosmos"),
-        ("ch-5", "32.1", "FOX Sports Live", "European Football"),
-        ("ch-6", "44.1", "Cinema HD 1", "Dune: Part Two"),
-        ("ch-7", "101", "Sci-Fi 24/7", "The Expanse"),
-        ("ch-8", "102", "Cinema Classics", "Casablanca")
+    private let availableChannels: [MultiViewAvailableChannel] = [
+        MultiViewAvailableChannel(id: "ch-1", num: "04.1", name: "NBC Premier", prog: "Today in America Live"),
+        MultiViewAvailableChannel(id: "ch-2", num: "07.1", name: "ABC Prime", prog: "World News Tonight"),
+        MultiViewAvailableChannel(id: "ch-3", num: "11.1", name: "CBS Showcase", prog: "60 Minutes Investigative"),
+        MultiViewAvailableChannel(id: "ch-4", num: "28.1", name: "PBS North", prog: "Nova: Wonders of the Cosmos"),
+        MultiViewAvailableChannel(id: "ch-5", num: "32.1", name: "FOX Sports Live", prog: "European Football"),
+        MultiViewAvailableChannel(id: "ch-6", num: "44.1", name: "Cinema HD 1", prog: "Dune: Part Two"),
+        MultiViewAvailableChannel(id: "ch-7", num: "101", name: "Sci-Fi 24/7", prog: "The Expanse"),
+        MultiViewAvailableChannel(id: "ch-8", num: "102", name: "Cinema Classics", prog: "Casablanca")
     ]
 
     public init(initialChannelIds: [String] = []) {
@@ -129,9 +166,9 @@ public struct MultiViewPlayer: View {
     private var topControlBar: some View {
         HStack(spacing: KhyloSpacing.md) {
             // Close / Exit Button
-            Button(action: {
+            Button {
                 navigator.pop()
-            }) {
+            } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
@@ -149,19 +186,16 @@ public struct MultiViewPlayer: View {
             // Layout Mode Switcher
             HStack(spacing: 4) {
                 ForEach(MultiViewLayout.allCases) { layout in
-                    Button(action: {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                            activeLayout = layout
-                            enforceTileCount(for: layout)
+                    MultiViewLayoutButton(
+                        layout: layout,
+                        isSelected: activeLayout == layout,
+                        onSelect: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                activeLayout = layout
+                                enforceTileCount(for: layout)
+                            }
                         }
-                    }) {
-                        Image(systemName: layout.systemIcon)
-                            .font(.system(size: 14))
-                            .foregroundColor(activeLayout == layout ? KhyloColors.accent : .white)
-                            .frame(width: 34, height: 32)
-                            .background(activeLayout == layout ? Color.white.opacity(0.18) : Color.clear)
-                            .cornerRadius(KhyloRadius.xs)
-                    }
+                    )
                 }
             }
             .padding(3)
@@ -170,9 +204,9 @@ public struct MultiViewPlayer: View {
 
             // Add Stream Button
             if tiles.count < 4 {
-                Button(action: {
+                Button {
                     addNextAvailableStream()
-                }) {
+                } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.white)
@@ -348,10 +382,10 @@ public struct MultiViewPlayer: View {
                     // Quick Action Menu (Swap, Solo, Close)
                     if showControls {
                         HStack(spacing: 4) {
-                            Button(action: {
+                            Button {
                                 tileToSwap = tile
                                 showSwapSheet = true
-                            }) {
+                            } label: {
                                 Image(systemName: "arrow.triangle.2.circlepath")
                                     .font(.system(size: 12))
                                     .foregroundColor(.white)
@@ -361,11 +395,11 @@ public struct MultiViewPlayer: View {
                             }
 
                             if tiles.count > 1 {
-                                Button(action: {
+                                Button {
                                     withAnimation {
                                         removeTile(tile)
                                     }
-                                }) {
+                                } label: {
                                     Image(systemName: "xmark")
                                         .font(.system(size: 11, weight: .bold))
                                         .foregroundColor(.white)
@@ -398,9 +432,9 @@ public struct MultiViewPlayer: View {
 
                 // Tap to Hear Button
                 if !isAudioActive {
-                    Button(action: {
+                    Button {
                         setAudioActive(tile.id)
-                    }) {
+                    } label: {
                         Text("Hear This")
                             .font(KhyloTypography.caption2Medium)
                             .foregroundColor(.white)
@@ -432,8 +466,8 @@ public struct MultiViewPlayer: View {
 
     private var channelSwapSheet: some View {
         NavigationStack {
-            List(availableChannels, id: \.id) { ch in
-                Button(action: {
+            List(availableChannels) { ch in
+                Button {
                     if let target = tileToSwap,
                        let idx = tiles.firstIndex(where: { $0.id == target.id }) {
                         tiles[idx].channelId = ch.id
@@ -442,7 +476,7 @@ public struct MultiViewPlayer: View {
                         tiles[idx].programTitle = ch.prog
                     }
                     showSwapSheet = false
-                }) {
+                } label: {
                     HStack(spacing: KhyloSpacing.md) {
                         Text(ch.num)
                             .font(KhyloTypography.captionBold)
