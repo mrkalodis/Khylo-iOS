@@ -10,15 +10,15 @@ import CoreSpotlight
 import Foundation
 
 struct SwiftfinSpotlight {
-    private let mainIndex = CSSearchableIndex(name: "SwiftfinAppIndex")
+    private let mainIndex = CSSearchableIndex(name: "KhyloAppIndex")
 
     func addSwiftfinToSpotlight() {
         Task.detached {
             let attributeSet = CSSearchableItemAttributeSet(contentType: UTType.application)
-            attributeSet.title = L10n.jellyfin
+            attributeSet.title = "Khylo"
 
             let searchableItem = CSSearchableItem(
-                uniqueIdentifier: "org.jellyfin.swiftfin",
+                uniqueIdentifier: "org.khylo.app",
                 domainIdentifier: nil,
                 attributeSet: attributeSet
             )

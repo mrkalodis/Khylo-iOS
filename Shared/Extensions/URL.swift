@@ -15,11 +15,11 @@ extension URL {
         self.init(string: string)
     }
 
-    static let swiftfinGithub: URL = URL(string: "https://github.com/jellyfin/Swiftfin")!
+    static let swiftfinGithub: URL = URL(string: "https://github.com/mrkalodis/Khylo-iOS")!
 
-    static let swiftfinGithubLicense: URL = URL(string: "https://github.com/jellyfin/Swiftfin/blob/main/LICENSE.md")!
+    static let swiftfinGithubLicense: URL = URL(string: "https://github.com/mrkalodis/Khylo-iOS/blob/main/LICENSE.md")!
 
-    static let swiftfinGithubIssues: URL = URL(string: "https://github.com/jellyfin/Swiftfin/issues")!
+    static let swiftfinGithubIssues: URL = URL(string: "https://github.com/mrkalodis/Khylo-iOS/issues")!
 
     static let jellyfinDocsBackup: URL = URL(string: "https://jellyfin.org/docs/general/administration/backup-and-restore/")!
 

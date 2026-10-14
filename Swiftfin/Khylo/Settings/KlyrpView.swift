@@ -244,11 +244,6 @@ public struct KlyrpView: View {
            let img = UIImage(contentsOfFile: path) {
             return img
         }
-        // Check relative Resources path in development
-        let localPath = "c:/Users/danshie.admin/Downloads/Projects/Khylo Open Source Media/Swiftfin/Khylo/Resources/klyrp.webp"
-        if let img = UIImage(contentsOfFile: localPath) {
-            return img
-        }
         #endif
         return nil
     }

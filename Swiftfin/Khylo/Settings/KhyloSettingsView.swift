@@ -522,7 +522,7 @@ public struct KhyloSettingsView: View {
                 )
                 infoRow(
                     title: "Server Software",
-                    value: "Khylo / Jellyfin 10.9.11"
+                    value: "Khylo Core 1.0"
                 )
                 #if os(iOS)
                 infoRow(

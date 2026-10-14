@@ -219,7 +219,7 @@ public struct ServerDiscoveryView: View {
                         if server.isKhyloServer {
                             KhyloBadge("Khylo", style: .accent)
                         } else {
-                            KhyloBadge("Jellyfin", style: .standard)
+                            KhyloBadge("Media Server", style: .standard)
                         }
                     }
 
