@@ -187,6 +187,11 @@ public enum GenreColors {
         }
     }
 
+    /// Maps a genre string to a single prominent color (the leading color of its gradient).
+    public static func color(for genre: String) -> Color {
+        gradient(for: genre).leading
+    }
+
     private static func fallbackGradient(for genre: String) -> GenreGradient {
         var hash: UInt64 = 5381
         for byte in genre.utf8 {
