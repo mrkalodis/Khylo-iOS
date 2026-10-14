@@ -416,9 +416,9 @@ public final class KhyloRepository: ObservableObject {
     @Published public private(set) var isLoading: Bool = false
     @Published public var errorMessage: String?
 
-    private var serverUrl: URL?
-    private var userId: String?
-    private var accessToken: String?
+    public private(set) var serverUrl: URL?
+    public private(set) var userId: String?
+    public private(set) var accessToken: String?
 
     public init(
         serverUrl: URL? = nil,

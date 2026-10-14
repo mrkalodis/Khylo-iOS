@@ -277,15 +277,15 @@ public struct KhyloVideoPlayer: View {
     }
 
     private func resolveStreamURL() -> URL {
-        if let server = repository.serverUrl {
-            // Jellyfin Direct Stream / Transcode HLS URL
+        if let server = repository.currentServerUrl ?? repository.serverUrl {
+            // Direct Stream / Transcode HLS URL
             var comp = URLComponents(url: server.appendingPathComponent("Videos/\(request.itemId)/stream.m3u8"), resolvingAgainstBaseURL: false)
             comp?.queryItems = [
                 URLQueryItem(name: "Static", value: "true"),
                 URLQueryItem(name: "mediaSourceId", value: request.mediaSourceId ?? request.itemId),
                 URLQueryItem(name: "deviceId", value: "Khylo-iOS")
             ]
-            if let token = repository.accessToken {
+            if let token = repository.currentAccessToken ?? repository.accessToken {
                 comp?.queryItems?.append(URLQueryItem(name: "api_key", value: token))
             }
             if let url = comp?.url {

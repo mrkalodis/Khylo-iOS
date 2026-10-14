@@ -54,7 +54,7 @@ jobs:
       - name: Build
         uses: nick-fields/retry@v4
         with:
-          max_attempts: 3
+          max_attempts: 1
           retry_on: error
           timeout_minutes: 60
           command: bundle exec fastlane buildLane \
