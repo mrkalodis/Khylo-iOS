@@ -119,15 +119,7 @@ private struct NextUpThumbnailView: View {
                 thumbnailFallback
             }
 
-            Circle()
-                .fill(Color.black.opacity(0.6))
-                .frame(width: 32, height: 32)
-                .overlay(
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(.white)
-                        .offset(x: 1)
-                )
+            playOverlay
         }
         .frame(width: 120, height: 68)
         .clipped()
@@ -136,6 +128,18 @@ private struct NextUpThumbnailView: View {
             RoundedRectangle(cornerRadius: KhyloRadius.sm)
                 .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
         )
+    }
+
+    private var playOverlay: some View {
+        Circle()
+            .fill(Color.black.opacity(0.6))
+            .frame(width: 32, height: 32)
+            .overlay(
+                Image(systemName: "play.fill")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundColor(.white)
+                    .offset(x: 1)
+            )
     }
 
     private var thumbnailFallback: some View {
@@ -192,33 +196,36 @@ private struct NextUpCountdownPlayButton: View {
     let onPlay: () -> Void
 
     var body: some View {
-        Button(action: {
+        Button {
             onPlay()
-        }) {
-            ZStack {
-                Circle()
-                    .stroke(Color.white.opacity(0.2), lineWidth: 2.5)
-
-                Circle()
-                    .trim(from: 0, to: CGFloat(progress))
-                    .stroke(
-                        KhyloColors.accent,
-                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 1.0), value: progress)
-
-                Image(systemName: "forward.end.fill")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-            }
-            .frame(width: 44, height: 44)
-            .background(
-                Circle()
-                    .fill(KhyloColors.surfaceElevated)
-            )
+        } label: {
+            countdownRing
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
+    }
+
+    private var countdownRing: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.2), lineWidth: 2.5)
+
+            Circle()
+                .trim(from: 0, to: CGFloat(progress))
+                .stroke(
+                    KhyloColors.accent,
+                    style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+
+            Image(systemName: "forward.end.fill")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.white)
+        }
+        .frame(width: 44, height: 44)
+        .background(
+            Circle()
+                .fill(KhyloColors.surfaceElevated)
+        )
     }
 }
 
@@ -226,18 +233,22 @@ private struct NextUpDismissButton: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        Button(action: {
+        Button {
             onDismiss()
-        }) {
-            Image(systemName: "xmark")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(KhyloColors.textSecondary)
-                .frame(width: 32, height: 32)
-                .background(
-                    Circle()
-                        .fill(KhyloColors.surfaceElevated.opacity(0.6))
-                )
+        } label: {
+            dismissIcon
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(.plain)
+    }
+
+    private var dismissIcon: some View {
+        Image(systemName: "xmark")
+            .font(.system(size: 13, weight: .bold))
+            .foregroundColor(KhyloColors.textSecondary)
+            .frame(width: 32, height: 32)
+            .background(
+                Circle()
+                    .fill(KhyloColors.surfaceElevated.opacity(0.6))
+            )
     }
 }
