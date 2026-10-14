@@ -1,4 +1,4 @@
-name: "Build 🔨"
+name: "Build Khylo iOS 📱"
 
 on:
   push:
@@ -13,15 +13,10 @@ on:
 
 jobs:
   build:
-    name: "Build 🔨"
+    name: "Build Khylo iOS 📱"
     if: github.event.pull_request.draft == false
     permissions:
       contents: write
-    strategy:
-      matrix:
-        scheme:
-          - "Swiftfin"
-          - "Swiftfin tvOS"
 
     runs-on: macos-26
 
@@ -50,9 +45,9 @@ jobs:
             build/SourcePackages/repositories
             build/SourcePackages/artifacts
             build/SourcePackages/workspace-state.json
-          key: spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.XCODE_VERSION }}-${{ matrix.scheme }}-${{ hashFiles('Swiftfin.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          key: spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.XCODE_VERSION }}-ios-${{ hashFiles('Swiftfin.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
-            spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.XCODE_VERSION }}-${{ matrix.scheme }}-
+            spm-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.XCODE_VERSION }}-ios-
 
       - name: Build
         uses: nick-fields/retry@v4
@@ -61,43 +56,36 @@ jobs:
           retry_on: error
           timeout_minutes: 60
           command: bundle exec fastlane buildLane \
-            scheme:"\"${{ matrix.scheme }}\"" \
+            scheme:"\"Swiftfin\"" \
             xcodeVersion:${{ env.XCODE_VERSION }}
 
       - name: Package unsigned IPA
-        env:
-          SCHEME: ${{ matrix.scheme }}
         run: |
           set -euo pipefail
           mkdir -p fastlane/build/Payload
           cp -R fastlane/build/*.xcarchive/Products/Applications/*.app fastlane/build/Payload/
           cd fastlane/build
-          zip -r -y "$SCHEME-unsigned.ipa" Payload
-          if [ "$SCHEME" = "Swiftfin" ]; then
-            cp "$SCHEME-unsigned.ipa" "Khylo-iOS.ipa"
-          else
-            cp "$SCHEME-unsigned.ipa" "Khylo-tvOS.ipa"
-          fi
+          zip -r -y "Khylo-iOS.ipa" Payload
 
-      - name: Upload unsigned IPA
+      - name: Upload Khylo iOS IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.scheme }}-unsigned
-          path: fastlane/build/*.ipa
+          name: Khylo-iOS-unsigned
+          path: fastlane/build/Khylo-iOS.ipa
           if-no-files-found: error
           compression-level: 0
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/main' && matrix.scheme == 'Swiftfin'
+        if: github.ref == 'refs/heads/main'
         with:
           tag_name: "v26.10.010"
           name: "Khylo iOS DEV-V26.10.010"
           body: |
             ### Khylo iOS DEV-V26.10.010
-            
+
             Official native iOS build of the Khylo client.
-            
+
             - **Download:** `Khylo-iOS.ipa`
           files: |
             fastlane/build/Khylo-iOS.ipa
