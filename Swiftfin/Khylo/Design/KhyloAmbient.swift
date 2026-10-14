@@ -37,9 +37,10 @@ public final class KhyloAmbientState: ObservableObject {
     /// - Parameters:
     ///   - url: URL of the poster or backdrop image.
     ///   - isBackdrop: Whether the source image is a 16:9 backdrop (versus 2:3 poster).
+    @MainActor
     public func show(url: URL?, isBackdrop: Bool = false) {
         debounceTask?.cancel()
-        debounceTask = Task { [weak self] in
+        debounceTask = Task { @MainActor [weak self] in
             // 280ms debounce to prevent flicker during fast scrolling
             try? await Task.sleep(nanoseconds: 280_000_000)
             guard !Task.isCancelled else { return }
@@ -52,6 +53,7 @@ public final class KhyloAmbientState: ObservableObject {
     }
 
     /// Clears the ambient background image.
+    @MainActor
     public func clear() {
         debounceTask?.cancel()
         withAnimation(.easeInOut(duration: 0.5)) {

@@ -905,7 +905,7 @@ public final class KhyloRepository: ObservableObject {
             ]
         }
 
-        var comp = URLComponents(url: server.appendingPathComponent("Items/\(itemId)/MediaSegments"), resolvingAgainstBaseURL: false)
+        let comp = URLComponents(url: server.appendingPathComponent("Items/\(itemId)/MediaSegments"), resolvingAgainstBaseURL: false)
         guard let url = comp?.url else { return [] }
 
         var request = URLRequest(url: url)
