@@ -8,67 +8,6 @@
 
 import SwiftUI
 
-// MARK: - Color Hex Initializer
-
-extension Color {
-
-    /// Parses a hexadecimal color string (e.g. `"#D97732"`, `"#1A1C1F"`, or `"#FFAA2200"`).
-    /// Defaults to opaque black if parsing fails.
-    fileprivate init(hex: String) {
-        var cleanHex = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleanHex.hasPrefix("#") {
-            cleanHex.removeFirst()
-        }
-
-        var hexNumber: UInt64 = 0
-        let scanner = Scanner(string: cleanHex)
-        guard scanner.scanHexInt64(&hexNumber) else {
-            self.init(.sRGB, red: 0, green: 0, blue: 0, opacity: 1)
-            return
-        }
-
-        let red: Double
-        let green: Double
-        let blue: Double
-        let alpha: Double
-
-        switch cleanHex.count {
-        case 3: // RGB (12-bit)
-            red = Double((hexNumber >> 8) & 0xF) / 15.0
-            green = Double((hexNumber >> 4) & 0xF) / 15.0
-            blue = Double(hexNumber & 0xF) / 15.0
-            alpha = 1.0
-        case 4: // RGBA (16-bit)
-            red = Double((hexNumber >> 12) & 0xF) / 15.0
-            green = Double((hexNumber >> 8) & 0xF) / 15.0
-            blue = Double((hexNumber >> 4) & 0xF) / 15.0
-            alpha = Double(hexNumber & 0xF) / 15.0
-        case 6: // RRGGBB (24-bit)
-            red = Double((hexNumber >> 16) & 0xFF) / 255.0
-            green = Double((hexNumber >> 8) & 0xFF) / 255.0
-            blue = Double(hexNumber & 0xFF) / 255.0
-            alpha = 1.0
-        case 8: // AARRGGBB (32-bit)
-            alpha = Double((hexNumber >> 24) & 0xFF) / 255.0
-            red = Double((hexNumber >> 16) & 0xFF) / 255.0
-            green = Double((hexNumber >> 8) & 0xFF) / 255.0
-            blue = Double(hexNumber & 0xFF) / 255.0
-        default:
-            red = 0
-            green = 0
-            blue = 0
-            alpha = 1.0
-        }
-
-        self.init(
-            .sRGB,
-            red: red,
-            green: green,
-            blue: blue,
-            opacity: alpha
-        )
-    }
-}
 
 // MARK: - Khylo Colors
 

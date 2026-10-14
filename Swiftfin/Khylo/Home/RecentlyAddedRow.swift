@@ -69,7 +69,9 @@ public struct RecentlyAddedRow: View {
                     Spacer()
 
                     if let onSeeAll {
-                        Button(action: { onSeeAll() }) {
+                        Button {
+                            onSeeAll()
+                        } label: {
                             HStack(spacing: 3) {
                                 Text("See All")
                                     .font(KhyloTypography.subheadline)
@@ -135,12 +137,12 @@ private struct RecentlyAddedFilterPill: View {
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
             onSelect()
-        }) {
+        } label: {
             Text(filter.rawValue)
                 .font(KhyloTypography.captionMedium)
                 .padding(.horizontal, 12)

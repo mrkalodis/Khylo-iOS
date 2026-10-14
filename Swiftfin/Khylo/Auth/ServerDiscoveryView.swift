@@ -64,7 +64,9 @@ public struct ServerDiscoveryView: View {
                                 .font(KhyloTypography.subheadline)
                                 .foregroundColor(KhyloColors.textPrimary)
                             Spacer()
-                            Button(action: { self.errorMessage = nil }) {
+                            Button {
+                                self.errorMessage = nil
+                            } label: {
                                 Image(systemName: "xmark")
                                     .font(.system(size: 12, weight: .bold))
                                     .foregroundColor(KhyloColors.textSecondary)
@@ -103,7 +105,9 @@ public struct ServerDiscoveryView: View {
                                         .foregroundColor(KhyloColors.textSecondary)
                                 }
                             } else {
-                                Button(action: { discovery.startScanning() }) {
+                                Button {
+                                    discovery.startScanning()
+                                } label: {
                                     HStack(spacing: 4) {
                                         Image(systemName: "arrow.clockwise")
                                         Text("Rescan")
@@ -193,12 +197,12 @@ public struct ServerDiscoveryView: View {
     }
 
     private func serverRow(_ server: DiscoveredServer) -> some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             #endif
             onSelectServer(server)
-        }) {
+        } label: {
             HStack(spacing: KhyloSpacing.md) {
                 ZStack {
                     RoundedRectangle(cornerRadius: KhyloRadius.sm)

@@ -136,7 +136,9 @@ public struct ProfilePickerView: View {
         VStack(spacing: KhyloSpacing.xl) {
             // Top Bar
             HStack {
-                Button(action: { onSwitchServer() }) {
+                Button {
+                    onSwitchServer()
+                } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "server.rack")
                         Text(server.name)
@@ -207,7 +209,7 @@ public struct ProfilePickerView: View {
     }
 
     private func profileCard(_ profile: KhyloProfile) -> some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UISelectionFeedbackGenerator().selectionChanged()
             #endif
@@ -218,7 +220,7 @@ public struct ProfilePickerView: View {
             } else {
                 onSelectProfile(profile, nil)
             }
-        }) {
+        } label: {
             VStack(spacing: KhyloSpacing.sm) {
                 ZStack(alignment: .bottomTrailing) {
                     // Avatar circle
@@ -270,12 +272,12 @@ public struct ProfilePickerView: View {
     }
 
     private var addProfileCard: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             #endif
             showKidsSetup = true
-        }) {
+        } label: {
             VStack(spacing: KhyloSpacing.sm) {
                 ZStack {
                     Circle()

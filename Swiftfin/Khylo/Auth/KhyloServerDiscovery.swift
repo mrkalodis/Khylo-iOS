@@ -21,11 +21,11 @@ public struct DiscoveredServer: Identifiable, Hashable, Sendable {
     public let isOnline: Bool
 
     public init(
-        id: String,
-        name: String,
-        address: URL,
-        version: String,
-        isKhyloServer: Bool,
+        id: String = "local-server",
+        name: String = "Home Media Server",
+        address: URL = URL(string: "http://localhost:8096")!,
+        version: String = "10.9.0",
+        isKhyloServer: Bool = true,
         isOnline: Bool = true
     ) {
         self.id = id
@@ -34,6 +34,15 @@ public struct DiscoveredServer: Identifiable, Hashable, Sendable {
         self.version = version
         self.isKhyloServer = isKhyloServer
         self.isOnline = isOnline
+    }
+
+    public init(name: String, address: String) {
+        self.id = "local-server"
+        self.name = name
+        self.address = URL(string: address) ?? URL(string: "http://localhost:8096")!
+        self.version = "10.9.0"
+        self.isKhyloServer = true
+        self.isOnline = true
     }
 }
 
@@ -170,7 +179,7 @@ public final class KhyloServerDiscovery: ObservableObject {
         connection.start(queue: .global(qos: .utility))
     }
 
-    private func receiveBroadcastResponse(on connection: NWConnection) {
+    nonisolated private func receiveBroadcastResponse(on connection: NWConnection) {
         connection.receiveMessage { [weak self] content, _, _, _ in
             guard let self = self, let content = content else { return }
             if let json = try? JSONSerialization.jsonObject(with: content) as? [String: Any],

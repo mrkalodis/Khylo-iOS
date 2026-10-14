@@ -48,12 +48,12 @@ public struct KhyloPrimaryButton: View {
     }
 
     public var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             #endif
             action()
-        }) {
+        } label: {
             HStack(spacing: KhyloSpacing.sm) {
                 if isLoading {
                     ProgressView()
@@ -103,12 +103,12 @@ public struct KhyloSecondaryButton: View {
     }
 
     public var body: some View {
-        Button(action: {
+        Button {
             #if os(iOS)
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             #endif
             action()
-        }) {
+        } label: {
             HStack(spacing: KhyloSpacing.sm) {
                 if let icon {
                     Image(systemName: icon)

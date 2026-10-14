@@ -153,7 +153,9 @@ public struct KidsSetupView: View {
 
                         VStack(spacing: KhyloSpacing.sm) {
                             ForEach(ratingTiers) { tier in
-                                Button(action: { selectedTierIndex = tier.id }) {
+                                Button {
+                                    selectedTierIndex = tier.id
+                                } label: {
                                     HStack(spacing: KhyloSpacing.md) {
                                         Image(systemName: tier.icon)
                                             .font(.system(size: 20))
@@ -200,13 +202,13 @@ public struct KidsSetupView: View {
 
                         VStack(spacing: 8) {
                             ForEach(availableLibraries, id: \.self) { lib in
-                                Button(action: {
+                                Button {
                                     if selectedLibraries.contains(lib) {
                                         selectedLibraries.remove(lib)
                                     } else {
                                         selectedLibraries.insert(lib)
                                     }
-                                }) {
+                                } label: {
                                     HStack {
                                         Text(lib)
                                             .font(KhyloTypography.bodyMedium)
