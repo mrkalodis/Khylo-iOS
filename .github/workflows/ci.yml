@@ -22,6 +22,8 @@ jobs:
 
     env:
       XCODE_VERSION: "26.6"
+      FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: "120"
+      FASTLANE_XCODEBUILD_SETTINGS_RETRIES: "8"
 
     steps:
       - name: Checkout
