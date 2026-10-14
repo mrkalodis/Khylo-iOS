@@ -112,44 +112,28 @@ public enum KhyloColors {
 // MARK: - Khylo Typography
 
 public enum KhyloTypography {
-    public static func heroTitle() -> Font { .system(size: 32, weight: .bold) }
-    public static var heroTitle: Font { heroTitle() }
-
-    public static func title1() -> Font { .system(size: 24, weight: .bold) }
-    public static var title1: Font { title1() }
-
-    public static func title2() -> Font { .system(size: 20, weight: .semibold) }
-    public static var title2: Font { title2() }
-
-    public static func title3() -> Font { .system(size: 17, weight: .semibold) }
-    public static var title3: Font { title3() }
-
-    public static func headline() -> Font { .system(size: 16, weight: .semibold) }
-    public static var headline: Font { headline() }
-
-    public static func body() -> Font { .system(size: 15, weight: .regular) }
-    public static var body: Font { body() }
-
-    public static func bodyMedium() -> Font { .system(size: 15, weight: .medium) }
-    public static var bodyMedium: Font { bodyMedium() }
-
-    public static func callout() -> Font { .system(size: 14, weight: .medium) }
-    public static var callout: Font { callout() }
-
-    public static func subheadline() -> Font { .system(size: 13, weight: .medium) }
-    public static var subheadline: Font { subheadline() }
-
-    public static func caption() -> Font { .system(size: 12, weight: .regular) }
-    public static var caption: Font { caption() }
-
-    public static func captionBold() -> Font { .system(size: 12, weight: .bold) }
-    public static var captionBold: Font { captionBold() }
-
-    public static func badge() -> Font { .system(size: 11, weight: .bold) }
-    public static var badge: Font { badge() }
-
-    public static func audiobookTitle() -> Font { .system(size: 22, weight: .bold, design: .serif) }
-    public static var audiobookTitle: Font { audiobookTitle() }
+    public static let largeTitle: Font = .system(size: 34, weight: .bold)
+    public static let heroTitle: Font = .system(size: 32, weight: .bold)
+    public static let title1: Font = .system(size: 24, weight: .bold)
+    public static let title2: Font = .system(size: 20, weight: .semibold)
+    public static let title3: Font = .system(size: 17, weight: .semibold)
+    public static let headline: Font = .system(size: 16, weight: .semibold)
+    public static let headlineBold: Font = .system(size: 16, weight: .bold)
+    public static let body: Font = .system(size: 15, weight: .regular)
+    public static let bodyMedium: Font = .system(size: 15, weight: .medium)
+    public static let bodyBold: Font = .system(size: 15, weight: .bold)
+    public static let callout: Font = .system(size: 14, weight: .medium)
+    public static let subheadline: Font = .system(size: 13, weight: .regular)
+    public static let subheadlineMedium: Font = .system(size: 13, weight: .medium)
+    public static let subheadlineBold: Font = .system(size: 13, weight: .bold)
+    public static let caption: Font = .system(size: 12, weight: .regular)
+    public static let captionMedium: Font = .system(size: 12, weight: .medium)
+    public static let captionBold: Font = .system(size: 12, weight: .bold)
+    public static let caption2: Font = .system(size: 11, weight: .regular)
+    public static let caption2Medium: Font = .system(size: 11, weight: .medium)
+    public static let caption2Bold: Font = .system(size: 11, weight: .bold)
+    public static let badge: Font = .system(size: 11, weight: .bold)
+    public static let audiobookTitle: Font = .system(size: 22, weight: .bold, design: .serif)
 }
 
 // MARK: - Khylo Spacing
