@@ -369,16 +369,12 @@ public struct KhyloPlayerControls: View {
 
                     // Segment Markers (Intros / Credits)
                     ForEach(segments) { seg in
-                        if duration > 0 {
-                            let segStartRatio = min(max(seg.startSeconds / duration, 0.0), 1.0)
-                            let segEndRatio = min(max(seg.endSeconds / duration, 0.0), 1.0)
-                            let segWidth = max(trackWidth * (segEndRatio - segStartRatio), 4.0)
-
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(seg.type == .credits ? Color.purple.opacity(0.8) : KhyloColors.accent.opacity(0.8))
-                                .frame(width: segWidth, height: isScrubbing ? 8 : 5)
-                                .offset(x: trackWidth * segStartRatio)
-                        }
+                        PlayerSegmentMarkerView(
+                            seg: seg,
+                            duration: duration,
+                            trackWidth: trackWidth,
+                            isScrubbing: isScrubbing
+                        )
                     }
 
                     // Played track
@@ -460,6 +456,28 @@ public struct KhyloPlayerControls: View {
             return String(format: "%d:%02d:%02d", hrs, mins, secs)
         } else {
             return String(format: "%02d:%02d", mins, secs)
+        }
+    }
+}
+
+// MARK: - Player Segment Marker View
+
+private struct PlayerSegmentMarkerView: View {
+    let seg: KhyloSegment
+    let duration: Double
+    let trackWidth: CGFloat
+    let isScrubbing: Bool
+
+    var body: some View {
+        if duration > 0 {
+            let segStartRatio: CGFloat = CGFloat(min(max(seg.startSeconds / duration, 0.0), 1.0))
+            let segEndRatio: CGFloat = CGFloat(min(max(seg.endSeconds / duration, 0.0), 1.0))
+            let segWidth: CGFloat = max(trackWidth * (segEndRatio - segStartRatio), 4.0)
+
+            RoundedRectangle(cornerRadius: 2)
+                .fill(seg.type == .credits ? Color.purple.opacity(0.8) : KhyloColors.accent.opacity(0.8))
+                .frame(width: segWidth, height: isScrubbing ? 8 : 5)
+                .offset(x: trackWidth * segStartRatio)
         }
     }
 }

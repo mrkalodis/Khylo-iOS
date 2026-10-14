@@ -195,26 +195,7 @@ public struct MusicHomeView: View {
                     spacing: KhyloSpacing.sm
                 ) {
                     ForEach(sampleGenres, id: \.self) { genre in
-                        let color = GenreColors.color(for: genre)
-                        Button(action: {}) {
-                            HStack {
-                                Text(genre)
-                                    .font(KhyloTypography.headline)
-                                    .foregroundColor(.white)
-                                Spacer()
-                            }
-                            .padding(KhyloSpacing.md)
-                            .frame(height: 64)
-                            .background(
-                                LinearGradient(
-                                    colors: [color.opacity(0.85), color.opacity(0.4)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .cornerRadius(KhyloRadius.md)
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                        MusicGenreCard(genre: genre)
                     }
                 }
                 .padding(.horizontal, KhyloSpacing.lg)
@@ -416,5 +397,37 @@ public struct MusicHomeView: View {
             AlbumSummary(id: "alb-h5", title: "Interstellar Soundtrack", year: 2014, trackCount: 16),
             AlbumSummary(id: "alb-h6", title: "Blade Runner 2049 OST", year: 2017, trackCount: 24)
         ]
+    }
+}
+
+// MARK: - Music Genre Card
+
+private struct MusicGenreCard: View {
+    let genre: String
+
+    private var color: Color {
+        GenreColors.color(for: genre)
+    }
+
+    var body: some View {
+        Button(action: {}) {
+            HStack {
+                Text(genre)
+                    .font(KhyloTypography.headline)
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            .padding(KhyloSpacing.md)
+            .frame(height: 64)
+            .background(
+                LinearGradient(
+                    colors: [color.opacity(0.85), color.opacity(0.4)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(KhyloRadius.md)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }

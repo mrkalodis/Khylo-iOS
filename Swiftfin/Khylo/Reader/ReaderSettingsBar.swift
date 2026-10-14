@@ -53,35 +53,11 @@ public struct ReaderSettingsBar: View {
 
                 HStack(spacing: 12) {
                     ForEach(ReadingTheme.allCases) { t in
-                        let isSelected = theme == t
-                        Button(action: {
-                            #if os(iOS)
-                            UISelectionFeedbackGenerator().selectionChanged()
-                            #endif
-                            theme = t
-                        }) {
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(t.backgroundColor)
-                                    .frame(width: 22, height: 22)
-                                    .overlay(Circle().stroke(Color.black.opacity(0.2), lineWidth: 1))
-
-                                Text(t.rawValue)
-                                    .font(isSelected ? KhyloTypography.subheadlineBold : KhyloTypography.subheadline)
-                                    .foregroundColor(theme == .night ? .white : Color.black)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: KhyloRadius.sm)
-                                    .fill(t.backgroundColor)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: KhyloRadius.sm)
-                                            .strokeBorder(isSelected ? KhyloColors.accent : Color.gray.opacity(0.3), lineWidth: isSelected ? 2 : 1)
-                                    )
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                        ThemeSelectorButton(
+                            themeOption: t,
+                            currentTheme: theme,
+                            onSelect: { theme = t }
+                        )
                     }
                 }
             }
@@ -94,24 +70,12 @@ public struct ReaderSettingsBar: View {
 
                 HStack(spacing: 8) {
                     ForEach(ReadingFontSize.allCases) { size in
-                        let isSelected = fontSize == size
-                        Button(action: {
-                            #if os(iOS)
-                            UISelectionFeedbackGenerator().selectionChanged()
-                            #endif
-                            fontSize = size
-                        }) {
-                            Text(size.label)
-                                .font(.system(size: size.pointSize * 0.8, weight: isSelected ? .bold : .medium))
-                                .foregroundColor(isSelected ? .white : theme.textColor)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 44)
-                                .background(
-                                    RoundedRectangle(cornerRadius: KhyloRadius.xs)
-                                        .fill(isSelected ? KhyloColors.accent : Color.gray.opacity(0.18))
-                                )
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                        FontSizeSelectorButton(
+                            size: size,
+                            currentSize: fontSize,
+                            theme: theme,
+                            onSelect: { fontSize = size }
+                        )
                     }
                 }
             }
@@ -161,5 +125,79 @@ public struct ReaderSettingsBar: View {
                 .fill(theme.backgroundColor)
                 .shadow(color: Color.black.opacity(0.5), radius: 24, x: 0, y: -6)
         )
+    }
+}
+
+// MARK: - Subviews
+
+private struct ThemeSelectorButton: View {
+    let themeOption: ReadingTheme
+    let currentTheme: ReadingTheme
+    let onSelect: () -> Void
+
+    private var isSelected: Bool {
+        currentTheme == themeOption
+    }
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(themeOption.backgroundColor)
+                    .frame(width: 22, height: 22)
+                    .overlay(Circle().stroke(Color.black.opacity(0.2), lineWidth: 1))
+
+                Text(themeOption.rawValue)
+                    .font(isSelected ? KhyloTypography.subheadlineBold : KhyloTypography.subheadline)
+                    .foregroundColor(currentTheme == .night ? .white : Color.black)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: KhyloRadius.sm)
+                    .fill(themeOption.backgroundColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: KhyloRadius.sm)
+                            .strokeBorder(isSelected ? KhyloColors.accent : Color.gray.opacity(0.3), lineWidth: isSelected ? 2 : 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+private struct FontSizeSelectorButton: View {
+    let size: ReadingFontSize
+    let currentSize: ReadingFontSize
+    let theme: ReadingTheme
+    let onSelect: () -> Void
+
+    private var isSelected: Bool {
+        currentSize == size
+    }
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            Text(size.label)
+                .font(.system(size: size.pointSize * 0.8, weight: isSelected ? .bold : .medium))
+                .foregroundColor(isSelected ? .white : theme.textColor)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(
+                    RoundedRectangle(cornerRadius: KhyloRadius.xs)
+                        .fill(isSelected ? KhyloColors.accent : Color.gray.opacity(0.18))
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }

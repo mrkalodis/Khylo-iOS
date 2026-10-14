@@ -98,24 +98,11 @@ public struct PlayerSettingsSheet: View {
                         sectionContainer(title: "Playback Speed") {
                             HStack(spacing: 8) {
                                 ForEach(playbackRates, id: \.self) { rate in
-                                    let isSelected = abs(playbackRate - rate) < 0.05
-                                    Button(action: {
-                                        #if os(iOS)
-                                        UISelectionFeedbackGenerator().selectionChanged()
-                                        #endif
-                                        playbackRate = rate
-                                    }) {
-                                        Text(rate == 1.0 ? "1x" : "\(String(format: "%.2gx", rate))")
-                                            .font(isSelected ? KhyloTypography.captionBold : KhyloTypography.captionMedium)
-                                            .foregroundColor(isSelected ? .white : KhyloColors.textSecondary)
-                                            .frame(maxWidth: .infinity)
-                                            .padding(.vertical, 10)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: KhyloRadius.xs)
-                                                    .fill(isSelected ? KhyloColors.accent : KhyloColors.surfaceElevated)
-                                            )
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
+                                    PlaybackRateButton(
+                                        rate: rate,
+                                        isSelected: abs(playbackRate - rate) < 0.05,
+                                        onSelect: { playbackRate = rate }
+                                    )
                                 }
                             }
                             .padding(KhyloSpacing.sm)
@@ -125,28 +112,11 @@ public struct PlayerSettingsSheet: View {
                         sectionContainer(title: "Aspect Ratio") {
                             HStack(spacing: 8) {
                                 ForEach(VideoAspectRatioMode.allCases) { mode in
-                                    let isSelected = aspectRatioMode == mode
-                                    Button(action: {
-                                        #if os(iOS)
-                                        UISelectionFeedbackGenerator().selectionChanged()
-                                        #endif
-                                        aspectRatioMode = mode
-                                    }) {
-                                        HStack(spacing: 6) {
-                                            Image(systemName: mode.iconName)
-                                                .font(.system(size: 13, weight: .bold))
-                                            Text(mode.rawValue)
-                                                .font(isSelected ? KhyloTypography.captionBold : KhyloTypography.caption)
-                                        }
-                                        .foregroundColor(isSelected ? .white : KhyloColors.textSecondary)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: KhyloRadius.xs)
-                                                .fill(isSelected ? KhyloColors.accent : KhyloColors.surfaceElevated)
-                                        )
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
+                                    AspectRatioButton(
+                                        mode: mode,
+                                        isSelected: aspectRatioMode == mode,
+                                        onSelect: { aspectRatioMode = mode }
+                                    )
                                 }
                             }
                             .padding(KhyloSpacing.sm)
@@ -156,39 +126,15 @@ public struct PlayerSettingsSheet: View {
                         sectionContainer(title: "Stream Quality & Bitrate") {
                             VStack(spacing: 0) {
                                 ForEach(QualityOption.allOptions) { option in
-                                    let isSelected = selectedQualityIndex == option.id
-                                    Button(action: {
-                                        #if os(iOS)
-                                        UISelectionFeedbackGenerator().selectionChanged()
-                                        #endif
-                                        selectedQualityIndex = option.id
-                                        KhyloPreferences.maxBitrateIndex = option.id
-                                    }) {
-                                        HStack {
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(option.name)
-                                                    .font(KhyloTypography.bodyMedium)
-                                                    .foregroundColor(KhyloColors.textPrimary)
-                                                Text(option.description)
-                                                    .font(KhyloTypography.caption)
-                                                    .foregroundColor(KhyloColors.textTertiary)
-                                            }
-
-                                            Spacer()
-
-                                            if isSelected {
-                                                Image(systemName: "checkmark")
-                                                    .font(.system(size: 14, weight: .bold))
-                                                    .foregroundColor(KhyloColors.accent)
-                                            }
+                                    QualityOptionRow(
+                                        option: option,
+                                        isSelected: selectedQualityIndex == option.id,
+                                        isLast: option.id == QualityOption.allOptions.last?.id,
+                                        onSelect: {
+                                            selectedQualityIndex = option.id
+                                            KhyloPreferences.maxBitrateIndex = option.id
                                         }
-                                        .padding(KhyloSpacing.md)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-
-                                    if option.id != QualityOption.allOptions.last?.id {
-                                        Divider().background(KhyloColors.border)
-                                    }
+                                    )
                                 }
                             }
                         }
@@ -197,38 +143,12 @@ public struct PlayerSettingsSheet: View {
                         sectionContainer(title: "Audio Track") {
                             VStack(spacing: 0) {
                                 ForEach(Array(audioTracks.enumerated()), id: \.offset) { index, track in
-                                    let isSelected = selectedAudioTrackIndex == index
-                                    Button(action: {
-                                        #if os(iOS)
-                                        UISelectionFeedbackGenerator().selectionChanged()
-                                        #endif
-                                        selectedAudioTrackIndex = index
-                                    }) {
-                                        HStack {
-                                            Image(systemName: "waveform")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(isSelected ? KhyloColors.accent : KhyloColors.textTertiary)
-                                                .frame(width: 24)
-
-                                            Text(track)
-                                                .font(KhyloTypography.bodyMedium)
-                                                .foregroundColor(KhyloColors.textPrimary)
-
-                                            Spacer()
-
-                                            if isSelected {
-                                                Image(systemName: "checkmark")
-                                                    .font(.system(size: 14, weight: .bold))
-                                                    .foregroundColor(KhyloColors.accent)
-                                            }
-                                        }
-                                        .padding(KhyloSpacing.md)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-
-                                    if index != audioTracks.count - 1 {
-                                        Divider().background(KhyloColors.border)
-                                    }
+                                    AudioTrackRow(
+                                        track: track,
+                                        isSelected: selectedAudioTrackIndex == index,
+                                        isLast: index == audioTracks.count - 1,
+                                        onSelect: { selectedAudioTrackIndex = index }
+                                    )
                                 }
                             }
                         }
@@ -237,39 +157,16 @@ public struct PlayerSettingsSheet: View {
                         sectionContainer(title: "Subtitles") {
                             VStack(spacing: 0) {
                                 ForEach(Array(subtitleTracks.enumerated()), id: \.offset) { index, track in
-                                    let isSelected = selectedSubtitleTrackIndex == index
-                                    Button(action: {
-                                        #if os(iOS)
-                                        UISelectionFeedbackGenerator().selectionChanged()
-                                        #endif
-                                        selectedSubtitleTrackIndex = index
-                                    }) {
-                                        HStack {
-                                            Image(systemName: index == 0 ? "captions.bubble" : "captions.bubble.fill")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(isSelected ? KhyloColors.accent : KhyloColors.textTertiary)
-                                                .frame(width: 24)
-
-                                            Text(track)
-                                                .font(KhyloTypography.bodyMedium)
-                                                .foregroundColor(KhyloColors.textPrimary)
-
-                                            Spacer()
-
-                                            if isSelected {
-                                                Image(systemName: "checkmark")
-                                                    .font(.system(size: 14, weight: .bold))
-                                                    .foregroundColor(KhyloColors.accent)
-                                            }
-                                        }
-                                        .padding(KhyloSpacing.md)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-
-                                    if index != subtitleTracks.count - 1 {
-                                        Divider().background(KhyloColors.border)
-                                    }
+                                    SubtitleTrackRow(
+                                        index: index,
+                                        track: track,
+                                        isSelected: selectedSubtitleTrackIndex == index,
+                                        isLast: index == subtitleTracks.count - 1,
+                                        onSelect: { selectedSubtitleTrackIndex = index }
+                                    )
                                 }
+                            }
+                        }
 
                                 if selectedSubtitleTrackIndex > 0 {
                                     Divider().background(KhyloColors.border)
@@ -382,6 +279,188 @@ public struct PlayerSettingsSheet: View {
                 RoundedRectangle(cornerRadius: KhyloRadius.sm)
                     .strokeBorder(KhyloColors.border, lineWidth: 1)
             )
+        }
+    }
+}
+
+// MARK: - Row Subviews
+
+private struct PlaybackRateButton: View {
+    let rate: Double
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            Text(rate == 1.0 ? "1x" : "\(String(format: "%.2gx", rate))")
+                .font(isSelected ? KhyloTypography.captionBold : KhyloTypography.captionMedium)
+                .foregroundColor(isSelected ? .white : KhyloColors.textSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: KhyloRadius.xs)
+                        .fill(isSelected ? KhyloColors.accent : KhyloColors.surfaceElevated)
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+private struct AspectRatioButton: View {
+    let mode: VideoAspectRatioMode
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: mode.iconName)
+                    .font(.system(size: 13, weight: .bold))
+                Text(mode.rawValue)
+                    .font(isSelected ? KhyloTypography.captionBold : KhyloTypography.caption)
+            }
+            .foregroundColor(isSelected ? .white : KhyloColors.textSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: KhyloRadius.xs)
+                    .fill(isSelected ? KhyloColors.accent : KhyloColors.surfaceElevated)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+private struct QualityOptionRow: View {
+    let option: QualityOption
+    let isSelected: Bool
+    let isLast: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(option.name)
+                        .font(KhyloTypography.bodyMedium)
+                        .foregroundColor(KhyloColors.textPrimary)
+                    Text(option.description)
+                        .font(KhyloTypography.caption)
+                        .foregroundColor(KhyloColors.textTertiary)
+                }
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(KhyloColors.accent)
+                }
+            }
+            .padding(KhyloSpacing.md)
+        }
+        .buttonStyle(PlainButtonStyle())
+
+        if !isLast {
+            Divider().background(KhyloColors.border)
+        }
+    }
+}
+
+private struct AudioTrackRow: View {
+    let track: String
+    let isSelected: Bool
+    let isLast: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            HStack {
+                Image(systemName: "waveform")
+                    .font(.system(size: 14))
+                    .foregroundColor(isSelected ? KhyloColors.accent : KhyloColors.textTertiary)
+                    .frame(width: 24)
+
+                Text(track)
+                    .font(KhyloTypography.bodyMedium)
+                    .foregroundColor(KhyloColors.textPrimary)
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(KhyloColors.accent)
+                }
+            }
+            .padding(KhyloSpacing.md)
+        }
+        .buttonStyle(PlainButtonStyle())
+
+        if !isLast {
+            Divider().background(KhyloColors.border)
+        }
+    }
+}
+
+private struct SubtitleTrackRow: View {
+    let index: Int
+    let track: String
+    let isSelected: Bool
+    let isLast: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            HStack {
+                Image(systemName: index == 0 ? "captions.bubble" : "captions.bubble.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(isSelected ? KhyloColors.accent : KhyloColors.textTertiary)
+                    .frame(width: 24)
+
+                Text(track)
+                    .font(KhyloTypography.bodyMedium)
+                    .foregroundColor(KhyloColors.textPrimary)
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(KhyloColors.accent)
+                }
+            }
+            .padding(KhyloSpacing.md)
+        }
+        .buttonStyle(PlainButtonStyle())
+
+        if !isLast {
+            Divider().background(KhyloColors.border)
         }
     }
 }

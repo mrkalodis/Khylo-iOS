@@ -411,26 +411,8 @@ public struct KhyloSearchView: View {
                             spacing: KhyloSpacing.sm
                         ) {
                             ForEach(sampleGenres, id: \.self) { genre in
-                                let color = GenreColors.color(for: genre)
-                                Button(action: {
+                                GenreSearchChip(genre: genre) {
                                     query = genre
-                                }) {
-                                    HStack {
-                                        Text(genre)
-                                            .font(KhyloTypography.headline)
-                                            .foregroundColor(.white)
-                                        Spacer()
-                                    }
-                                    .padding(KhyloSpacing.md)
-                                    .frame(height: 72)
-                                    .background(
-                                        LinearGradient(
-                                            colors: [color.opacity(0.85), color.opacity(0.4)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .cornerRadius(KhyloRadius.md)
                                 }
                             }
                         }
@@ -698,6 +680,38 @@ private struct KhyloPlayerStubView: View {
 
                 Spacer()
             }
+        }
+    }
+}
+
+// MARK: - Genre Search Chip
+
+private struct GenreSearchChip: View {
+    let genre: String
+    let onSelect: () -> Void
+
+    private var color: Color {
+        GenreColors.color(for: genre)
+    }
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack {
+                Text(genre)
+                    .font(KhyloTypography.headline)
+                    .foregroundColor(.white)
+                Spacer()
+            }
+            .padding(KhyloSpacing.md)
+            .frame(height: 72)
+            .background(
+                LinearGradient(
+                    colors: [color.opacity(0.85), color.opacity(0.4)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(KhyloRadius.md)
         }
     }
 }

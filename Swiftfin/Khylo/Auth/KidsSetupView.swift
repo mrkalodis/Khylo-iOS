@@ -200,9 +200,8 @@ public struct KidsSetupView: View {
 
                         VStack(spacing: 8) {
                             ForEach(availableLibraries, id: \.self) { lib in
-                                let isSelected = selectedLibraries.contains(lib)
                                 Button(action: {
-                                    if isSelected {
+                                    if selectedLibraries.contains(lib) {
                                         selectedLibraries.remove(lib)
                                     } else {
                                         selectedLibraries.insert(lib)
@@ -213,9 +212,9 @@ public struct KidsSetupView: View {
                                             .font(KhyloTypography.bodyMedium)
                                             .foregroundColor(KhyloColors.textPrimary)
                                         Spacer()
-                                        Image(systemName: isSelected ? "checkmark.square.fill" : "square")
+                                        Image(systemName: selectedLibraries.contains(lib) ? "checkmark.square.fill" : "square")
                                             .font(.system(size: 18))
-                                            .foregroundColor(isSelected ? KhyloColors.accent : KhyloColors.textTertiary)
+                                            .foregroundColor(selectedLibraries.contains(lib) ? KhyloColors.accent : KhyloColors.textTertiary)
                                     }
                                     .padding(.vertical, 8)
                                     .padding(.horizontal, KhyloSpacing.md)

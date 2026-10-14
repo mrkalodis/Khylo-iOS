@@ -158,6 +158,7 @@ public enum KhyloRadius {
     public static let lg: CGFloat = 16
     public static let xl: CGFloat = 24
     public static let full: CGFloat = 9999
+    public static let pill: CGFloat = 9999
 }
 
 // MARK: - Khylo Theme Environment

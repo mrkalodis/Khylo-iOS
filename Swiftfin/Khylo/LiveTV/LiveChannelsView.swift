@@ -276,18 +276,8 @@ public struct LiveChannelsView: View {
             .background(KhyloColors.surface)
 
             // Timeline slots for 6 hours
-            let startOfTimeline = timelineStart
             ForEach(0..<12, id: \.self) { slotIndex in
-                let slotDate = startOfTimeline.addingTimeInterval(Double(slotIndex * timelineIntervalMinutes * 60))
-                HStack {
-                    Text(formatTime(slotDate))
-                        .font(KhyloTypography.caption2Medium)
-                        .foregroundColor(KhyloColors.textSecondary)
-                        .padding(.leading, 6)
-                    Spacer()
-                }
-                .frame(width: CGFloat(timelineIntervalMinutes) * minuteWidth, height: 36)
-                .border(KhyloColors.border.opacity(0.3), width: 0.5)
+                timelineSlotView(slotIndex: slotIndex)
             }
         }
         .background(KhyloColors.surface)
@@ -330,76 +320,17 @@ public struct LiveChannelsView: View {
             let startOfTimeline = timelineStart
             HStack(spacing: 2) {
                 ForEach(channel.programs) { program in
-                    let isNow = program.isAiring(at: currentTime)
-                    let isSelected = selectedProgram?.id == program.id
-                    let width = max(CGFloat(program.durationMinutes) * minuteWidth - 2, 60)
-
-                    Button(action: {
-                        selectedChannel = channel
-                        selectedProgram = program
-                    }) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack {
-                                Text(program.title)
-                                    .font(KhyloTypography.captionBold)
-                                    .foregroundColor(isNow ? KhyloColors.accent : KhyloColors.textPrimary)
-                                    .lineLimit(1)
-
-                                Spacer()
-
-                                if isNow {
-                                    Circle()
-                                        .fill(Color.red)
-                                        .frame(width: 6, height: 6)
-                                }
-                            }
-
-                            if let detail = program.detail {
-                                Text(detail)
-                                    .font(KhyloTypography.caption2)
-                                    .foregroundColor(KhyloColors.textSecondary)
-                                    .lineLimit(1)
-                            } else {
-                                Text("\(formatTime(program.start)) - \(formatTime(program.end))")
-                                    .font(KhyloTypography.caption2)
-                                    .foregroundColor(KhyloColors.textTertiary)
-                                    .lineLimit(1)
-                            }
-
-                            Spacer()
-
-                            if isNow {
-                                GeometryReader { geo in
-                                    ZStack(alignment: .leading) {
-                                        Rectangle()
-                                            .fill(Color.white.opacity(0.12))
-                                            .frame(height: 2)
-
-                                        Rectangle()
-                                            .fill(KhyloColors.accent)
-                                            .frame(width: geo.size.width * CGFloat(program.progress(at: currentTime)), height: 2)
-                                    }
-                                }
-                                .frame(height: 2)
-                            }
+                    ProgramCellView(
+                        program: program,
+                        currentTime: currentTime,
+                        isSelected: selectedProgram?.id == program.id,
+                        minuteWidth: minuteWidth,
+                        rowHeight: rowHeight,
+                        onSelect: {
+                            selectedChannel = channel
+                            selectedProgram = program
                         }
-                        .padding(6)
-                        .frame(width: width, height: rowHeight - 6)
-                        .background(
-                            isSelected ? KhyloColors.accent.opacity(0.25) :
-                            isNow ? KhyloColors.surfaceElevated : KhyloColors.surface
-                        )
-                        .cornerRadius(KhyloRadius.xs)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: KhyloRadius.xs)
-                                .stroke(
-                                    isSelected ? KhyloColors.accent :
-                                    isNow ? KhyloColors.accent.opacity(0.6) :
-                                    Color.clear,
-                                    lineWidth: 1
-                                )
-                        )
-                    }
+                    )
                 }
             }
             .frame(height: rowHeight)
@@ -492,6 +423,110 @@ public struct LiveChannelsView: View {
             .sink { [self] date in
                 self.currentTime = date
             }
+    }
+
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
+    }
+
+    private func timelineSlotView(slotIndex: Int) -> some View {
+        let slotDate = timelineStart.addingTimeInterval(Double(slotIndex * timelineIntervalMinutes * 60))
+        return HStack {
+            Text(formatTime(slotDate))
+                .font(KhyloTypography.caption2Medium)
+                .foregroundColor(KhyloColors.textSecondary)
+                .padding(.leading, 6)
+            Spacer()
+        }
+        .frame(width: CGFloat(timelineIntervalMinutes) * minuteWidth, height: 36)
+        .border(KhyloColors.border.opacity(0.3), width: 0.5)
+    }
+}
+
+// MARK: - Program Cell View
+
+private struct ProgramCellView: View {
+    let program: LiveChannelProgram
+    let currentTime: Date
+    let isSelected: Bool
+    let minuteWidth: CGFloat
+    let rowHeight: CGFloat
+    let onSelect: () -> Void
+
+    private var isNow: Bool {
+        program.isAiring(at: currentTime)
+    }
+
+    private var cellWidth: CGFloat {
+        max(CGFloat(program.durationMinutes) * minuteWidth - 2, 60)
+    }
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text(program.title)
+                        .font(KhyloTypography.captionBold)
+                        .foregroundColor(isNow ? KhyloColors.accent : KhyloColors.textPrimary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    if isNow {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 6, height: 6)
+                    }
+                }
+
+                if let detail = program.detail {
+                    Text(detail)
+                        .font(KhyloTypography.caption2)
+                        .foregroundColor(KhyloColors.textSecondary)
+                        .lineLimit(1)
+                } else {
+                    Text("\(formatTime(program.start)) - \(formatTime(program.end))")
+                        .font(KhyloTypography.caption2)
+                        .foregroundColor(KhyloColors.textTertiary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                if isNow {
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.12))
+                                .frame(height: 2)
+
+                            Rectangle()
+                                .fill(KhyloColors.accent)
+                                .frame(width: geo.size.width * CGFloat(program.progress(at: currentTime)), height: 2)
+                        }
+                    }
+                    .frame(height: 2)
+                }
+            }
+            .padding(6)
+            .frame(width: cellWidth, height: rowHeight - 6)
+            .background(
+                isSelected ? KhyloColors.accent.opacity(0.25) :
+                isNow ? KhyloColors.surfaceElevated : KhyloColors.surface
+            )
+            .cornerRadius(KhyloRadius.xs)
+            .overlay(
+                RoundedRectangle(cornerRadius: KhyloRadius.xs)
+                    .stroke(
+                        isSelected ? KhyloColors.accent :
+                        isNow ? KhyloColors.accent.opacity(0.6) :
+                        Color.clear,
+                        lineWidth: 1
+                    )
+            )
+        }
     }
 
     private func formatTime(_ date: Date) -> String {

@@ -286,29 +286,15 @@ public struct EPUBReaderView: View {
 
                 List {
                     ForEach(viewModel.book.chapters) { chapter in
-                        let isCurrent = chapter.chapterIndex == viewModel.currentChapterIndex
-                        Button(action: {
-                            viewModel.jumpToChapter(index: chapter.chapterIndex)
-                            showTOCDrawer = false
-                        }) {
-                            HStack {
-                                Text("\(chapter.chapterIndex + 1).")
-                                    .font(KhyloTypography.bodyMedium)
-                                    .foregroundColor(isCurrent ? KhyloColors.accent : viewModel.theme.secondaryTextColor)
-                                    .frame(width: 30, alignment: .leading)
-
-                                Text(chapter.title)
-                                    .font(isCurrent ? KhyloTypography.headline : KhyloTypography.body)
-                                    .foregroundColor(isCurrent ? KhyloColors.accent : viewModel.theme.textColor)
-
-                                Spacer()
-
-                                Text("\(chapter.wordCount) words")
-                                    .font(KhyloTypography.caption)
-                                    .foregroundColor(viewModel.theme.secondaryTextColor)
+                        TOCChapterRow(
+                            chapter: chapter,
+                            isCurrent: chapter.chapterIndex == viewModel.currentChapterIndex,
+                            theme: viewModel.theme,
+                            onSelect: {
+                                viewModel.jumpToChapter(index: chapter.chapterIndex)
+                                showTOCDrawer = false
                             }
-                        }
-                        .listRowBackground(isCurrent ? viewModel.theme.textColor.opacity(0.08) : Color.clear)
+                        )
                     }
                 }
                 .listStyle(.plain)
@@ -325,5 +311,36 @@ public struct EPUBReaderView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - TOC Chapter Row
+
+private struct TOCChapterRow: View {
+    let chapter: EPUBChapter
+    let isCurrent: Bool
+    let theme: ReadingTheme
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack {
+                Text("\(chapter.chapterIndex + 1).")
+                    .font(KhyloTypography.bodyMedium)
+                    .foregroundColor(isCurrent ? KhyloColors.accent : theme.secondaryTextColor)
+                    .frame(width: 30, alignment: .leading)
+
+                Text(chapter.title)
+                    .font(isCurrent ? KhyloTypography.headline : KhyloTypography.body)
+                    .foregroundColor(isCurrent ? KhyloColors.accent : theme.textColor)
+
+                Spacer()
+
+                Text("\(chapter.wordCount) words")
+                    .font(KhyloTypography.caption)
+                    .foregroundColor(theme.secondaryTextColor)
+            }
+        }
+        .listRowBackground(isCurrent ? theme.textColor.opacity(0.08) : Color.clear)
     }
 }

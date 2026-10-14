@@ -85,28 +85,14 @@ public struct RecentlyAddedRow: View {
                 // Filter Pills
                 HStack(spacing: KhyloSpacing.xs) {
                     ForEach(RecentlyAddedFilter.allCases) { filter in
-                        let isSelected = selectedFilter == filter
-                        Button(action: {
-                            #if os(iOS)
-                            UISelectionFeedbackGenerator().selectionChanged()
-                            #endif
-                            selectedFilter = filter
-                            onFilterChange?(filter)
-                        }) {
-                            Text(filter.rawValue)
-                                .font(KhyloTypography.captionMedium)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule()
-                                        .fill(isSelected ? KhyloColors.accent : KhyloColors.surfaceElevated)
-                                )
-                                .foregroundColor(isSelected ? KhyloColors.textPrimary : KhyloColors.textSecondary)
-                                .overlay(
-                                    Capsule()
-                                        .stroke(isSelected ? Color.clear : KhyloColors.border.opacity(0.4), lineWidth: 1)
-                                )
-                        }
+                        RecentlyAddedFilterPill(
+                            filter: filter,
+                            isSelected: selectedFilter == filter,
+                            onSelect: {
+                                selectedFilter = filter
+                                onFilterChange?(filter)
+                            }
+                        )
                     }
                     Spacer()
                 }
@@ -138,5 +124,36 @@ public struct RecentlyAddedRow: View {
     private var filteredItems: [KhyloMediaItem] {
         guard let filterType = selectedFilter.itemType else { return items }
         return items.filter { $0.type == filterType }
+    }
+}
+
+// MARK: - Recently Added Filter Pill
+
+private struct RecentlyAddedFilterPill: View {
+    let filter: RecentlyAddedFilter
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            Text(filter.rawValue)
+                .font(KhyloTypography.captionMedium)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? KhyloColors.accent : KhyloColors.surfaceElevated)
+                )
+                .foregroundColor(isSelected ? KhyloColors.textPrimary : KhyloColors.textSecondary)
+                .overlay(
+                    Capsule()
+                        .stroke(isSelected ? Color.clear : KhyloColors.border.opacity(0.4), lineWidth: 1)
+                )
+        }
     }
 }

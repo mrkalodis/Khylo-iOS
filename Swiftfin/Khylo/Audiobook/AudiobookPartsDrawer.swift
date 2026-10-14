@@ -41,72 +41,17 @@ public struct AudiobookPartsDrawer: View {
                 ScrollView {
                     VStack(spacing: 8) {
                         ForEach(Array(parts.enumerated()), id: \.element.id) { index, part in
-                            let isCurrent = index == currentPartIndex
-                            Button(action: {
-                                #if os(iOS)
-                                UISelectionFeedbackGenerator().selectionChanged()
-                                #endif
-                                onSelectPart(index)
-                                onDismiss()
-                            }) {
-                                HStack(spacing: 14) {
-                                    // Part Index / Playing Indicator
-                                    ZStack {
-                                        if isCurrent {
-                                            Circle()
-                                                .fill(warmAmber.opacity(0.2))
-                                                .frame(width: 36, height: 36)
-                                            Image(systemName: "speaker.wave.2.fill")
-                                                .font(.system(size: 14, weight: .bold))
-                                                .foregroundColor(warmAmber)
-                                        } else {
-                                            Text("\(part.partNumber)")
-                                                .font(KhyloTypography.bodyMedium)
-                                                .foregroundColor(Color.white.opacity(0.6))
-                                                .frame(width: 36, height: 36)
-                                        }
-                                    }
-
-                                    // Title & Progress Bar
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(part.title)
-                                            .font(isCurrent ? KhyloTypography.headline : KhyloTypography.bodyMedium)
-                                            .foregroundColor(isCurrent ? warmAmber : .white)
-                                            .lineLimit(1)
-
-                                        // Progress bar
-                                        GeometryReader { geometry in
-                                            ZStack(alignment: .leading) {
-                                                Capsule()
-                                                    .fill(Color.white.opacity(0.12))
-                                                    .frame(height: 3)
-
-                                                Capsule()
-                                                    .fill(warmAmber)
-                                                    .frame(width: geometry.size.width * CGFloat(part.progress), height: 3)
-                                            }
-                                        }
-                                        .frame(height: 3)
-                                    }
-
-                                    Spacer()
-
-                                    // Duration
-                                    Text(part.durationFormatted)
-                                        .font(KhyloTypography.captionMedium)
-                                        .foregroundColor(Color.white.opacity(0.5))
+                            AudiobookPartRow(
+                                part: part,
+                                index: index,
+                                isCurrent: index == currentPartIndex,
+                                warmAmber: warmAmber,
+                                warmSurface: warmSurface,
+                                onSelect: {
+                                    onSelectPart(index)
+                                    onDismiss()
                                 }
-                                .padding(12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: KhyloRadius.sm)
-                                        .fill(isCurrent ? warmSurface : Color.white.opacity(0.04))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: KhyloRadius.sm)
-                                                .strokeBorder(isCurrent ? warmAmber.opacity(0.3) : Color.clear, lineWidth: 1)
-                                        )
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
+                            )
                         }
                     }
                     .padding(KhyloSpacing.md)
@@ -123,5 +68,83 @@ public struct AudiobookPartsDrawer: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Audiobook Part Row
+
+private struct AudiobookPartRow: View {
+    let part: AudiobookPart
+    let index: Int
+    let isCurrent: Bool
+    let warmAmber: Color
+    let warmSurface: Color
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: {
+            #if os(iOS)
+            UISelectionFeedbackGenerator().selectionChanged()
+            #endif
+            onSelect()
+        }) {
+            HStack(spacing: 14) {
+                // Part Index / Playing Indicator
+                ZStack {
+                    if isCurrent {
+                        Circle()
+                            .fill(warmAmber.opacity(0.2))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(warmAmber)
+                    } else {
+                        Text("\(part.partNumber)")
+                            .font(KhyloTypography.bodyMedium)
+                            .foregroundColor(Color.white.opacity(0.6))
+                            .frame(width: 36, height: 36)
+                    }
+                }
+
+                // Title & Progress Bar
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(part.title)
+                        .font(isCurrent ? KhyloTypography.headline : KhyloTypography.bodyMedium)
+                        .foregroundColor(isCurrent ? warmAmber : .white)
+                        .lineLimit(1)
+
+                    // Progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.white.opacity(0.12))
+                                .frame(height: 3)
+
+                            Capsule()
+                                .fill(warmAmber)
+                                .frame(width: geometry.size.width * CGFloat(part.progress), height: 3)
+                        }
+                    }
+                    .frame(height: 3)
+                }
+
+                Spacer()
+
+                // Duration
+                Text(part.durationFormatted)
+                    .font(KhyloTypography.captionMedium)
+                    .foregroundColor(Color.white.opacity(0.5))
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: KhyloRadius.sm)
+                    .fill(isCurrent ? warmSurface : Color.white.opacity(0.04))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: KhyloRadius.sm)
+                            .strokeBorder(isCurrent ? warmAmber.opacity(0.3) : Color.clear, lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }

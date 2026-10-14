@@ -99,7 +99,6 @@ public struct MediaLibraryView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: KhyloSpacing.sm) {
                         ForEach(MediaLibraryTab.allCases) { tab in
-                            let isSelected = selectedTab == tab
                             Button(action: {
                                 #if os(iOS)
                                 UISelectionFeedbackGenerator().selectionChanged()
@@ -109,13 +108,13 @@ public struct MediaLibraryView: View {
                                 }
                             }) {
                                 Text(tab.rawValue)
-                                    .font(isSelected ? KhyloTypography.bodyMedium : KhyloTypography.body)
-                                    .foregroundColor(isSelected ? KhyloColors.textPrimary : KhyloColors.textSecondary)
+                                    .font(selectedTab == tab ? KhyloTypography.bodyMedium : KhyloTypography.body)
+                                    .foregroundColor(selectedTab == tab ? KhyloColors.textPrimary : KhyloColors.textSecondary)
                                     .padding(.horizontal, 14)
                                     .padding(.vertical, 8)
                                     .background(
                                         Capsule()
-                                            .fill(isSelected ? KhyloColors.accent : KhyloColors.surfaceElevated)
+                                            .fill(selectedTab == tab ? KhyloColors.accent : KhyloColors.surfaceElevated)
                                     )
                             }
                         }
@@ -336,35 +335,14 @@ public struct MediaLibraryView: View {
                 spacing: KhyloSpacing.md
             ) {
                 ForEach(libraryGenres, id: \.self) { genre in
-                    let color = GenreColors.color(for: genre)
-                    Button(action: {
-                        selectedGenre = genre
-                        selectedTab = .browse
-                        currentSearch = genre
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(genre)
-                                    .font(KhyloTypography.headline)
-                                    .foregroundColor(.white)
-
-                                Text("Explore")
-                                    .font(KhyloTypography.caption2Medium)
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                            Spacer()
+                    GenreExploreCard(
+                        genre: genre,
+                        onSelect: {
+                            selectedGenre = genre
+                            selectedTab = .browse
+                            currentSearch = genre
                         }
-                        .padding(KhyloSpacing.md)
-                        .frame(height: 80)
-                        .background(
-                            LinearGradient(
-                                colors: [color.opacity(0.85), color.opacity(0.4)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .cornerRadius(KhyloRadius.md)
-                    }
+                    )
                 }
             }
             .padding(KhyloSpacing.lg)
@@ -465,6 +443,44 @@ public struct MediaLibraryView: View {
         let rec = await repository.fetchRecommendations()
         await MainActor.run {
             self.recommendedItems = rec
+        }
+    }
+}
+
+// MARK: - Genre Explore Card
+
+private struct GenreExploreCard: View {
+    let genre: String
+    let onSelect: () -> Void
+
+    private var color: Color {
+        GenreColors.color(for: genre)
+    }
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(genre)
+                        .font(KhyloTypography.headline)
+                        .foregroundColor(.white)
+
+                    Text("Explore")
+                        .font(KhyloTypography.caption2Medium)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                Spacer()
+            }
+            .padding(KhyloSpacing.md)
+            .frame(height: 80)
+            .background(
+                LinearGradient(
+                    colors: [color.opacity(0.85), color.opacity(0.4)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(KhyloRadius.md)
         }
     }
 }
