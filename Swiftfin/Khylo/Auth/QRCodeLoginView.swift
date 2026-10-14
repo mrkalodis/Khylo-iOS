@@ -52,7 +52,7 @@ public struct QRCodeLoginView: View {
                 VStack(spacing: KhyloSpacing.lg) {
                     // Navigation bar / back
                     HStack {
-                        Button(action: onCancel) {
+                        Button(action: { onCancel() }) {
                             HStack(spacing: 4) {
                                 Image(systemName: "chevron.left")
                                 Text("Servers")

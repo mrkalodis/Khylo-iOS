@@ -643,7 +643,9 @@ private struct KhyloPlayerStubView: View {
 
             VStack {
                 HStack {
-                    Button(action: onDismiss) {
+                    Button(action: {
+                        onDismiss()
+                    }) {
                         Image(systemName: "xmark")
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.white)
@@ -695,7 +697,9 @@ private struct GenreSearchChip: View {
     }
 
     var body: some View {
-        Button(action: onSelect) {
+        Button(action: {
+            onSelect()
+        }) {
             HStack {
                 Text(genre)
                     .font(KhyloTypography.headline)

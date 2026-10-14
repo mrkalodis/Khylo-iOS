@@ -323,7 +323,7 @@ private struct TOCChapterRow: View {
     let onSelect: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
+        Button(action: { onSelect() }) {
             HStack {
                 Text("\(chapter.chapterIndex + 1).")
                     .font(KhyloTypography.bodyMedium)

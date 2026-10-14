@@ -458,7 +458,7 @@ private struct GenreExploreCard: View {
     }
 
     var body: some View {
-        Button(action: onSelect) {
+        Button(action: { onSelect() }) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(genre)

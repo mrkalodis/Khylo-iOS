@@ -69,7 +69,7 @@ public struct RecentlyAddedRow: View {
                     Spacer()
 
                     if let onSeeAll {
-                        Button(action: onSeeAll) {
+                        Button(action: { onSeeAll() }) {
                             HStack(spacing: 3) {
                                 Text("See All")
                                     .font(KhyloTypography.subheadline)

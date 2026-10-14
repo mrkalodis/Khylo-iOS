@@ -464,7 +464,7 @@ private struct ProgramCellView: View {
     }
 
     var body: some View {
-        Button(action: onSelect) {
+        Button(action: { onSelect() }) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(program.title)

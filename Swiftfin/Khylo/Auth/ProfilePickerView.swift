@@ -136,7 +136,7 @@ public struct ProfilePickerView: View {
         VStack(spacing: KhyloSpacing.xl) {
             // Top Bar
             HStack {
-                Button(action: onSwitchServer) {
+                Button(action: { onSwitchServer() }) {
                     HStack(spacing: 4) {
                         Image(systemName: "server.rack")
                         Text(server.name)

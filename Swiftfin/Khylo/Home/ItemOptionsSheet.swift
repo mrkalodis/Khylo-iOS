@@ -220,7 +220,7 @@ public struct ItemOptionsSheet: View {
         destructive: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        Button(action: { action() }) {
             HStack(spacing: KhyloSpacing.md) {
                 Image(systemName: icon)
                     .font(.system(size: 18))

@@ -192,7 +192,9 @@ private struct NextUpCountdownPlayButton: View {
     let onPlay: () -> Void
 
     var body: some View {
-        Button(action: onPlay) {
+        Button(action: {
+            onPlay()
+        }) {
             ZStack {
                 Circle()
                     .stroke(Color.white.opacity(0.2), lineWidth: 2.5)
@@ -224,7 +226,9 @@ private struct NextUpDismissButton: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        Button(action: onDismiss) {
+        Button(action: {
+            onDismiss()
+        }) {
             Image(systemName: "xmark")
                 .font(.system(size: 13, weight: .bold))
                 .foregroundColor(KhyloColors.textSecondary)

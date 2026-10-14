@@ -63,7 +63,7 @@ public struct PINEntryView: View {
             VStack(spacing: KhyloSpacing.xl) {
                 // Header with cancel
                 HStack {
-                    Button(action: onCancel) {
+                    Button(action: { onCancel() }) {
                         Text("Cancel")
                             .font(KhyloTypography.bodyMedium)
                             .foregroundColor(KhyloColors.textSecondary)
@@ -117,7 +117,7 @@ public struct PINEntryView: View {
                     HStack(spacing: 32) {
                         // Biometrics
                         if biometricType != .none {
-                            Button(action: triggerBiometrics) {
+                            Button(action: { triggerBiometrics() }) {
                                 Image(systemName: biometricIcon)
                                     .font(.system(size: 26))
                                     .foregroundColor(KhyloColors.accent)
@@ -132,7 +132,7 @@ public struct PINEntryView: View {
                         numpadButton("0")
 
                         // Delete
-                        Button(action: deleteDigit) {
+                        Button(action: { deleteDigit() }) {
                             Image(systemName: "delete.left")
                                 .font(.system(size: 22, weight: .semibold))
                                 .foregroundColor(KhyloColors.textSecondary)
