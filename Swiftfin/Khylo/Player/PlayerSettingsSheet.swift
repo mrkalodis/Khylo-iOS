@@ -165,8 +165,6 @@ public struct PlayerSettingsSheet: View {
                                         onSelect: { selectedSubtitleTrackIndex = index }
                                     )
                                 }
-                            }
-                        }
 
                                 if selectedSubtitleTrackIndex > 0 {
                                     Divider().background(KhyloColors.border)
