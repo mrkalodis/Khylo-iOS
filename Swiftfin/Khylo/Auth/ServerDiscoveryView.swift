@@ -17,7 +17,7 @@ public struct ServerDiscoveryView: View {
     @State private var manualHost: String = ""
     @State private var isConnectingManual: Bool = false
     @State private var errorMessage: String?
-    @State private var pulseAnimation: Bool = false
+    @FocusState private var isAddressFocused: Bool
 
     public let onSelectServer: (DiscoveredServer) -> Void
 
@@ -25,174 +25,106 @@ public struct ServerDiscoveryView: View {
         self.onSelectServer = onSelectServer
     }
 
+    private var canConnect: Bool {
+        !manualHost.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     public var body: some View {
-        ZStack {
-            KhyloColors.background
-                .ignoresSafeArea()
+        KhyloAuthScaffold {
+            Spacer(minLength: 56)
 
-            ScrollView {
-                VStack(spacing: KhyloSpacing.xl) {
-                    // Header Brand
-                    VStack(spacing: KhyloSpacing.sm) {
-                        #if canImport(UIKit)
-                        if let logo = loadBrandImage(named: "khylo_logo") {
-                            Image(uiImage: logo)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 64, height: 64)
-                        }
-                        #endif
+            KhyloAuthLogo(width: 240)
+                .padding(.bottom, 44)
 
-                        Text("Connect to Server")
-                            .font(KhyloTypography.title1)
-                            .foregroundColor(KhyloColors.textPrimary)
+            KhyloAuthHeader(
+                title: "Connect to your server",
+                subtitle: "Enter your Khylo server address to start watching."
+            )
+            .padding(.bottom, 32)
 
-                        Text("Choose a media server on your local network or enter an address.")
-                            .font(KhyloTypography.body)
-                            .foregroundColor(KhyloColors.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, KhyloSpacing.lg)
+            VStack(alignment: .leading, spacing: 12) {
+                KhyloAuthField(
+                    label: "Server address",
+                    text: $manualHost,
+                    kind: .url,
+                    isFocused: isAddressFocused,
+                    hasError: errorMessage != nil,
+                    onSubmit: connectManual
+                )
+                .focused($isAddressFocused)
+                .onChange(of: manualHost) { _, _ in
+                    if errorMessage != nil {
+                        withAnimation { errorMessage = nil }
                     }
-                    .padding(.top, KhyloSpacing.xl)
+                }
 
-                    // Error Alert Banner
-                    if let errorMessage {
-                        HStack(spacing: KhyloSpacing.sm) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.red)
-                            Text(errorMessage)
-                                .font(KhyloTypography.subheadline)
-                                .foregroundColor(KhyloColors.textPrimary)
-                            Spacer()
-                            Button {
-                                self.errorMessage = nil
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(KhyloColors.textSecondary)
-                            }
-                        }
-                        .padding(KhyloSpacing.md)
-                        .background(
-                            RoundedRectangle(cornerRadius: KhyloRadius.sm)
-                                .fill(Color.red.opacity(0.18))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: KhyloRadius.sm)
-                                .stroke(Color.red.opacity(0.4), lineWidth: 1)
-                        )
-                        .padding(.horizontal, KhyloSpacing.lg)
-                    }
-
-                    // Discovered Servers Section
-                    VStack(alignment: .leading, spacing: KhyloSpacing.md) {
-                        HStack {
-                            Text("Discovered Servers")
-                                .font(KhyloTypography.headline)
-                                .foregroundColor(KhyloColors.textPrimary)
-
-                            Spacer()
-
-                            if discovery.isScanning {
-                                HStack(spacing: KhyloSpacing.xs) {
-                                    Circle()
-                                        .fill(KhyloColors.accent)
-                                        .frame(width: 8, height: 8)
-                                        .scaleEffect(pulseAnimation ? 1.4 : 0.8)
-                                        .opacity(pulseAnimation ? 1.0 : 0.4)
-                                    Text("Scanning...")
-                                        .font(KhyloTypography.caption)
-                                        .foregroundColor(KhyloColors.textSecondary)
-                                }
-                            } else {
-                                Button {
-                                    discovery.startScanning()
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "arrow.clockwise")
-                                        Text("Rescan")
-                                    }
-                                    .font(KhyloTypography.captionBold)
-                                    .foregroundColor(KhyloColors.accent)
-                                }
-                            }
-                        }
-
-                        if discovery.discoveredServers.isEmpty {
-                            VStack(spacing: KhyloSpacing.sm) {
-                                Image(systemName: "network")
-                                    .font(.system(size: 32))
-                                    .foregroundColor(KhyloColors.textTertiary)
-                                Text(discovery.isScanning ? "Looking for nearby Khylo servers..." : "No servers discovered automatically")
-                                    .font(KhyloTypography.subheadline)
-                                    .foregroundColor(KhyloColors.textSecondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, KhyloSpacing.xl)
-                            .background(
-                                RoundedRectangle(cornerRadius: KhyloRadius.md)
-                                    .fill(KhyloColors.surfaceElevated.opacity(0.5))
-                            )
-                        } else {
-                            VStack(spacing: KhyloSpacing.sm) {
-                                ForEach(discovery.discoveredServers) { server in
-                                    serverRow(server)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, KhyloSpacing.lg)
-
-                    // Manual Connection Section
-                    VStack(alignment: .leading, spacing: KhyloSpacing.md) {
-                        Text("Connect Manually")
-                            .font(KhyloTypography.headline)
-                            .foregroundColor(KhyloColors.textPrimary)
-
-                        VStack(spacing: KhyloSpacing.sm) {
-                            HStack {
-                                Image(systemName: "link")
-                                    .foregroundColor(KhyloColors.textTertiary)
-                                TextField("http://192.168.1.100:8096", text: $manualHost)
-                                    .autocapitalization(.none)
-                                    .disableAutocorrection(true)
-                                    .font(KhyloTypography.body)
-                                    .foregroundColor(KhyloColors.textPrimary)
-                            }
-                            .padding(KhyloSpacing.md)
-                            .background(
-                                RoundedRectangle(cornerRadius: KhyloRadius.md)
-                                    .fill(KhyloColors.surfaceElevated)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: KhyloRadius.md)
-                                    .stroke(KhyloColors.border, lineWidth: 1)
-                            )
-
-                            KhyloPrimaryButton(
-                                "Connect",
-                                icon: "arrow.right",
-                                isLoading: isConnectingManual,
-                                isEnabled: !manualHost.trimmingCharacters(in: .whitespaces).isEmpty
-                            ) {
-                                connectManual()
-                            }
-                        }
-                    }
-                    .padding(.horizontal, KhyloSpacing.lg)
-
-                    Spacer(minLength: 40)
+                if let errorMessage {
+                    KhyloAuthError(message: errorMessage)
+                } else {
+                    Text("For example khylo.example.com or 192.168.1.20:8096")
+                        .font(.system(size: 13))
+                        .foregroundColor(KhyloColors.textTertiary)
+                        .padding(.horizontal, 4)
                 }
             }
+            .padding(.bottom, 24)
+
+            KhyloAuthPrimaryButton(
+                title: "Continue",
+                isLoading: isConnectingManual,
+                isEnabled: canConnect,
+                action: connectManual
+            )
+
+            nearbyServers
+                .padding(.top, 40)
+
+            Spacer(minLength: 32)
         }
+        .animation(.easeInOut(duration: 0.2), value: errorMessage)
+        .animation(.easeInOut(duration: 0.25), value: discovery.discoveredServers)
         .onAppear {
             discovery.startScanning()
-            withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                pulseAnimation = true
-            }
         }
         .onDisappear {
             discovery.stopScanning()
+        }
+    }
+
+    // MARK: - Nearby Servers
+
+    @ViewBuilder
+    private var nearbyServers: some View {
+        if !discovery.discoveredServers.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("ON YOUR NETWORK")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1.2)
+                    .foregroundColor(KhyloColors.textTertiary)
+                    .padding(.horizontal, 4)
+
+                VStack(spacing: 10) {
+                    ForEach(discovery.discoveredServers) { server in
+                        serverRow(server)
+                    }
+                }
+            }
+            .transition(.opacity)
+        } else if discovery.isScanning {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(KhyloColors.textTertiary)
+                Text("Looking for servers on your network…")
+                    .font(.system(size: 14))
+                    .foregroundColor(KhyloColors.textTertiary)
+            }
+            .transition(.opacity)
+        } else {
+            KhyloAuthTextButton(title: "Search my network again", systemImage: "arrow.clockwise") {
+                discovery.startScanning()
+            }
+            .transition(.opacity)
         }
     }
 
@@ -203,56 +135,53 @@ public struct ServerDiscoveryView: View {
             #endif
             onSelectServer(server)
         } label: {
-            HStack(spacing: KhyloSpacing.md) {
+            HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: KhyloRadius.sm)
-                        .fill(server.isKhyloServer ? KhyloColors.accent.opacity(0.18) : KhyloColors.surfaceElevated)
-                        .frame(width: 44, height: 44)
-
-                    Image(systemName: server.isKhyloServer ? "sparkles.tv" : "server.rack")
-                        .font(.system(size: 20))
-                        .foregroundColor(server.isKhyloServer ? KhyloColors.accent : KhyloColors.textSecondary)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(KhyloColors.accent.opacity(0.16))
+                    Image(systemName: "play.tv.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(KhyloColors.accent)
                 }
+                .frame(width: 44, height: 44)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(server.name)
-                            .font(KhyloTypography.headline)
-                            .foregroundColor(KhyloColors.textPrimary)
+                    Text(server.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(KhyloColors.textPrimary)
+                        .lineLimit(1)
 
-                        if server.isKhyloServer {
-                            KhyloBadge("Khylo", style: .accent)
-                        } else {
-                            KhyloBadge("Media Server", style: .standard)
-                        }
-                    }
-
-                    Text(server.address.absoluteString)
-                        .font(KhyloTypography.caption)
+                    Text(server.address.host() ?? server.address.absoluteString)
+                        .font(.system(size: 13))
                         .foregroundColor(KhyloColors.textSecondary)
+                        .lineLimit(1)
                 }
 
-                Spacer()
+                Spacer(minLength: 8)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(KhyloColors.textTertiary)
             }
-            .padding(KhyloSpacing.md)
+            .padding(14)
             .background(
-                RoundedRectangle(cornerRadius: KhyloRadius.md)
-                    .fill(KhyloColors.surfaceElevated.opacity(0.85))
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.05))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: KhyloRadius.md)
-                    .stroke(server.isKhyloServer ? KhyloColors.accentDim.opacity(0.5) : KhyloColors.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 1)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(KhyloScaleButtonStyle())
     }
 
+    // MARK: - Actions
+
     private func connectManual() {
-        guard !manualHost.isEmpty else { return }
+        guard canConnect, !isConnectingManual else { return }
+        isAddressFocused = false
         isConnectingManual = true
         errorMessage = nil
 
@@ -267,18 +196,9 @@ public struct ServerDiscoveryView: View {
                 #if os(iOS)
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
                 #endif
-                self.errorMessage = "Unable to connect to server at \(manualHost). Check host address and network."
+                self.errorMessage = "We couldn't reach that server. Check the address and your connection, then try again."
             }
             isConnectingManual = false
         }
     }
-
-    #if canImport(UIKit)
-    private func loadBrandImage(named: String) -> UIImage? {
-        if let path = Bundle.main.path(forResource: named, ofType: "png") {
-            return UIImage(contentsOfFile: path)
-        }
-        return nil
-    }
-    #endif
 }

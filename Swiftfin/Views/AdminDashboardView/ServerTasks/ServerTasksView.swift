@@ -24,9 +24,7 @@ struct ServerTasksView: View {
             ListTitleSection(
                 L10n.tasks,
                 description: L10n.tasksDescription
-            ) {
-                UIApplication.shared.open(.jellyfinDocsTasks)
-            }
+            )
 
             Section(L10n.server) {
                 destructiveServerTask(

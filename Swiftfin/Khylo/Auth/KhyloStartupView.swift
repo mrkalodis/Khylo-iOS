@@ -30,9 +30,14 @@ public struct KhyloStartupView: View {
     @State private var activeServer: DiscoveredServer?
     @State private var manualUsername: String = ""
     @State private var manualPassword: String = ""
-    @State private var showPassword: Bool = false
-    @State private var isAuthenticating: Bool = false
-    @State private var authErrorMessage: String?
+    @FocusState private var focusedLoginField: LoginField?
+    @StateObject private var signInModel = KhyloSignInModel()
+
+    @Environment(\.localUserAuthenticationAction)
+    private var authenticationAction
+
+    private var isAuthenticating: Bool { signInModel.isSigningIn }
+    private var authErrorMessage: String? { signInModel.errorMessage }
 
     public let onAuthenticated: () -> Void
 
@@ -42,7 +47,7 @@ public struct KhyloStartupView: View {
     ) {
         self._activeServer = State(initialValue: initialServer)
         if let initialServer {
-            self._currentStep = State(initialValue: .profiles(initialServer))
+            self._currentStep = State(initialValue: .manualLogin(initialServer))
         } else {
             self._currentStep = State(initialValue: .serverDiscovery)
         }
@@ -59,7 +64,7 @@ public struct KhyloStartupView: View {
                 ServerDiscoveryView { selectedServer in
                     activeServer = selectedServer
                     withAnimation(.easeInOut(duration: 0.28)) {
-                        currentStep = .profiles(selectedServer)
+                        currentStep = .manualLogin(selectedServer)
                     }
                 }
                 .transition(.asymmetric(
@@ -100,7 +105,7 @@ public struct KhyloStartupView: View {
                     },
                     onCancel: {
                         withAnimation(.easeInOut(duration: 0.28)) {
-                            currentStep = .profiles(server)
+                            currentStep = .manualLogin(server)
                         }
                     }
                 )
@@ -142,157 +147,114 @@ public struct KhyloStartupView: View {
 
     // MARK: - Manual Login View
 
+    private enum LoginField: Hashable {
+        case username
+        case password
+    }
+
+    private var canSignIn: Bool {
+        !manualUsername.trimmingCharacters(in: .whitespaces).isEmpty && !isAuthenticating
+    }
+
     @ViewBuilder
     private func manualLoginView(server: DiscoveredServer) -> some View {
-        ScrollView {
-            VStack(spacing: KhyloSpacing.xl) {
-                // Top Bar
-                HStack {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.28)) {
-                            currentStep = .profiles(server)
+        ZStack(alignment: .topLeading) {
+            KhyloAuthScaffold {
+                Spacer(minLength: 72)
+
+                KhyloAuthLogo(width: 180)
+                    .padding(.bottom, 40)
+
+                KhyloAuthHeader(title: "Sign in")
+                    .padding(.bottom, 14)
+
+                serverChip(server: server)
+                    .padding(.bottom, 32)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    KhyloAuthField(
+                        label: "Username",
+                        text: $manualUsername,
+                        kind: .username,
+                        isFocused: focusedLoginField == .username,
+                        hasError: authErrorMessage != nil,
+                        onSubmit: { focusedLoginField = .password }
+                    )
+                    .focused($focusedLoginField, equals: .username)
+
+                    KhyloAuthField(
+                        label: "Password",
+                        text: $manualPassword,
+                        kind: .password,
+                        isFocused: focusedLoginField == .password,
+                        hasError: authErrorMessage != nil,
+                        onSubmit: {
+                            if canSignIn { authenticateManually(server: server) }
                         }
-                    }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.left")
-                            Text("Back")
-                        }
-                        .font(KhyloTypography.bodyMedium)
-                        .foregroundColor(KhyloColors.textPrimary)
-                    }
+                    )
+                    .focused($focusedLoginField, equals: .password)
 
-                    Spacer()
-                }
-                .padding(.horizontal, KhyloSpacing.lg)
-                .padding(.top, KhyloSpacing.md)
-
-                // Header
-                VStack(spacing: KhyloSpacing.xs) {
-                    Text("Sign In")
-                        .font(KhyloTypography.largeTitle)
-                        .foregroundColor(KhyloColors.textPrimary)
-
-                    Text(server.name)
-                        .font(KhyloTypography.headline)
-                        .foregroundColor(KhyloColors.accent)
-
-                    Text(server.address.absoluteString)
-                        .font(KhyloTypography.caption)
-                        .foregroundColor(KhyloColors.textSecondary)
-                }
-
-                // Error Message
-                if let authErrorMessage {
-                    HStack(spacing: KhyloSpacing.sm) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.red)
-                        Text(authErrorMessage)
-                            .font(KhyloTypography.subheadline)
-                            .foregroundColor(KhyloColors.textPrimary)
-                        Spacer()
-                    }
-                    .padding(KhyloSpacing.md)
-                    .background(Color.red.opacity(0.18))
-                    .cornerRadius(KhyloRadius.sm)
-                    .padding(.horizontal, KhyloSpacing.lg)
-                }
-
-                // Form Fields
-                VStack(spacing: KhyloSpacing.md) {
-                    VStack(alignment: .leading, spacing: KhyloSpacing.xs) {
-                        Text("Username")
-                            .font(KhyloTypography.captionMedium)
-                            .foregroundColor(KhyloColors.textSecondary)
-
-                        TextField("Enter your username", text: $manualUsername)
-                            .padding(.horizontal, KhyloSpacing.md)
-                            .frame(height: 52)
-                            .background(KhyloColors.surface)
-                            .cornerRadius(KhyloRadius.sm)
-                            .foregroundColor(KhyloColors.textPrimary)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                    }
-
-                    VStack(alignment: .leading, spacing: KhyloSpacing.xs) {
-                        Text("Password")
-                            .font(KhyloTypography.captionMedium)
-                            .foregroundColor(KhyloColors.textSecondary)
-
-                        HStack {
-                            if showPassword {
-                                TextField("Enter your password", text: $manualPassword)
-                                    .autocapitalization(.none)
-                                    .disableAutocorrection(true)
-                            } else {
-                                SecureField("Enter your password", text: $manualPassword)
-                            }
-
-                            Button(action: { showPassword.toggle() }) {
-                                Image(systemName: showPassword ? "eye.slash" : "eye")
-                                    .foregroundColor(KhyloColors.textSecondary)
-                            }
-                        }
-                        .padding(.horizontal, KhyloSpacing.md)
-                        .frame(height: 52)
-                        .background(KhyloColors.surface)
-                        .cornerRadius(KhyloRadius.sm)
-                        .foregroundColor(KhyloColors.textPrimary)
+                    if let authErrorMessage {
+                        KhyloAuthError(message: authErrorMessage)
                     }
                 }
-                .padding(.horizontal, KhyloSpacing.lg)
+                .padding(.bottom, 24)
 
-                // Sign In Button
-                Button(action: {
+                KhyloAuthPrimaryButton(
+                    title: "Sign In",
+                    isLoading: isAuthenticating,
+                    isEnabled: canSignIn
+                ) {
                     authenticateManually(server: server)
-                }) {
-                    HStack(spacing: KhyloSpacing.sm) {
-                        if isAuthenticating {
-                            ProgressView()
-                                .tint(KhyloColors.textPrimary)
-                        }
-                        Text("Sign In")
-                            .font(KhyloTypography.headline)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 52)
-                    .background(KhyloColors.accent)
-                    .foregroundColor(KhyloColors.textPrimary)
-                    .cornerRadius(KhyloRadius.sm)
                 }
-                .disabled(manualUsername.trimmingCharacters(in: .whitespaces).isEmpty || isAuthenticating)
-                .opacity(manualUsername.trimmingCharacters(in: .whitespaces).isEmpty ? 0.6 : 1.0)
-                .padding(.horizontal, KhyloSpacing.lg)
 
-                // Alternate Login Options
-                VStack(spacing: KhyloSpacing.md) {
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.28)) {
-                            currentStep = .qrCode(server)
-                        }
-                    }) {
-                        HStack(spacing: KhyloSpacing.xs) {
-                            Image(systemName: "qrcode")
-                            Text("Sign in with QR Code")
-                        }
-                        .font(KhyloTypography.bodyMedium)
-                        .foregroundColor(KhyloColors.textSecondary)
-                    }
-
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.28)) {
-                            currentStep = .serverDiscovery
-                        }
-                    }) {
-                        Text("Connect to different server")
-                            .font(KhyloTypography.caption)
-                            .foregroundColor(KhyloColors.textTertiary)
+                KhyloAuthTextButton(title: "Use Quick Connect instead", systemImage: "qrcode") {
+                    withAnimation(.easeInOut(duration: 0.28)) {
+                        currentStep = .qrCode(server)
                     }
                 }
-                .padding(.top, KhyloSpacing.sm)
+                .padding(.top, 16)
+
+                Spacer(minLength: 32)
             }
-            .padding(.bottom, KhyloSpacing.xxl)
+            .animation(.easeInOut(duration: 0.2), value: authErrorMessage)
+
+            KhyloAuthBackButton {
+                withAnimation(.easeInOut(duration: 0.28)) {
+                    currentStep = .serverDiscovery
+                }
+            }
+            .padding(.leading, 20)
+            .padding(.top, 8)
         }
+    }
+
+    /// Shows which server the user is signing in to, with a way to change it.
+    private func serverChip(server: DiscoveredServer) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                currentStep = .serverDiscovery
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(Color(hex: "#3DDC84"))
+                    .frame(width: 7, height: 7)
+                Text(server.address.host() ?? server.name)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(KhyloColors.textPrimary)
+                    .lineLimit(1)
+                Text("Change")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(KhyloColors.accent)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Capsule().fill(Color.white.opacity(0.06)))
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
+        }
+        .buttonStyle(KhyloScaleButtonStyle())
+        .accessibilityLabel("Server \(server.address.host() ?? server.name). Change server")
     }
 
     // MARK: - Profile Picker Alternative Auth Bar
@@ -382,60 +344,13 @@ public struct KhyloStartupView: View {
     }
 
     private func authenticateManually(server: DiscoveredServer) {
-        isAuthenticating = true
-        authErrorMessage = nil
-
-        Task {
-            let authUrl = server.address.appendingPathComponent("Users/AuthenticateByName")
-            var request = URLRequest(url: authUrl)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-            // Jellyfin Authorization header
-            let clientName = "Khylo iOS"
-            let deviceName = "Apple Device"
-            let deviceId = "khylo-ios-\(UUID().uuidString.prefix(8))"
-            let version = "1.0.0"
-            let authHeader = "MediaBrowser Client=\"\(clientName)\", Device=\"\(deviceName)\", DeviceId=\"\(deviceId)\", Version=\"\(version)\""
-            request.setValue(authHeader, forHTTPHeaderField: "X-Emby-Authorization")
-
-            let payload: [String: String] = [
-                "Username": manualUsername.trimmingCharacters(in: .whitespaces),
-                "Pw": manualPassword
-            ]
-
-            do {
-                request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-                let (data, response) = try await URLSession.shared.data(for: request)
-
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    await MainActor.run {
-                        self.isAuthenticating = false
-                        self.authErrorMessage = "Invalid username or password"
-                    }
-                    return
-                }
-
-                // If authentication succeeded, parse token
-                if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let _ = json["AccessToken"] as? String {
-                    await MainActor.run {
-                        self.isAuthenticating = false
-                        self.onAuthenticated()
-                    }
-                } else {
-                    await MainActor.run {
-                        self.isAuthenticating = false
-                        self.onAuthenticated()
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.isAuthenticating = false
-                    self.authErrorMessage = "Unable to connect: \(error.localizedDescription)"
-                }
-            }
-        }
+        focusedLoginField = nil
+        signInModel.signIn(
+            server: server,
+            username: manualUsername.trimmingCharacters(in: .whitespaces),
+            password: manualPassword,
+            authenticationAction: authenticationAction
+        )
     }
+
 }

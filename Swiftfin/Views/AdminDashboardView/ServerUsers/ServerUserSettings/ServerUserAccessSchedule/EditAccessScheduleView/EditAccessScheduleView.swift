@@ -33,9 +33,7 @@ struct EditAccessScheduleView: View {
             ListTitleSection(
                 L10n.accessSchedules.localizedCapitalized,
                 description: L10n.accessSchedulesDescription
-            ) {
-                UIApplication.shared.open(.jellyfinDocsManagingUsers)
-            }
+            )
 
             if viewModel.user.policy?.accessSchedules == [] {
                 Button(L10n.add) {

@@ -6,7 +6,9 @@
 // Copyright (c) 2026 Khylo & Khylo Contributors
 //
 
+import Defaults
 import FactoryKit
+import Logging
 import SwiftUI
 
 public enum KhyloAppState: Equatable {
@@ -27,6 +29,9 @@ public struct KhyloRootView: View {
 
     @State
     private var appState: KhyloAppState = .intro
+
+    @MainActor
+    private static var isDataStackReady = false
 
     public init() {}
 
@@ -59,15 +64,17 @@ public struct KhyloRootView: View {
 
             case .unauthenticated:
                 KhyloStartupView {
+                    // Only enter the app with a real session; the session observer
+                    // below handles the transition once sign-in completes.
+                    guard userSessionManager.state == .signedIn else { return }
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        configureActiveSession()
                         appState = .ready
                     }
                 }
                 .transition(.opacity)
 
             case .ready:
-                KhyloShellView()
+                KhyloAppView()
                     .transition(.opacity)
             }
         }
@@ -91,6 +98,20 @@ public struct KhyloRootView: View {
 
     /// Resolves the user session state before transitioning to ready or unauthenticated.
     private func resolveSessionState() async {
+        // The local database holds saved servers, users and settings. It must be
+        // opened before the stored session is read or any sign-in is saved.
+        if !Self.isDataStackReady {
+            do {
+                try await SwiftfinStore.setupDataStack()
+                Self.isDataStackReady = true
+            } catch {
+                Logger.swiftfin().critical("Failed to open local database: \(error.localizedDescription)")
+            }
+        }
+
+        // Player controls and other shared components tint with this color.
+        Defaults[.accentColor] = KhyloColors.accent
+
         if userSessionManager.state == .initial {
             await userSessionManager.start()
         }

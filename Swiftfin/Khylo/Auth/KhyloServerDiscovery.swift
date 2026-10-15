@@ -84,15 +84,37 @@ public final class KhyloServerDiscovery: ObservableObject {
     /// Manually verifies and pings a server URL.
     /// Accepts "Khylo Server" as well as standard Jellyfin and custom versions.
     public func pingServer(urlString: String) async throws -> DiscoveredServer {
-        var formatted = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !formatted.lowercased().hasPrefix("http://") && !formatted.lowercased().hasPrefix("https://") {
-            formatted = "http://" + formatted
+        let trimmed = urlString
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard !trimmed.isEmpty else { throw URLError(.badURL) }
+
+        // An explicit http:// or https:// is used as typed. Without a scheme, try
+        // https first (remote/reverse-proxied servers) and fall back to http (LAN).
+        let lowered = trimmed.lowercased()
+        let candidates: [String]
+        if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") {
+            candidates = [trimmed]
+        } else {
+            candidates = ["https://" + trimmed, "http://" + trimmed]
         }
 
-        guard let baseURL = URL(string: formatted) else {
-            throw URLError(.badURL)
+        var lastError: Error = URLError(.cannotConnectToHost)
+        for candidate in candidates {
+            guard let baseURL = URL(string: candidate) else {
+                lastError = URLError(.badURL)
+                continue
+            }
+            do {
+                return try await probeServer(baseURL: baseURL)
+            } catch {
+                lastError = error
+            }
         }
+        throw lastError
+    }
 
+    private func probeServer(baseURL: URL) async throws -> DiscoveredServer {
         let infoURL = baseURL.appendingPathComponent("System/Info/Public")
         var request = URLRequest(url: infoURL)
         request.timeoutInterval = 8.0
@@ -102,6 +124,11 @@ public final class KhyloServerDiscovery: ObservableObject {
         guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
             throw URLError(.badServerResponse)
         }
+
+        // If the server redirected (e.g. a reverse proxy upgrading http -> https),
+        // keep the final address. Otherwise later POSTs such as login get redirected
+        // too, and URLSession turns a redirected POST into a GET, which fails.
+        let resolvedBaseURL = Self.baseURL(from: httpResponse.url, fallback: baseURL)
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw URLError(.cannotParseResponse)
@@ -120,7 +147,7 @@ public final class KhyloServerDiscovery: ObservableObject {
         let server = DiscoveredServer(
             id: id,
             name: serverName,
-            address: baseURL,
+            address: resolvedBaseURL,
             version: version,
             isKhyloServer: isKhylo,
             isOnline: true
@@ -132,6 +159,22 @@ public final class KhyloServerDiscovery: ObservableObject {
         }
 
         return server
+    }
+
+    /// Strips the `System/Info/Public` suffix from the final response URL to recover the server base URL.
+    private static func baseURL(from responseURL: URL?, fallback: URL) -> URL {
+        guard let responseURL,
+              var components = URLComponents(url: responseURL, resolvingAgainstBaseURL: false)
+        else { return fallback }
+
+        let suffix = "/System/Info/Public"
+        guard let range = components.path.range(of: suffix, options: [.caseInsensitive, .backwards]) else {
+            return fallback
+        }
+        components.path = String(components.path[..<range.lowerBound])
+        components.query = nil
+        components.fragment = nil
+        return components.url ?? fallback
     }
 
     private func performDiscoveryScan() async {

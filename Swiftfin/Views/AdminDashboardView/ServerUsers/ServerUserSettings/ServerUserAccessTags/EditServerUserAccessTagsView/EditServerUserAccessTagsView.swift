@@ -148,9 +148,7 @@ struct EditServerUserAccessTagsView: View {
             ListTitleSection(
                 L10n.accessTags.localizedCapitalized,
                 description: L10n.accessTagsDescription
-            ) {
-                UIApplication.shared.open(.jellyfinDocsManagingUsers)
-            }
+            )
 
             if blockedTags.isEmpty, allowedTags.isEmpty {
                 Button(L10n.add) {

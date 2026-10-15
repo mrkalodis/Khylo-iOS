@@ -108,9 +108,7 @@ struct DevicesView: View {
             InsetGroupedListHeader(
                 L10n.devices,
                 description: L10n.allDevicesDescription
-            ) {
-                UIApplication.shared.open(.jellyfinDocsDevices)
-            }
+            )
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .padding(.vertical, 24)

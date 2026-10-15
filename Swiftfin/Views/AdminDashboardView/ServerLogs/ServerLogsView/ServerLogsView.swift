@@ -27,9 +27,7 @@ struct ServerLogsView: View {
             ListTitleSection(
                 L10n.serverLogs.localizedCapitalized,
                 description: L10n.logsDescription
-            ) {
-                UIApplication.shared.open(.jellyfinDocsTroubleshooting)
-            }
+            )
 
             if viewModel.logs.isNotEmpty {
                 ForEach(viewModel.logs, id: \.self) { log in

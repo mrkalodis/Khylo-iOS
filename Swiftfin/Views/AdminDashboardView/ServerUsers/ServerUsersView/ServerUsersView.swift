@@ -169,9 +169,7 @@ struct ServerUsersView: View {
             InsetGroupedListHeader(
                 L10n.users,
                 description: L10n.allUsersDescription
-            ) {
-                UIApplication.shared.open(.jellyfinDocsUsers)
-            }
+            )
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .padding(.vertical, 24)

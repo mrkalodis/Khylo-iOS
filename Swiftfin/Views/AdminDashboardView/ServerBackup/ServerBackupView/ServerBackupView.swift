@@ -23,9 +23,7 @@ struct ServerBackupView: View {
             ListTitleSection(
                 L10n.backups,
                 description: L10n.backupsDescription
-            ) {
-                UIApplication.shared.open(.jellyfinDocsBackup)
-            }
+            )
 
             if viewModel.backups.isNotEmpty {
                 ForEach(viewModel.backups, id: \.path) { backup in

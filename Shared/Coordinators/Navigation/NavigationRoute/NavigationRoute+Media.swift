@@ -115,5 +115,33 @@ struct VideoPlayerViewShim: View {
         .onFrameChanged { _, safeArea in
             self.safeAreaInsets = safeArea.max(EdgeInsets.edgePadding)
         }
+        .onAppear {
+            // Phones turn to landscape for video, like other media apps.
+            Self.requestOrientation(.landscapeRight)
+        }
+        .onDisappear {
+            Self.requestOrientation(.portrait)
+            // Lets browse screens refresh Continue Watching with the new position.
+            NotificationCenter.default.post(name: .khyloPlaybackDidEnd, object: nil)
+        }
     }
+}
+
+extension VideoPlayerViewShim {
+
+    static func requestOrientation(_ orientation: UIInterfaceOrientationMask) {
+        guard !UIDevice.isPad,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+        else { return }
+        // Give the presentation a beat so the new supported orientations are in place.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            scene.windows.first { $0.isKeyWindow }?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            scene.requestGeometryUpdate(.iOS(interfaceOrientations: orientation))
+        }
+    }
+}
+
+extension Notification.Name {
+    /// Posted when the video player closes.
+    static let khyloPlaybackDidEnd = Notification.Name("khyloPlaybackDidEnd")
 }

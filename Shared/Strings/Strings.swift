@@ -44,8 +44,8 @@ internal enum L10n {
   internal static let addAccessTag = L10n.tr("Localizable", "addAccessTag", fallback: "Add access tag")
   /// Additional parts
   internal static let additionalParts = L10n.tr("Localizable", "additionalParts", fallback: "Additional parts")
-  /// Additional security access for users signed in to this device. This does not change any Jellyfin server user settings.
-  internal static let additionalSecurityAccessDescription = L10n.tr("Localizable", "additionalSecurityAccessDescription", fallback: "Additional security access for users signed in to this device. This does not change any Jellyfin server user settings.")
+  /// Additional security access for users signed in to this device. This does not change any Khylo server user settings.
+  internal static let additionalSecurityAccessDescription = L10n.tr("Localizable", "additionalSecurityAccessDescription", fallback: "Additional security access for users signed in to this device. This does not change any Khylo server user settings.")
   /// Add server
   internal static let addServer = L10n.tr("Localizable", "addServer", fallback: "Add server")
   /// Add to favorites
@@ -384,8 +384,8 @@ internal enum L10n {
   internal static let connections = L10n.tr("Localizable", "connections", fallback: "Connections")
   /// This connection does not point to the current server.
   internal static let connectionServerMismatch = L10n.tr("Localizable", "connectionServerMismatch", fallback: "This connection does not point to the current server.")
-  /// Connect to a Jellyfin server to get started
-  internal static let connectToJellyfinServerStart = L10n.tr("Localizable", "connectToJellyfinServerStart", fallback: "Connect to a Jellyfin server to get started")
+  /// Connect to a Khylo server to get started
+  internal static let connectToJellyfinServerStart = L10n.tr("Localizable", "connectToJellyfinServerStart", fallback: "Connect to a Khylo server to get started")
   /// Connect to server
   internal static let connectToServer = L10n.tr("Localizable", "connectToServer", fallback: "Connect to server")
   /// Container
@@ -444,10 +444,10 @@ internal enum L10n {
   internal static let customConnectionsDescription = L10n.tr("Localizable", "customConnectionsDescription", fallback: "Manually set the maximum number of connections a user can have to the server.")
   /// Allows advanced customization of device profiles for native playback. Incorrect settings may affect playback.
   internal static let customDescription = L10n.tr("Localizable", "customDescription", fallback: "Allows advanced customization of device profiles for native playback. Incorrect settings may affect playback.")
-  /// The custom device profiles will be added to the default Swiftfin device profiles.
-  internal static let customDeviceProfileAdd = L10n.tr("Localizable", "customDeviceProfileAdd", fallback: "The custom device profiles will be added to the default Swiftfin device profiles.")
-  /// The custom device profiles will replace the default Swiftfin device profiles.
-  internal static let customDeviceProfileReplace = L10n.tr("Localizable", "customDeviceProfileReplace", fallback: "The custom device profiles will replace the default Swiftfin device profiles.")
+  /// The custom device profiles will be added to the default Khylo device profiles.
+  internal static let customDeviceProfileAdd = L10n.tr("Localizable", "customDeviceProfileAdd", fallback: "The custom device profiles will be added to the default Khylo device profiles.")
+  /// The custom device profiles will replace the default Khylo device profiles.
+  internal static let customDeviceProfileReplace = L10n.tr("Localizable", "customDeviceProfileReplace", fallback: "The custom device profiles will replace the default Khylo device profiles.")
   /// Manually set the number of failed login attempts allowed before locking the user.
   internal static let customFailedLoginDescription = L10n.tr("Localizable", "customFailedLoginDescription", fallback: "Manually set the number of failed login attempts allowed before locking the user.")
   /// Custom failed logins
@@ -472,8 +472,8 @@ internal enum L10n {
   internal static let dark = L10n.tr("Localizable", "dark", fallback: "Dark")
   /// Dashboard
   internal static let dashboard = L10n.tr("Localizable", "dashboard", fallback: "Dashboard")
-  /// Perform administrative tasks for your Jellyfin server.
-  internal static let dashboardDescription = L10n.tr("Localizable", "dashboardDescription", fallback: "Perform administrative tasks for your Jellyfin server.")
+  /// Perform administrative tasks for your Khylo server.
+  internal static let dashboardDescription = L10n.tr("Localizable", "dashboardDescription", fallback: "Perform administrative tasks for your Khylo server.")
   /// Database
   internal static let database = L10n.tr("Localizable", "database", fallback: "Database")
   /// Date
@@ -698,8 +698,8 @@ internal enum L10n {
   internal static let executed = L10n.tr("Localizable", "executed", fallback: "Executed")
   /// Existing items
   internal static let existingItems = L10n.tr("Localizable", "existingItems", fallback: "Existing items")
-  /// This item exists on your Jellyfin Server.
-  internal static let existsOnServer = L10n.tr("Localizable", "existsOnServer", fallback: "This item exists on your Jellyfin Server.")
+  /// This item exists on your Khylo Server.
+  internal static let existsOnServer = L10n.tr("Localizable", "existsOnServer", fallback: "This item exists on your Khylo Server.")
   /// Experimental
   internal static let experimental = L10n.tr("Localizable", "experimental", fallback: "Experimental")
   /// External
@@ -982,8 +982,8 @@ internal enum L10n {
   internal static let logoImageDescription = L10n.tr("Localizable", "logoImageDescription", fallback: "A transparent logo or title treatment overlaid on top of backdrops and other imagery. Used as a stylized alternative to plain text titles.")
   /// Logs
   internal static let logs = L10n.tr("Localizable", "logs", fallback: "Logs")
-  /// Access the Jellyfin server logs for troubleshooting and monitoring purposes.
-  internal static let logsDescription = L10n.tr("Localizable", "logsDescription", fallback: "Access the Jellyfin server logs for troubleshooting and monitoring purposes.")
+  /// Access the Khylo server logs for troubleshooting and monitoring purposes.
+  internal static let logsDescription = L10n.tr("Localizable", "logsDescription", fallback: "Access the Khylo server logs for troubleshooting and monitoring purposes.")
   /// Long press
   internal static let longPress = L10n.tr("Localizable", "longPress", fallback: "Long press")
   /// Lyricist
@@ -1052,8 +1052,8 @@ internal enum L10n {
   internal static let metadata = L10n.tr("Localizable", "metadata", fallback: "Metadata")
   /// Metadata preferences
   internal static let metadataPreferences = L10n.tr("Localizable", "metadataPreferences", fallback: "Metadata preferences")
-  /// Metadata is refreshed based on settings and internet services that are enabled in Jellyfin.
-  internal static let metadataRefreshDescription = L10n.tr("Localizable", "metadataRefreshDescription", fallback: "Metadata is refreshed based on settings and internet services that are enabled in Jellyfin.")
+  /// Metadata is refreshed based on settings and internet services that are enabled in Khylo.
+  internal static let metadataRefreshDescription = L10n.tr("Localizable", "metadataRefreshDescription", fallback: "Metadata is refreshed based on settings and internet services that are enabled in Khylo.")
   /// Method
   internal static let method = L10n.tr("Localizable", "method", fallback: "Method")
   /// Minutes
@@ -1192,8 +1192,8 @@ internal enum L10n {
   internal static let password = L10n.tr("Localizable", "password", fallback: "Password")
   /// User password has been changed.
   internal static let passwordChangedMessage = L10n.tr("Localizable", "passwordChangedMessage", fallback: "User password has been changed.")
-  /// Changes the Jellyfin server user password. This does not change any Swiftfin settings.
-  internal static let passwordChangeWarning = L10n.tr("Localizable", "passwordChangeWarning", fallback: "Changes the Jellyfin server user password. This does not change any Swiftfin settings.")
+  /// Changes the Khylo server user password. This does not change any Khylo settings.
+  internal static let passwordChangeWarning = L10n.tr("Localizable", "passwordChangeWarning", fallback: "Changes the Khylo server user password. This does not change any Khylo settings.")
   /// New passwords do not match.
   internal static let passwordsDoNotMatch = L10n.tr("Localizable", "passwordsDoNotMatch", fallback: "New passwords do not match.")
   /// Path
@@ -1214,8 +1214,8 @@ internal enum L10n {
   }
   /// Permissions
   internal static let permissions = L10n.tr("Localizable", "permissions", fallback: "Permissions")
-  /// Manage additional Swiftfin settings in the Settings app.
-  internal static let permissionsSettingsAppFooter = L10n.tr("Localizable", "permissionsSettingsAppFooter", fallback: "Manage additional Swiftfin settings in the Settings app.")
+  /// Manage additional Khylo settings in the Settings app.
+  internal static let permissionsSettingsAppFooter = L10n.tr("Localizable", "permissionsSettingsAppFooter", fallback: "Manage additional Khylo settings in the Settings app.")
   /// Person
   internal static let person = L10n.tr("Localizable", "person", fallback: "Person")
   /// Photo
@@ -1382,8 +1382,8 @@ internal enum L10n {
   internal static let quickConnectCode = L10n.tr("Localizable", "quickConnectCode", fallback: "Quick Connect code")
   /// Enter the 6 digit code from your other device.
   internal static let quickConnectCodeInstruction = L10n.tr("Localizable", "quickConnectCodeInstruction", fallback: "Enter the 6 digit code from your other device.")
-  /// Open the Jellyfin app on your phone or web browser and sign in with your account
-  internal static let quickConnectStep1 = L10n.tr("Localizable", "quickConnectStep1", fallback: "Open the Jellyfin app on your phone or web browser and sign in with your account")
+  /// Open the Khylo app on your phone or web browser and sign in with your account
+  internal static let quickConnectStep1 = L10n.tr("Localizable", "quickConnectStep1", fallback: "Open the Khylo app on your phone or web browser and sign in with your account")
   /// Open the user menu and go to the Quick Connect page
   internal static let quickConnectStep2 = L10n.tr("Localizable", "quickConnectStep2", fallback: "Open the user menu and go to the Quick Connect page")
   /// Enter the following code:
@@ -1484,8 +1484,8 @@ internal enum L10n {
   internal static let resetFilterFooter = L10n.tr("Localizable", "resetFilterFooter", fallback: "Reset the filter values to none.")
   /// Reset settings
   internal static let resetSettings = L10n.tr("Localizable", "resetSettings", fallback: "Reset settings")
-  /// Reset Swiftfin user settings.
-  internal static let resetSettingsDescription = L10n.tr("Localizable", "resetSettingsDescription", fallback: "Reset Swiftfin user settings.")
+  /// Reset Khylo user settings.
+  internal static let resetSettingsDescription = L10n.tr("Localizable", "resetSettingsDescription", fallback: "Reset Khylo user settings.")
   /// Are you sure you want to reset all user settings?
   internal static let resetSettingsMessage = L10n.tr("Localizable", "resetSettingsMessage", fallback: "Are you sure you want to reset all user settings?")
   /// Resolution
@@ -1602,9 +1602,9 @@ internal enum L10n {
   internal static let serverLogs = L10n.tr("Localizable", "serverLogs", fallback: "Server logs")
   /// Servers
   internal static let servers = L10n.tr("Localizable", "servers", fallback: "Servers")
-  /// Swiftfin requires Jellyfin version %@ or higher.
+  /// Khylo requires Khylo version %@ or higher.
   internal static func serverVersionWarning(_ p1: Any) -> String {
-    return L10n.tr("Localizable", "serverVersionWarning", String(describing: p1), fallback: "Swiftfin requires Jellyfin version %@ or higher.")
+    return L10n.tr("Localizable", "serverVersionWarning", String(describing: p1), fallback: "Khylo requires Khylo version %@ or higher.")
   }
   /// Session
   internal static let session = L10n.tr("Localizable", "session", fallback: "Session")
@@ -1646,12 +1646,12 @@ internal enum L10n {
   }
   /// Sign out on background
   internal static let signoutBackground = L10n.tr("Localizable", "signoutBackground", fallback: "Sign out on background")
-  /// Signs out the last user when Swiftfin has been in the background without media playback after some time.
-  internal static let signoutBackgroundFooter = L10n.tr("Localizable", "signoutBackgroundFooter", fallback: "Signs out the last user when Swiftfin has been in the background without media playback after some time.")
+  /// Signs out the last user when Khylo has been in the background without media playback after some time.
+  internal static let signoutBackgroundFooter = L10n.tr("Localizable", "signoutBackgroundFooter", fallback: "Signs out the last user when Khylo has been in the background without media playback after some time.")
   /// Sign out on close
   internal static let signoutClose = L10n.tr("Localizable", "signoutClose", fallback: "Sign out on close")
-  /// Signs out the last user when Swiftfin has been force closed.
-  internal static let signoutCloseFooter = L10n.tr("Localizable", "signoutCloseFooter", fallback: "Signs out the last user when Swiftfin has been force closed.")
+  /// Signs out the last user when Khylo has been force closed.
+  internal static let signoutCloseFooter = L10n.tr("Localizable", "signoutCloseFooter", fallback: "Signs out the last user when Khylo has been force closed.")
   /// Simple
   internal static let simple = L10n.tr("Localizable", "simple", fallback: "Simple")
   /// Size
@@ -1994,8 +1994,8 @@ internal enum L10n {
   internal static let wifi = L10n.tr("Localizable", "wifi", fallback: "Wi-Fi")
   /// Wi-Fi Name
   internal static let wifiName = L10n.tr("Localizable", "wifiName", fallback: "Wi-Fi Name")
-  /// This will be created as a new item on your Jellyfin Server.
-  internal static let willBeCreatedOnServer = L10n.tr("Localizable", "willBeCreatedOnServer", fallback: "This will be created as a new item on your Jellyfin Server.")
+  /// This will be created as a new item on your Khylo Server.
+  internal static let willBeCreatedOnServer = L10n.tr("Localizable", "willBeCreatedOnServer", fallback: "This will be created as a new item on your Khylo Server.")
   /// %1$@ with Enhancement Layer
   internal static func withEnhancementLayer(_ p1: Any) -> String {
     return L10n.tr("Localizable", "withEnhancementLayer", String(describing: p1), fallback: "%1$@ with Enhancement Layer")
