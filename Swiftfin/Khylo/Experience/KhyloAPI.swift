@@ -114,6 +114,7 @@ enum KhyloAPI {
         isFavorite: Bool? = nil,
         genres: [String]? = nil,
         artistIDs: [String]? = nil,
+        albumArtistIDs: [String]? = nil,
         albumIDs: [String]? = nil,
         searchTerm: String? = nil,
         recursive: Bool = true,
@@ -132,6 +133,7 @@ enum KhyloAPI {
         parameters.isFavorite = isFavorite
         parameters.genres = genres
         parameters.artistIDs = artistIDs
+        parameters.albumArtistIDs = albumArtistIDs
         parameters.albumIDs = albumIDs
         parameters.searchTerm = searchTerm
         parameters.isRecursive = recursive
@@ -221,15 +223,16 @@ enum KhyloAPI {
 
     // MARK: - Music
 
-    static func albumArtists(parentID: String?, startIndex: Int = 0, limit: Int = 60) async throws -> Page {
+    static func albumArtists(parentID: String?, searchTerm: String? = nil, startIndex: Int = 0, limit: Int = 60) async throws -> Page {
         let session = try requireSession()
         var parameters = Paths.GetAlbumArtistsParameters()
         parameters.userID = session.user.id
         parameters.parentID = parentID
+        parameters.searchTerm = searchTerm
         parameters.startIndex = startIndex
         parameters.limit = limit
         parameters.sortBy = [.sortName]
-        parameters.fields = [.primaryImageAspectRatio]
+        parameters.fields = [.primaryImageAspectRatio, .childCount, .overview, .genres]
         parameters.enableImages = true
         parameters.imageTypeLimit = 1
         parameters.enableTotalRecordCount = true

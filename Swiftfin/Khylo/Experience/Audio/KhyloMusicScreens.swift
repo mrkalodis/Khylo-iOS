@@ -11,7 +11,7 @@ import SwiftUI
 
 // MARK: - Music library
 
-/// Music: Albums, Artists and Songs, switched with pills like the Libraries tab.
+/// Music: Albums, Artists and Songs, each searchable.
 struct KhyloMusicLibraryScreen: View {
 
     let library: BaseItemDto
@@ -25,63 +25,46 @@ struct KhyloMusicLibraryScreen: View {
     }
 
     @State private var section: Section = .albums
-    @Router private var router
+    @State private var query = ""
+    @State private var searchTerm = ""
 
     var body: some View {
         ZStack {
             KhyloStyle.canvas.ignoresSafeArea()
 
-            switch section {
-            case .albums:
-                KhyloSearchableGrid(
-                    shape: .square,
-                    id: "albums",
-                    placeholder: "Search albums and artists",
-                    header: { sectionHeader }
-                ) { term, start, limit in
-                    if let term {
-                        // Match album titles or the artists who made them.
-                        async let byTitle = KhyloAPI.items(
-                            parentID: library.id, types: [.musicAlbum], sortBy: [.sortName],
-                            searchTerm: term, startIndex: start, limit: limit
-                        )
-                        async let artists = KhyloAPI.items(
-                            parentID: library.id, types: [.musicArtist], searchTerm: term, limit: 5
-                        )
-                        let titled = try await byTitle
-                        let artistIDs = ((try? await artists)?.items ?? []).compactMap(\.id)
-                        guard start == 0, !artistIDs.isEmpty else { return titled }
-                        let byArtist = (try? await KhyloAPI.items(
-                            parentID: library.id, types: [.musicAlbum], sortBy: [.productionYear],
-                            sortOrder: .descending, artistIDs: artistIDs, limit: 60
-                        ))?.items ?? []
-                        let known = Set(titled.items.compactMap(\.id))
-                        let merged = titled.items + byArtist.filter { !known.contains($0.id ?? "") }
-                        return KhyloAPI.Page(items: merged, total: merged.count)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    sectionHeader
+
+                    switch section {
+                    case .albums:
+                        KhyloAlbumGrid(libraryID: library.id, searchTerm: searchTerm)
+                            .id("albums-\(searchTerm)")
+                    case .artists:
+                        KhyloArtistGrid(libraryID: library.id, searchTerm: searchTerm)
+                            .id("artists-\(searchTerm)")
+                    case .songs:
+                        KhyloSongList(libraryID: library.id, searchTerm: searchTerm)
+                            .id("songs-\(searchTerm)")
                     }
-                    return try await KhyloAPI.items(
-                        parentID: library.id,
-                        types: [.musicAlbum],
-                        sortBy: [.dateCreated, .sortName],
-                        sortOrder: .descending,
-                        startIndex: start,
-                        limit: limit
-                    )
                 }
-                .id(Section.albums)
-            case .artists:
-                KhyloArtistGrid(libraryID: library.id) { sectionHeader }
-                    .id(Section.artists)
-            case .songs:
-                KhyloSongList(libraryID: library.id) { sectionHeader }
-                    .id(Section.songs)
+                .padding(.bottom, 40)
             }
+            .scrollDismissesKeyboard(.immediately)
         }
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: query) {
+            let trimmed = query.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                try? await Task.sleep(for: .milliseconds(300))
+                guard !Task.isCancelled else { return }
+            }
+            searchTerm = trimmed
+        }
     }
 
     private var sectionHeader: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             if let header {
                 header
             } else {
@@ -103,26 +86,23 @@ struct KhyloMusicLibraryScreen: View {
                     shuffleAll()
                 } label: {
                     Image(systemName: "shuffle")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundColor(.black)
-                        .frame(width: 36, height: 36)
+                        .frame(width: 38, height: 38)
                         .background(Circle().fill(KhyloStyle.accent))
                 }
                 .buttonStyle(KhyloScaleButtonStyle())
-                .accessibilityLabel("Shuffle all")
+                .accessibilityLabel("Shuffle all music")
             }
             .padding(.horizontal, KhyloStyle.gutter)
+
+            KhyloLibrarySearchField(placeholder: "Search \(section.rawValue.lowercased())", text: $query)
         }
     }
 
     private func shuffleAll() {
         Task {
-            let songs = try? await KhyloAPI.items(
-                parentID: library.id,
-                types: [.audio],
-                sortBy: [.random],
-                limit: 200
-            ).items
+            let songs = try? await KhyloAPI.items(parentID: library.id, types: [.audio], sortBy: [.random], limit: 200).items
             if let songs, !songs.isEmpty {
                 KhyloAudioPlayer.shared.play(songs, kind: .music, startTicks: 0)
             }
@@ -130,126 +110,226 @@ struct KhyloMusicLibraryScreen: View {
     }
 }
 
-/// Artists as circles.
-private struct KhyloArtistGrid<Header: View>: View {
+// MARK: - Paged loading
 
-    let libraryID: String?
-    @ViewBuilder let header: () -> Header
+/// Loads pages of items as the user scrolls.
+@MainActor
+private final class KhyloPager: ObservableObject {
+    @Published private(set) var items: [BaseItemDto] = []
+    @Published private(set) var isLoading = true
+    private var total = Int.max
+    private var isLoadingMore = false
+    private let loader: (Int, Int) async throws -> KhyloAPI.Page
 
-    @State private var artists: [BaseItemDto] = []
-    @State private var isLoading = true
+    init(loader: @escaping (Int, Int) async throws -> KhyloAPI.Page) {
+        self.loader = loader
+    }
+
+    func loadFirst() async {
+        guard items.isEmpty else { return }
+        if let page = try? await loader(0, 60) {
+            items = page.items
+            total = page.total
+        }
+        isLoading = false
+    }
+
+    func loadMore(after item: BaseItemDto) async {
+        guard !isLoadingMore, items.count < total,
+              let position = items.firstIndex(where: { $0.id == item.id }), position >= items.count - 12
+        else { return }
+        isLoadingMore = true
+        if let page = try? await loader(items.count, 60) {
+            let known = Set(items.compactMap(\.id))
+            items += page.items.filter { !known.contains($0.id ?? "") }
+            total = page.total
+        }
+        isLoadingMore = false
+    }
+}
+
+private struct KhyloAlbumGrid: View {
+    @StateObject private var pager: KhyloPager
     @Router private var router
 
-    private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+    init(libraryID: String?, searchTerm: String) {
+        let term = searchTerm.isEmpty ? nil : searchTerm
+        _pager = StateObject(wrappedValue: KhyloPager { start, limit in
+            if let term {
+                // Album titles, plus albums by matching artists.
+                async let byTitle = KhyloAPI.items(parentID: libraryID, types: [.musicAlbum], sortBy: [.sortName], searchTerm: term, startIndex: start, limit: limit)
+                async let artists = KhyloAPI.albumArtists(parentID: libraryID, searchTerm: term, limit: 5)
+                let titled = try await byTitle
+                let artistIDs = ((try? await artists)?.items ?? []).compactMap(\.id)
+                guard start == 0, !artistIDs.isEmpty else { return titled }
+                let byArtist = (try? await KhyloAPI.items(
+                    parentID: libraryID, types: [.musicAlbum], sortBy: [.productionYear],
+                    sortOrder: .descending, albumArtistIDs: artistIDs, limit: 60
+                ))?.items ?? []
+                let known = Set(titled.items.compactMap(\.id))
+                let merged = titled.items + byArtist.filter { !known.contains($0.id ?? "") }
+                return KhyloAPI.Page(items: merged, total: merged.count)
+            }
+            return try await KhyloAPI.items(parentID: libraryID, types: [.musicAlbum], sortBy: [.dateCreated, .sortName], sortOrder: .descending, startIndex: start, limit: limit)
+        })
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            let width = (proxy.size.width - KhyloStyle.gutter * 2 - 28) / 3
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    header()
-                    if isLoading {
-                        ProgressView().tint(.white).frame(maxWidth: .infinity).padding(.top, 60)
-                    } else {
-                        LazyVGrid(columns: columns, spacing: 20) {
-                            ForEach(artists, id: \.id) { artist in
-                                Button {
-                                    router.route(to: .khyloItem(artist))
-                                } label: {
-                                    KhyloTileCard(item: artist, width: width, isCircular: true)
-                                }
-                                .buttonStyle(KhyloScaleButtonStyle())
-                            }
-                        }
-                        .padding(.horizontal, KhyloStyle.gutter)
+            let width = (proxy.size.width - KhyloStyle.gutter * 2 - 14) / 2
+            LazyVGrid(columns: [GridItem(.fixed(width), spacing: 14), GridItem(.fixed(width), spacing: 14)], spacing: 20) {
+                ForEach(pager.items, id: \.id) { album in
+                    Button {
+                        router.route(to: .khyloItem(album))
+                    } label: {
+                        KhyloAlbumCard(album: album, width: width)
                     }
+                    .buttonStyle(KhyloScaleButtonStyle())
+                    .task { await pager.loadMore(after: album) }
                 }
-                .padding(.bottom, 32)
             }
+            .padding(.horizontal, KhyloStyle.gutter)
         }
-        .task {
-            artists = (try? await KhyloAPI.albumArtists(parentID: libraryID, limit: 500).items) ?? []
-            isLoading = false
-        }
+        .frame(minHeight: 600)
+        .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "albums") }
+        .task { await pager.loadFirst() }
     }
 }
 
-/// All songs, alphabetical; tapping plays from that song.
-private struct KhyloSongList<Header: View>: View {
+private struct KhyloArtistGrid: View {
+    @StateObject private var pager: KhyloPager
+    @Router private var router
 
-    let libraryID: String?
-    @ViewBuilder let header: () -> Header
-
-    @State private var songs: [BaseItemDto] = []
-    @State private var isLoading = true
+    init(libraryID: String?, searchTerm: String) {
+        let term = searchTerm.isEmpty ? nil : searchTerm
+        _pager = StateObject(wrappedValue: KhyloPager { start, limit in
+            try await KhyloAPI.albumArtists(parentID: libraryID, searchTerm: term, startIndex: start, limit: limit)
+        })
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header()
-                if isLoading {
-                    ProgressView().tint(.white).frame(maxWidth: .infinity).padding(.top, 60)
-                } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(songs.enumerated()), id: \.offset) { index, song in
-                            KhyloTrackRow(track: song, showsArtwork: true) {
-                                KhyloAudioPlayer.shared.play(songs, startAt: index, kind: .music, startTicks: 0)
-                            }
-                        }
+        GeometryReader { proxy in
+            let size = (proxy.size.width - KhyloStyle.gutter * 2 - 32) / 3
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(size), spacing: 16), count: 3), spacing: 22) {
+                ForEach(pager.items, id: \.id) { artist in
+                    Button {
+                        router.route(to: .khyloItem(artist))
+                    } label: {
+                        KhyloArtistCell(artist: artist, size: size)
                     }
+                    .buttonStyle(KhyloScaleButtonStyle())
+                    .task { await pager.loadMore(after: artist) }
                 }
             }
-            .padding(.bottom, 32)
+            .padding(.horizontal, KhyloStyle.gutter)
         }
-        .task {
-            songs = (try? await KhyloAPI.items(parentID: libraryID, types: [.audio], sortBy: [.sortName], limit: 500).items) ?? []
-            isLoading = false
-        }
+        .frame(minHeight: 600)
+        .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "artists") }
+        .task { await pager.loadFirst() }
     }
 }
 
-// MARK: - Track row
+private struct KhyloSongList: View {
+    @StateObject private var pager: KhyloPager
+
+    init(libraryID: String?, searchTerm: String) {
+        let term = searchTerm.isEmpty ? nil : searchTerm
+        _pager = StateObject(wrappedValue: KhyloPager { start, limit in
+            try await KhyloAPI.items(parentID: libraryID, types: [.audio], sortBy: [.sortName], searchTerm: term, startIndex: start, limit: limit)
+        })
+    }
+
+    var body: some View {
+        LazyVStack(spacing: 0) {
+            ForEach(Array(pager.items.enumerated()), id: \.element.id) { index, song in
+                KhyloTrackRow(track: song, style: .artwork) {
+                    KhyloAudioPlayer.shared.play(pager.items, startAt: index, kind: .music, startTicks: 0)
+                }
+                .task { await pager.loadMore(after: song) }
+            }
+        }
+        .frame(minHeight: 400, alignment: .top)
+        .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "songs") }
+        .task { await pager.loadFirst() }
+    }
+}
+
+@ViewBuilder
+private func loadingOverlay(isLoading: Bool, isEmpty: Bool, noun: String) -> some View {
+    if isLoading {
+        ProgressView().tint(.white.opacity(0.6)).padding(.top, 60).frame(maxHeight: .infinity, alignment: .top)
+    } else if isEmpty {
+        Text("No \(noun) found")
+            .font(.system(size: 15, weight: .medium))
+            .foregroundColor(KhyloStyle.tertiaryText)
+            .padding(.top, 60)
+            .frame(maxHeight: .infinity, alignment: .top)
+    }
+}
+
+// MARK: - Cards & rows
+
+/// Square album cover with title and artist (or year) beneath.
+struct KhyloAlbumCard: View {
+    let album: BaseItemDto
+    var width: CGFloat = 150
+    var showsYear = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            KhyloImage(url: KhyloArtwork.url(for: album, style: .square, width: width), placeholderSymbol: "music.note")
+                .frame(width: width, height: width)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(album.name ?? "")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                Text(showsYear ? album.khyloAlbumKind : album.khyloArtistLine)
+                    .font(.system(size: 12))
+                    .foregroundColor(KhyloStyle.tertiaryText)
+                    .lineLimit(1)
+            }
+            .frame(width: width, alignment: .leading)
+        }
+    }
+}
 
 struct KhyloTrackRow: View {
 
+    enum Style {
+        /// Track number (album page).
+        case numbered(Int)
+        /// Album art thumbnail (song lists, Popular).
+        case artwork
+        /// Rank number plus artwork (artist Popular).
+        case ranked(Int)
+    }
+
     let track: BaseItemDto
-    var number: Int? = nil
-    var showsArtwork = false
+    var style: Style = .artwork
+    /// Hide the artist line when it repeats the album artist.
+    var hidesArtist = false
     let action: () -> Void
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
+    @Router private var router
 
     private var isCurrent: Bool { player.current?.id == track.id }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                if showsArtwork {
-                    KhyloImage(url: KhyloArtwork.url(for: track, style: .square, width: 96), placeholderSymbol: "music.note")
-                        .frame(width: 46, height: 46)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                } else {
-                    ZStack {
-                        if isCurrent {
-                            Image(systemName: "waveform")
-                                .symbolEffect(.variableColor.iterative, isActive: player.isPlaying)
-                                .foregroundColor(KhyloStyle.accent)
-                        } else {
-                            Text(number.map(String.init) ?? "")
-                                .font(.system(size: 15, weight: .medium).monospacedDigit())
-                                .foregroundColor(KhyloStyle.tertiaryText)
-                        }
-                    }
-                    .frame(width: 26)
-                }
+                leading
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(track.name ?? "")
                         .font(.system(size: 16, weight: .medium))
                         .foregroundColor(isCurrent ? KhyloStyle.accent : .white)
                         .lineLimit(1)
-                    if showsArtwork, let artist = track.artists?.first ?? track.albumArtist {
-                        Text(artist)
+                    if !hidesArtist {
+                        Text(track.khyloArtistLine)
                             .font(.system(size: 13))
                             .foregroundColor(KhyloStyle.tertiaryText)
                             .lineLimit(1)
@@ -261,12 +341,100 @@ struct KhyloTrackRow: View {
                 Text(track.khyloRuntimeClock ?? "")
                     .font(.system(size: 13).monospacedDigit())
                     .foregroundColor(KhyloStyle.tertiaryText)
+
+                Menu {
+                    menuItems
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(KhyloStyle.tertiaryText)
+                        .frame(width: 30, height: 40)
+                        .contentShape(Rectangle())
+                }
             }
-            .padding(.horizontal, KhyloStyle.gutter)
-            .padding(.vertical, 10)
+            .padding(.leading, KhyloStyle.gutter)
+            .padding(.trailing, 10)
+            .padding(.vertical, 7)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu { menuItems }
+    }
+
+    @ViewBuilder
+    private var leading: some View {
+        switch style {
+        case let .numbered(number):
+            ZStack {
+                if isCurrent {
+                    Image(systemName: "waveform")
+                        .symbolEffect(.variableColor.iterative, isActive: player.isPlaying)
+                        .foregroundColor(KhyloStyle.accent)
+                } else {
+                    Text("\(number)")
+                        .font(.system(size: 15, weight: .medium).monospacedDigit())
+                        .foregroundColor(KhyloStyle.tertiaryText)
+                }
+            }
+            .frame(width: 24)
+        case .artwork:
+            artwork
+        case let .ranked(rank):
+            HStack(spacing: 12) {
+                Text("\(rank)")
+                    .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                    .foregroundColor(isCurrent ? KhyloStyle.accent : KhyloStyle.secondaryText)
+                    .frame(width: 18)
+                artwork
+            }
+        }
+    }
+
+    private var artwork: some View {
+        KhyloImage(url: KhyloArtwork.url(for: track, style: .square, width: 100), placeholderSymbol: "music.note")
+            .frame(width: 48, height: 48)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .overlay {
+                if isCurrent {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(.black.opacity(0.45))
+                    Image(systemName: "waveform")
+                        .symbolEffect(.variableColor.iterative, isActive: player.isPlaying)
+                        .foregroundColor(KhyloStyle.accent)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var menuItems: some View {
+        Button {
+            player.playNext(track)
+        } label: {
+            Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+        }
+        Button {
+            player.addToQueue(track)
+        } label: {
+            Label("Add to Queue", systemImage: "text.badge.plus")
+        }
+        if let albumID = track.albumID {
+            Button {
+                Task {
+                    if let album = try? await KhyloAPI.item(albumID) { router.route(to: .khyloItem(album)) }
+                }
+            } label: {
+                Label("Go to Album", systemImage: "square.stack")
+            }
+        }
+        if let artistID = track.albumArtists?.first?.id ?? track.artistItems?.first?.id {
+            Button {
+                Task {
+                    if let artist = try? await KhyloAPI.item(artistID) { router.route(to: .khyloItem(artist)) }
+                }
+            } label: {
+                Label("Go to Artist", systemImage: "music.mic")
+            }
+        }
     }
 }
 
@@ -279,126 +447,249 @@ extension BaseItemDto {
     }
 }
 
+/// Round accent play button with a smaller shuffle button beside it.
+private struct KhyloPlayCluster: View {
+    let isPlayingThis: Bool
+    let play: () -> Void
+    let shuffle: () -> Void
+
+    var body: some View {
+        HStack(spacing: 18) {
+            Button(action: shuffle) {
+                Image(systemName: "shuffle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.85))
+            }
+            .buttonStyle(KhyloScaleButtonStyle())
+            .accessibilityLabel("Shuffle")
+
+            Button(action: play) {
+                Image(systemName: isPlayingThis ? "pause.fill" : "play.fill")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.black)
+                    .frame(width: 56, height: 56)
+                    .background(Circle().fill(KhyloStyle.accent))
+                    .shadow(color: KhyloStyle.accent.opacity(0.4), radius: 12, y: 4)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(KhyloScaleButtonStyle())
+            .accessibilityLabel(isPlayingThis ? "Pause" : "Play")
+        }
+    }
+}
+
 // MARK: - Album
 
 struct KhyloAlbumScreen: View {
 
-    let album: BaseItemDto
+    @State var album: BaseItemDto
 
     @State private var tracks: [BaseItemDto] = []
+    @State private var moreByArtist: [BaseItemDto] = []
+    @State private var tint: Color?
     @State private var isLoading = true
+    @ObservedObject private var player = KhyloAudioPlayer.shared
     @Router private var router
 
-    private var artworkURL: URL? {
-        KhyloArtwork.url(for: album, style: .square, width: 600)
+    init(album: BaseItemDto) {
+        _album = State(initialValue: album)
+    }
+
+    private var coverURL: URL? { KhyloArtwork.url(for: album, style: .square, width: 600) }
+
+    private var isPlayingThis: Bool {
+        player.isPlaying && tracks.contains { $0.id == player.current?.id }
     }
 
     private var totalMinutes: Int {
         tracks.reduce(0) { $0 + ($1.runTimeTicks ?? 0) } / 600_000_000
     }
 
+    /// Discs, when the album has more than one.
+    private var discs: [(Int, [BaseItemDto])] {
+        let grouped = Dictionary(grouping: tracks) { $0.parentIndexNumber ?? 1 }
+        return grouped.keys.sorted().map { ($0, grouped[$0] ?? []) }
+    }
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                VStack(spacing: 14) {
-                    KhyloImage(url: artworkURL, placeholderSymbol: "music.note")
-                        .frame(width: 250, height: 250)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .shadow(color: .black.opacity(0.5), radius: 28, y: 14)
-                        .padding(.top, 70)
-
-                    VStack(spacing: 4) {
-                        Text(album.name ?? "")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                        if let artist = album.albumArtist ?? album.artists?.first {
-                            Button {
-                                openArtist()
-                            } label: {
-                                Text(artist)
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(KhyloStyle.accent)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        Text(metadata)
-                            .font(.system(size: 13))
-                            .foregroundColor(KhyloStyle.tertiaryText)
-                    }
-                    .padding(.horizontal, 30)
-
-                    HStack(spacing: 12) {
-                        albumButton("Play", systemImage: "play.fill") { play(shuffled: false) }
-                        albumButton("Shuffle", systemImage: "shuffle") { play(shuffled: true) }
-                    }
-                    .padding(.horizontal, KhyloStyle.gutter)
-                    .padding(.top, 6)
-                }
-                .padding(.bottom, 20)
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                    .padding(.bottom, 18)
 
                 if isLoading {
-                    ProgressView().tint(.white).padding(.top, 30)
+                    ProgressView().tint(.white).frame(maxWidth: .infinity).padding(.top, 30)
                 } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(tracks.enumerated()), id: \.offset) { index, track in
-                            KhyloTrackRow(track: track, number: track.indexNumber ?? index + 1) {
-                                KhyloAudioPlayer.shared.play(tracks, startAt: index, kind: .music, artworkURL: artworkURL, startTicks: 0)
-                            }
-                            if index < tracks.count - 1 {
-                                Divider().overlay(KhyloStyle.hairline).padding(.leading, KhyloStyle.gutter + 40)
-                            }
-                        }
-                    }
+                    trackList
+                    footer
                 }
             }
             .padding(.bottom, 40)
         }
-        .background(
-            ZStack {
-                KhyloStyle.canvas
-                KhyloImage(url: artworkURL, showsPlaceholder: false)
-                    .frame(height: 480)
-                    .scaleEffect(1.5)
-                    .blur(radius: 80)
-                    .opacity(0.5)
-                    .frame(maxHeight: .infinity, alignment: .top)
-            }
-            .ignoresSafeArea()
-        )
+        .background(KhyloTintedBackdrop(color: tint, height: 560))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .task {
-            guard let id = album.id else { return }
-            tracks = (try? await KhyloAPI.tracks(albumID: id)) ?? []
-            isLoading = false
+        .task { await load() }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            KhyloImage(url: coverURL, placeholderSymbol: "music.note")
+                .frame(width: 250, height: 250)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .shadow(color: .black.opacity(0.55), radius: 28, y: 14)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 64)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(album.name ?? "")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(3)
+
+                Button {
+                    openArtist()
+                } label: {
+                    HStack(spacing: 8) {
+                        if let artist = album.albumArtists?.first {
+                            KhyloArtistAvatar(artist: artistStub(artist), size: 24)
+                        }
+                        Text(album.khyloArtistLine)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Text(metadata)
+                    .font(.system(size: 13))
+                    .foregroundColor(KhyloStyle.secondaryText)
+            }
+
+            HStack(spacing: 22) {
+                Button {
+                    toggleFavorite()
+                } label: {
+                    Image(systemName: album.khyloIsFavorite ? "heart.fill" : "heart")
+                        .font(.system(size: 22))
+                        .foregroundColor(album.khyloIsFavorite ? KhyloStyle.accent : .white.opacity(0.85))
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(KhyloScaleButtonStyle())
+                .accessibilityLabel(album.khyloIsFavorite ? "Remove from favorites" : "Add to favorites")
+
+                Spacer()
+
+                KhyloPlayCluster(isPlayingThis: isPlayingThis) {
+                    if tracks.contains(where: { $0.id == player.current?.id }) {
+                        player.togglePlayPause()
+                    } else {
+                        play(shuffled: false)
+                    }
+                } shuffle: {
+                    play(shuffled: true)
+                }
+            }
+            .disabled(tracks.isEmpty)
         }
+        .padding(.horizontal, KhyloStyle.gutter)
     }
 
     private var metadata: String {
-        var parts: [String] = []
-        if let genre = album.genres?.first { parts.append(genre) }
-        if let year = album.productionYear { parts.append(String(year)) }
-        if !tracks.isEmpty { parts.append("\(tracks.count) songs, \(totalMinutes) min") }
+        var parts = [album.khyloAlbumKind]
+        if !tracks.isEmpty {
+            parts.append("\(tracks.count) song\(tracks.count == 1 ? "" : "s")")
+            parts.append(totalMinutes >= 60 ? "\(totalMinutes / 60) hr \(totalMinutes % 60) min" : "\(totalMinutes) min")
+        }
         return parts.joined(separator: " · ")
     }
 
-    private func albumButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(KhyloStyle.accent)
-                .frame(maxWidth: .infinity)
-                .frame(height: 48)
-                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.1)))
+    private var trackList: some View {
+        let albumArtist = album.khyloArtistLine
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(discs, id: \.0) { disc, discTracks in
+                if discs.count > 1 {
+                    Label("Disc \(disc)", systemImage: "opticaldisc")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(KhyloStyle.secondaryText)
+                        .padding(.horizontal, KhyloStyle.gutter)
+                        .padding(.top, 14)
+                        .padding(.bottom, 4)
+                }
+                ForEach(discTracks, id: \.id) { track in
+                    KhyloTrackRow(
+                        track: track,
+                        style: .numbered(track.indexNumber ?? ((tracks.firstIndex { $0.id == track.id } ?? 0) + 1)),
+                        hidesArtist: track.khyloArtistLine == albumArtist
+                    ) {
+                        let index = tracks.firstIndex { $0.id == track.id } ?? 0
+                        player.play(tracks, startAt: index, kind: .music, startTicks: 0)
+                    }
+                }
+            }
         }
-        .buttonStyle(KhyloScaleButtonStyle())
-        .disabled(tracks.isEmpty)
+    }
+
+    @ViewBuilder
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 26) {
+            if let date = album.premiereDate {
+                Text(date.formatted(date: .long, time: .omitted))
+                    .font(.system(size: 13))
+                    .foregroundColor(KhyloStyle.tertiaryText)
+                    .padding(.horizontal, KhyloStyle.gutter)
+            }
+
+            if !moreByArtist.isEmpty {
+                KhyloRow(title: "More by \(album.albumArtists?.first?.name ?? album.albumArtist ?? "this artist")") {
+                    ForEach(moreByArtist, id: \.id) { other in
+                        Button {
+                            router.route(to: .khyloItem(other))
+                        } label: {
+                            KhyloAlbumCard(album: other, width: 140, showsYear: true)
+                        }
+                        .buttonStyle(KhyloScaleButtonStyle())
+                    }
+                }
+            }
+        }
+        .padding(.top, 22)
+    }
+
+    private func load() async {
+        guard let id = album.id else { return }
+        async let fullAlbum = try? KhyloAPI.item(id)
+        tracks = (try? await KhyloAPI.tracks(albumID: id)) ?? []
+        isLoading = false
+        if let fresh = await fullAlbum { album = fresh }
+        tint = await KhyloArtColor.color(for: KhyloArtwork.url(for: album, style: .square, width: 120))
+
+        if let artistID = album.albumArtists?.first?.id {
+            let others = (try? await KhyloAPI.items(
+                types: [.musicAlbum], sortBy: [.productionYear, .sortName], sortOrder: .descending,
+                albumArtistIDs: [artistID], limit: 20
+            ))?.items ?? []
+            moreByArtist = others.filter { $0.id != id }
+        }
     }
 
     private func play(shuffled: Bool) {
-        let queue = shuffled ? tracks.shuffled() : tracks
-        KhyloAudioPlayer.shared.play(queue, kind: .music, artworkURL: artworkURL, startTicks: 0)
+        guard !tracks.isEmpty else { return }
+        if shuffled {
+            player.play(tracks.shuffled(), kind: .music, startTicks: 0)
+        } else {
+            player.play(tracks, kind: .music, startTicks: 0)
+        }
+    }
+
+    private func toggleFavorite() {
+        guard let id = album.id else { return }
+        Task {
+            if let data = try? await KhyloAPI.setFavorite(!album.khyloIsFavorite, itemID: id) {
+                album.userData = data
+            }
+        }
     }
 
     private func openArtist() {
@@ -409,70 +700,308 @@ struct KhyloAlbumScreen: View {
             }
         }
     }
+
+    private func artistStub(_ pair: NameIDPair) -> BaseItemDto {
+        BaseItemDto(id: pair.id, name: pair.name)
+    }
 }
 
 // MARK: - Artist
 
 struct KhyloArtistScreen: View {
 
-    let artist: BaseItemDto
+    @State var artist: BaseItemDto
 
     @State private var albums: [BaseItemDto] = []
-    @State private var topSongs: [BaseItemDto] = []
+    @State private var popular: [BaseItemDto] = []
+    @State private var songCount = 0
+    @State private var heroURL: URL?
+    @State private var heroIsPhoto = false
+    @State private var tint: Color?
+    @State private var showsAllPopular = false
+    @State private var isLoading = true
+    @ObservedObject private var player = KhyloAudioPlayer.shared
     @Router private var router
+
+    init(artist: BaseItemDto) {
+        _artist = State(initialValue: artist)
+    }
+
+    private var fullAlbums: [BaseItemDto] { albums.filter { !$0.khyloIsSingleOrEP } }
+    private var singles: [BaseItemDto] { albums.filter(\.khyloIsSingleOrEP) }
+
+    private var isPlayingThis: Bool {
+        player.isPlaying && (player.current?.albumArtists?.contains { $0.id == artist.id } ?? false
+            || player.current?.artistItems?.contains { $0.id == artist.id } ?? false)
+    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                ZStack(alignment: .bottomLeading) {
-                    KhyloImage(url: KhyloArtwork.url(for: artist, style: .backdrop, width: 1000), placeholderSymbol: "music.mic")
-                        .frame(height: 380)
-                    LinearGradient(colors: [.clear, KhyloStyle.canvas], startPoint: .center, endPoint: .bottom)
-                    HStack(alignment: .bottom) {
-                        Text(artist.name ?? "")
-                            .font(.system(size: 36, weight: .heavy))
-                            .foregroundColor(.white)
-                            .lineLimit(2)
-                        Spacer()
-                        Button {
-                            KhyloAudioPlayer.shared.play(topSongs.shuffled(), kind: .music, startTicks: 0)
-                        } label: {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(.black)
-                                .frame(width: 54, height: 54)
-                                .background(Circle().fill(KhyloStyle.accent))
-                        }
-                        .buttonStyle(KhyloScaleButtonStyle())
-                        .disabled(topSongs.isEmpty)
-                    }
-                    .padding(.horizontal, KhyloStyle.gutter)
-                    .padding(.bottom, 12)
-                }
+            VStack(alignment: .leading, spacing: 30) {
+                hero
+                controls
+                    .padding(.top, -14)
 
-                if !topSongs.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Songs")
-                            .font(KhyloStyle.title(21))
-                            .foregroundColor(.white)
+                if isLoading {
+                    ProgressView().tint(.white).frame(maxWidth: .infinity)
+                } else {
+                    if !popular.isEmpty { popularSection }
+                    if !fullAlbums.isEmpty { discography(title: "Albums", items: fullAlbums) }
+                    if !singles.isEmpty { discography(title: "Singles & EPs", items: singles) }
+                    if albums.isEmpty, popular.isEmpty {
+                        Text("No music found for this artist.")
+                            .font(.system(size: 15))
+                            .foregroundColor(KhyloStyle.tertiaryText)
                             .padding(.horizontal, KhyloStyle.gutter)
-                        ForEach(Array(topSongs.prefix(6).enumerated()), id: \.offset) { index, song in
-                            KhyloTrackRow(track: song, showsArtwork: true) {
-                                KhyloAudioPlayer.shared.play(topSongs, startAt: index, kind: .music, startTicks: 0)
-                            }
-                        }
+                    }
+                    if let overview = artist.overview, !overview.isEmpty {
+                        about(overview)
                     }
                 }
+            }
+            .padding(.bottom, 40)
+        }
+        .background(KhyloTintedBackdrop(color: tint, height: 700))
+        .ignoresSafeArea(edges: .top)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .task { await load() }
+    }
 
-                if !albums.isEmpty {
-                    KhyloShelf(title: "Albums") {
-                        ForEach(albums, id: \.id) { album in
-                            Button {
-                                router.route(to: .khyloItem(album))
-                            } label: {
-                                KhyloTileCard(item: album, width: 150)
-                            }
-                            .buttonStyle(KhyloScaleButtonStyle())
+    // MARK: Hero
+
+    private var hero: some View {
+        ZStack(alignment: .bottomLeading) {
+            Color.clear.frame(height: 400)
+                .overlay {
+                    if let heroURL {
+                        KhyloImage(url: heroURL, showsPlaceholder: false)
+                            // Album art isn't a photo: soften it so the name stays the hero.
+                            .blur(radius: heroIsPhoto ? 0 : 2)
+                            .transition(.opacity)
+                    }
+                }
+                .clipped()
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.35), location: 0),
+                    .init(color: .clear, location: 0.3),
+                    .init(color: (tint ?? KhyloStyle.canvas).opacity(0.6), location: 0.75),
+                    .init(color: tint ?? KhyloStyle.canvas, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(artist.name ?? "")
+                    .font(.system(size: 44, weight: .heavy))
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                    .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
+                if !stats.isEmpty {
+                    Text(stats)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.75))
+                }
+            }
+            .padding(.horizontal, KhyloStyle.gutter)
+            .padding(.bottom, 18)
+        }
+        .frame(height: 400)
+    }
+
+    private var stats: String {
+        var parts: [String] = []
+        if !albums.isEmpty { parts.append("\(albums.count) release\(albums.count == 1 ? "" : "s")") }
+        if songCount > 0 { parts.append("\(songCount) song\(songCount == 1 ? "" : "s")") }
+        if let genre = artist.genres?.first { parts.append(genre) }
+        return parts.joined(separator: " · ")
+    }
+
+    private var controls: some View {
+        HStack(spacing: 22) {
+            Button {
+                toggleFavorite()
+            } label: {
+                Text(artist.khyloIsFavorite ? "Following" : "Follow")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 32)
+                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.5), lineWidth: 1))
+            }
+            .buttonStyle(KhyloScaleButtonStyle())
+
+            Spacer()
+
+            KhyloPlayCluster(isPlayingThis: isPlayingThis) {
+                if isPlayingThis { player.pause() } else { playAll(shuffled: false) }
+            } shuffle: {
+                playAll(shuffled: true)
+            }
+        }
+        .padding(.horizontal, KhyloStyle.gutter)
+    }
+
+    // MARK: Sections
+
+    private var popularSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Popular")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.horizontal, KhyloStyle.gutter)
+
+            let shown = showsAllPopular ? popular : Array(popular.prefix(5))
+            ForEach(Array(shown.enumerated()), id: \.element.id) { index, song in
+                KhyloTrackRow(track: song, style: .ranked(index + 1), hidesArtist: true) {
+                    player.play(popular, startAt: index, kind: .music, startTicks: 0)
+                }
+            }
+
+            HStack {
+                if popular.count > 5 {
+                    Button(showsAllPopular ? "Show less" : "See more") {
+                        withAnimation(.easeInOut(duration: 0.2)) { showsAllPopular.toggle() }
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(KhyloStyle.secondaryText)
+                }
+                Spacer()
+                Button("All songs") { openAllSongs() }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(KhyloStyle.accent)
+            }
+            .padding(.horizontal, KhyloStyle.gutter)
+            .padding(.top, 4)
+        }
+    }
+
+    private func discography(title: String, items: [BaseItemDto]) -> some View {
+        KhyloRow(title: title, subtitle: "\(items.count)") {
+            ForEach(items, id: \.id) { album in
+                Button {
+                    router.route(to: .khyloItem(album))
+                } label: {
+                    KhyloAlbumCard(album: album, width: 150, showsYear: true)
+                }
+                .buttonStyle(KhyloScaleButtonStyle())
+            }
+        }
+    }
+
+    private func about(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("About")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.white)
+            Text(text)
+                .font(.system(size: 15))
+                .foregroundColor(KhyloStyle.secondaryText)
+                .lineSpacing(3)
+                .lineLimit(6)
+        }
+        .padding(18)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.06)))
+        .padding(.horizontal, KhyloStyle.gutter)
+    }
+
+    // MARK: Data
+
+    private func load() async {
+        guard let id = artist.id else { return }
+        if let fresh = try? await KhyloAPI.item(id) { artist = fresh }
+
+        async let albumPage = KhyloAPI.items(
+            types: [.musicAlbum], sortBy: [.productionYear, .premiereDate, .sortName], sortOrder: .descending,
+            albumArtistIDs: [id], limit: 300
+        )
+        async let songPage = KhyloAPI.items(
+            types: [.audio], sortBy: [.playCount, .communityRating, .sortName], sortOrder: .descending,
+            artistIDs: [id], limit: 20
+        )
+
+        var found = (try? await albumPage)?.items ?? []
+        if found.isEmpty {
+            // Some libraries only tag the track artists, not the album artist.
+            found = (try? await KhyloAPI.items(
+                types: [.musicAlbum], sortBy: [.productionYear, .sortName], sortOrder: .descending,
+                artistIDs: [id], limit: 300
+            ))?.items ?? []
+        }
+        albums = found
+        let songs = try? await songPage
+        popular = songs?.items ?? []
+        songCount = songs?.total ?? 0
+        isLoading = false
+
+        if let own = KhyloArtistArt.ownImage(for: artist, width: 1000) {
+            heroURL = own
+            heroIsPhoto = true
+        } else {
+            heroURL = found.first { $0.imageTags?["Primary"] != nil }
+                .flatMap { KhyloArtwork.url(for: $0, style: .square, width: 1000) }
+        }
+        tint = await KhyloArtColor.color(for: heroURL)
+    }
+
+    private func playAll(shuffled: Bool) {
+        guard let id = artist.id else { return }
+        Task {
+            let songs = (try? await KhyloAPI.items(
+                types: [.audio], sortBy: shuffled ? [.random] : [.playCount, .sortName],
+                sortOrder: .descending, artistIDs: [id], limit: 300
+            ))?.items ?? popular
+            guard !songs.isEmpty else { return }
+            player.play(songs, kind: .music, startTicks: 0)
+        }
+    }
+
+    private func toggleFavorite() {
+        guard let id = artist.id else { return }
+        Task {
+            if let data = try? await KhyloAPI.setFavorite(!artist.khyloIsFavorite, itemID: id) {
+                artist.userData = data
+            }
+        }
+    }
+
+    private func openAllSongs() {
+        guard let id = artist.id else { return }
+        router.route(to: NavigationRoute(id: "khylo-artist-songs-\(id)") {
+            KhyloArtistSongsScreen(artist: artist)
+        })
+    }
+}
+
+/// Every song by an artist.
+private struct KhyloArtistSongsScreen: View {
+    let artist: BaseItemDto
+    @State private var songs: [BaseItemDto] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(artist.name ?? "")
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, KhyloStyle.gutter)
+                Text("\(songs.count) songs")
+                    .font(.system(size: 14))
+                    .foregroundColor(KhyloStyle.tertiaryText)
+                    .padding(.horizontal, KhyloStyle.gutter)
+
+                if isLoading {
+                    ProgressView().tint(.white).frame(maxWidth: .infinity).padding(.top, 40)
+                }
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+                        KhyloTrackRow(track: song, style: .artwork) {
+                            KhyloAudioPlayer.shared.play(songs, startAt: index, kind: .music, startTicks: 0)
                         }
                     }
                 }
@@ -480,27 +1009,11 @@ struct KhyloArtistScreen: View {
             .padding(.bottom, 40)
         }
         .background(KhyloStyle.canvas.ignoresSafeArea())
-        .ignoresSafeArea(edges: .top)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
         .task {
             guard let id = artist.id else { return }
-            async let albumPage = KhyloAPI.items(
-                types: [.musicAlbum],
-                sortBy: [.productionYear, .sortName],
-                sortOrder: .descending,
-                artistIDs: [id],
-                limit: 100
-            )
-            async let songPage = KhyloAPI.items(
-                types: [.audio],
-                sortBy: [.playCount, .sortName],
-                sortOrder: .descending,
-                artistIDs: [id],
-                limit: 50
-            )
-            albums = (try? await albumPage.items) ?? []
-            topSongs = (try? await songPage.items) ?? []
+            songs = (try? await KhyloAPI.items(types: [.audio], sortBy: [.album, .parentIndexNumber, .indexNumber], artistIDs: [id], limit: 1000).items) ?? []
+            isLoading = false
         }
     }
 }

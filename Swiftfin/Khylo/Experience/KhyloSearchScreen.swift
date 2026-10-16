@@ -254,10 +254,16 @@ struct KhyloSearchScreen: View {
                     Button {
                         open(item)
                     } label: {
-                        switch group.shape {
-                        case .poster: KhyloCoverCard(item: item, width: 112)
-                        case .square: KhyloTileCard(item: item, width: 130)
-                        case .landscape: KhyloLandscapeCard(item: item, width: 220)
+                        if item.type == .musicArtist {
+                            KhyloArtistCell(artist: item, size: 120)
+                        } else if item.type == .musicAlbum {
+                            KhyloAlbumCard(album: item, width: 140)
+                        } else {
+                            switch group.shape {
+                            case .poster: KhyloShelfCard(item: item, shape: .portrait, width: 112)
+                            case .square: KhyloShelfCard(item: item, shape: .square, width: 130)
+                            case .landscape: KhyloLandscapeCard(item: item, width: 220)
+                            }
                         }
                     }
                     .buttonStyle(KhyloScaleButtonStyle())

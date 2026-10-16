@@ -27,6 +27,20 @@ final class KhyloAudioPlayer: ObservableObject {
         case audiobook
     }
 
+    enum RepeatMode {
+        case off
+        case all
+        case one
+
+        var next: RepeatMode {
+            switch self {
+            case .off: .all
+            case .all: .one
+            case .one: .off
+            }
+        }
+    }
+
     @Published private(set) var queue: [BaseItemDto] = []
     @Published private(set) var index = 0
     @Published private(set) var kind: Kind = .music
@@ -41,6 +55,10 @@ final class KhyloAudioPlayer: ObservableObject {
     /// Title of the audiobook (its folder), shown instead of the part name.
     @Published private(set) var collectionTitle: String?
     @Published private(set) var artworkURL: URL?
+    @Published var repeatMode: RepeatMode = .off
+    @Published private(set) var isShuffled = false
+    /// The queue's order before shuffling, so shuffle can be turned back off.
+    private var unshuffledQueue: [BaseItemDto] = []
 
     var current: BaseItemDto? { queue.indices.contains(index) ? queue[index] : nil }
     var isActive: Bool { current != nil }
@@ -86,6 +104,8 @@ final class KhyloAudioPlayer: ObservableObject {
         guard items.indices.contains(startIndex) else { return }
         reportStopped()
         queue = items
+        isShuffled = false
+        unshuffledQueue = []
         self.kind = kind
         self.collectionTitle = collectionTitle
         self.artworkURL = artworkURL
@@ -114,9 +134,51 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     func next() {
-        guard index + 1 < queue.count else { return }
-        reportStopped()
-        load(index: index + 1, startTicks: 0)
+        if index + 1 < queue.count {
+            reportStopped()
+            load(index: index + 1, startTicks: 0)
+        } else if repeatMode == .all, !queue.isEmpty {
+            reportStopped()
+            load(index: 0, startTicks: 0)
+        }
+    }
+
+    /// Shuffles everything after the current track, or restores the original order.
+    func toggleShuffle() {
+        guard let current else { return }
+        if isShuffled {
+            let original = unshuffledQueue
+            queue = original
+            index = original.firstIndex { $0.id == current.id } ?? 0
+            unshuffledQueue = []
+            isShuffled = false
+        } else {
+            unshuffledQueue = queue
+            var rest = queue
+            rest.remove(at: index)
+            queue = [current] + rest.shuffled()
+            index = 0
+            isShuffled = true
+        }
+        updateNowPlaying()
+    }
+
+    /// Moves a queued track to play right after the current one.
+    func playNext(_ item: BaseItemDto) {
+        guard isActive else {
+            play([item], kind: .music, startTicks: 0)
+            return
+        }
+        queue.removeAll { $0.id == item.id && $0.id != current?.id }
+        queue.insert(item, at: min(index + 1, queue.count))
+    }
+
+    func addToQueue(_ item: BaseItemDto) {
+        guard isActive else {
+            play([item], kind: .music, startTicks: 0)
+            return
+        }
+        queue.append(item)
     }
 
     func previous() {
@@ -212,8 +274,12 @@ final class KhyloAudioPlayer: ObservableObject {
     private func itemFinished() {
         report(force: true)
         reportStopped()
-        if index + 1 < queue.count {
+        if repeatMode == .one {
+            load(index: index, startTicks: 0)
+        } else if index + 1 < queue.count {
             load(index: index + 1, startTicks: 0)
+        } else if repeatMode == .all, !queue.isEmpty {
+            load(index: 0, startTicks: 0)
         } else {
             isPlaying = false
             updateNowPlaying()
@@ -344,10 +410,17 @@ final class KhyloAudioPlayer: ObservableObject {
 
     private var artworkImage: UIImage?
 
+    /// Album cover for music (per track); the book's cover for audiobooks.
+    func displayArtworkURL(width: CGFloat) -> URL? {
+        guard let item = current else { return nil }
+        if kind == .audiobook, let artworkURL { return artworkURL }
+        return KhyloArtwork.url(for: item, style: .square, width: width) ?? artworkURL
+    }
+
     private func loadArtwork() {
         artworkTask?.cancel()
         artworkImage = nil
-        let url = artworkURL ?? current.flatMap { KhyloArtwork.url(for: $0, style: .square, width: 600) }
+        let url = displayArtworkURL(width: 600)
         guard let url else { return }
         artworkTask = Task { [weak self] in
             guard let (data, _) = try? await URLSession.shared.data(from: url),
