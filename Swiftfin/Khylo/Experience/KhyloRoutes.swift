@@ -107,12 +107,25 @@ enum KhyloPlayback {
         router.route(to: .videoPlayer(provider: provider, queue: queue))
     }
 
-    /// Plays an item exactly as given (already fetched, start position set), with no episode queue.
-    static func play(prepared item: BaseItemDto, router: Router.Wrapper) throws {
+    /// Plays a scheduled program (Khylo TV) from wherever the broadcast is now.
+    ///
+    /// The player fetches the item again before it starts, so the live position
+    /// and the missing chapters are applied to that fresh copy.
+    static func playLive(_ item: BaseItemDto, airedAt: Date, router: Router.Wrapper) throws {
         guard let provider = item.getPlaybackItemProvider(userSession: KhyloAPI.session) else {
             throw PlaybackError.unavailable
         }
-        router.route(to: .videoPlayer(provider: provider, queue: nil))
+        let live = provider.modifyingItem { item in
+            let ticks = Int(max(0, Date().timeIntervalSince(airedAt)) * 10_000_000)
+            if item.userData == nil {
+                item.userData = UserItemDataDto(itemID: item.id, key: item.id ?? "")
+            }
+            item.userData?.playbackPositionTicks = ticks
+            // Channels play straight through: no chapter list or markers.
+            item.chapters = nil
+            item.trickplay = nil
+        }
+        router.route(to: .videoPlayer(provider: live, queue: nil))
     }
 
     /// Resolves what Play should actually start, with full media source info.

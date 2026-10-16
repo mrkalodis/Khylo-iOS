@@ -116,10 +116,18 @@ struct VideoPlayerViewShim: View {
             self.safeAreaInsets = safeArea.max(EdgeInsets.edgePadding)
         }
         .onAppear {
+            // Music and audiobooks stop when a video starts.
+            NotificationCenter.default.post(name: .khyloVideoWillPlay, object: nil)
             // Phones turn to landscape for video, like other media apps.
             Self.requestOrientation(.landscapeRight)
         }
         .onDisappear {
+            // Always shut the player down when it closes. Not every way of closing
+            // it reaches the player's own dismiss handling, and a player left running
+            // keeps reporting progress and blocks the next video from starting.
+            if manager.state != .stopped {
+                manager.stop()
+            }
             Self.requestOrientation(.portrait)
             // Lets browse screens refresh Continue Watching with the new position.
             NotificationCenter.default.post(name: .khyloPlaybackDidEnd, object: nil)

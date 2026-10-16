@@ -6,7 +6,9 @@
 // Copyright (c) 2026 Khylo & Khylo Contributors
 //
 
+import Get
 import JellyfinAPI
+import NukeUI
 import SwiftUI
 
 /// Khylo TV: always-on channels built from your own library. Tune in and the
@@ -230,12 +232,11 @@ struct KhyloTVScreen: View {
                     errorMessage = "Nothing is on \(channel.name) right now."
                     return
                 }
-                var item = try await KhyloAPI.item(current.itemID)
-                // Join the broadcast where it is now, not where you last stopped.
-                if item.userData == nil { item.userData = UserItemDataDto(itemID: item.id, key: item.id ?? "") }
-                item.userData?.playbackPositionTicks = result.startPositionTicks
-                KhyloTVSession.shared.start(channelID: channel.id, program: current)
-                try KhyloPlayback.play(prepared: item, router: router)
+                let item = try await KhyloAPI.item(current.itemID)
+                // When this program's first frame aired, by our clock (the server's clock may differ).
+                let airedAt = Date().addingTimeInterval(-Double(result.startPositionTicks) / 10_000_000)
+                KhyloTVSession.shared.start(channelID: channel.id, program: current, itemID: current.itemID, airedAt: airedAt)
+                try KhyloPlayback.playLive(item, airedAt: airedAt, router: router)
             } catch {
                 errorMessage = "Couldn't tune in to \(channel.name). Try again in a moment."
             }
@@ -267,14 +268,17 @@ final class KhyloTVSession {
     private(set) var channelID: String?
     private(set) var programEnd: Date?
 
-    func start(channelID: String, program: KhyloAPI.TVProgram) {
+    func start(channelID: String, program: KhyloAPI.TVProgram, itemID: String, airedAt: Date) {
         self.channelID = channelID
         programEnd = program.end
+        // Pause and rewind are fine; skipping ahead of the broadcast isn't.
+        MediaPlayerLiveEdge.begin(itemID: itemID, airedAt: airedAt)
     }
 
     func stop(notifyServer: Bool) {
         channelID = nil
         programEnd = nil
+        MediaPlayerLiveEdge.end()
         if notifyServer {
             Task { await KhyloAPI.leaveKhyloTV() }
         }
@@ -284,6 +288,16 @@ final class KhyloTVSession {
 // MARK: - Artwork
 
 enum KhyloTVArt {
+    /// A network channel's official logo, served by the server.
+    static func channelLogo(_ channelID: String) -> URL? {
+        guard let session = KhyloAPI.session,
+              let base = session.client.url(with: Request<Data>(path: "/LiveChannels/\(channelID)/Logo")),
+              var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+        else { return nil }
+        components.queryItems = [URLQueryItem(name: "api_key", value: session.user.accessToken)]
+        return components.url
+    }
+
     /// The show's (or movie's) backdrop.
     static func backdrop(_ program: KhyloAPI.TVProgram, width: CGFloat) -> URL? {
         KhyloArtwork.url(itemID: program.seriesID ?? program.itemID, type: .backdrop, tag: nil, width: width)
@@ -314,7 +328,7 @@ private struct KhyloTVChannelRow: View {
 
         Button(action: onWatch) {
             HStack(spacing: 12) {
-                KhyloChannelEmblem(number: channel.number, name: channel.name, category: channel.category)
+                KhyloChannelEmblem(channel: channel)
 
                 ZStack(alignment: .bottom) {
                     if let current {
@@ -382,43 +396,152 @@ private struct KhyloTVChannelRow: View {
     }
 }
 
-/// Channel number and name on a colour picked from the channel, like a network bug.
+/// A channel's emblem, as on the other Khylo apps: the official logo for network
+/// channels, the collection's artwork for collection channels, and an icon (or an
+/// era label like "'80s") for everything else. The channel number sits beneath.
 private struct KhyloChannelEmblem: View {
-    let number: Int
-    let name: String
-    let category: String
+    let channel: KhyloAPI.TVChannel
 
-    private static let palette = ["#C2410C", "#7C3AED", "#0E7490", "#BE123C", "#15803D", "#1D4ED8", "#A16207", "#9D174D"]
+    private var key: String { channel.key ?? "" }
 
     var body: some View {
-        let hex = Self.palette[abs(name.hashValue_stable) % Self.palette.count]
-        VStack(spacing: 1) {
-            Text("\(number)")
-                .font(.system(size: 18, weight: .heavy).monospacedDigit())
-            Text(name)
-                .font(.system(size: 8, weight: .bold))
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.7)
+        VStack(spacing: 4) {
+            tile
+                .frame(width: 64, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Text("CH \(channel.number)")
+                .font(.system(size: 10, weight: .bold).monospacedDigit())
+                .tracking(0.4)
+                .foregroundColor(KhyloStyle.tertiaryText)
         }
-        .foregroundColor(.white)
-        .padding(4)
-        .frame(width: 54, height: 54)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(LinearGradient(colors: [Color(hex: hex), Color(hex: hex).opacity(0.65)], startPoint: .topLeading, endPoint: .bottomTrailing))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.15), lineWidth: 1)
-        )
+    }
+
+    @ViewBuilder
+    private var tile: some View {
+        if key.hasPrefix("network:") {
+            KhyloRemoteEmblem(url: KhyloTVArt.channelLogo(channel.id), isLogo: true) {
+                wordmark
+            }
+        } else if key.hasPrefix("collection:") {
+            KhyloRemoteEmblem(
+                url: KhyloArtwork.url(itemID: String(key.dropFirst("collection:".count)), type: .primary, tag: nil, width: 128),
+                isLogo: false
+            ) {
+                iconTile
+            }
+        } else {
+            iconTile
+        }
+    }
+
+    private var wordmark: some View {
+        ZStack {
+            darkTile
+            Text(channel.name)
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundColor(Color(hex: "#F4F1EC"))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    private var iconTile: some View {
+        ZStack {
+            darkTile
+            if let era = KhyloChannelIcons.eraLabel(for: key) {
+                Text(era)
+                    .font(.system(size: 15, weight: .heavy))
+                    .tracking(-0.3)
+                    .foregroundColor(Color(hex: "#F4F1EC"))
+            } else {
+                Image(systemName: KhyloChannelIcons.symbol(for: key))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(KhyloStyle.accent)
+            }
+        }
+    }
+
+    private var darkTile: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(LinearGradient(colors: [Color(hex: "#1D1E20"), Color(hex: "#141516")], startPoint: .topLeading, endPoint: .bottomTrailing))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.white.opacity(0.08), lineWidth: 1))
     }
 }
 
-private extension String {
-    /// A hash that stays the same between launches (unlike `hashValue`).
-    var hashValue_stable: Int {
-        unicodeScalars.reduce(5381) { ($0 &* 33) &+ Int($1.value) }
+/// A logo or artwork image, with a fallback when the server has none.
+private struct KhyloRemoteEmblem<Fallback: View>: View {
+    let url: URL?
+    /// Logos keep their real colours on a light tile (they're designed for light backgrounds).
+    let isLogo: Bool
+    @ViewBuilder let fallback: () -> Fallback
+
+    var body: some View {
+        if let url {
+            LazyImage(url: url) { state in
+                if let image = state.image {
+                    if isLogo {
+                        ZStack {
+                            Color(hex: "#F4F1EC")
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 7)
+                        }
+                    } else {
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    }
+                } else if state.error != nil {
+                    fallback()
+                } else {
+                    Color.white.opacity(0.06)
+                }
+            }
+        } else {
+            fallback()
+        }
+    }
+}
+
+/// Icons for Khylo TV's built-in channels, keyed like the server's channel keys.
+enum KhyloChannelIcons {
+
+    private static let symbols: [String: String] = [
+        "classic": "tv", "classic-movies": "film.stack", "sitcoms": "sofa", "comedy": "theatermasks",
+        "animation": "sparkles.tv", "anime": "sparkles", "kids": "figure.and.child.holdinghands",
+        "family": "figure.2.and.child.holdinghands", "drama": "theatermasks.fill", "medical": "cross.case",
+        "legal": "building.columns", "teen": "graduationcap", "soaps": "heart", "crime": "magnifyingglass",
+        "procedurals": "shield.lefthalf.filled", "scifi": "airplane.departure", "action": "flame",
+        "superhero": "shield", "horror": "moon.stars", "war": "medal", "western": "mountain.2",
+        "westerns": "mountain.2", "miniseries": "bookmark", "top-rated": "star", "reality": "video",
+        "game-shows": "dice", "talk": "mic", "docuseries": "globe.americas", "documentaries": "globe.americas",
+        "true-crime": "magnifyingglass", "adventure": "tree", "action-comedies": "flame", "romcoms": "heart",
+        "romance": "heart", "mystery": "eye.slash", "thriller": "eye.slash", "fantasy": "wand.and.stars",
+        "history": "scroll", "music": "music.note", "biopics": "book", "sports": "football", "film-noir": "film",
+        "tv": "tv", "indie": "film", "animated": "sparkles.tv", "heist": "diamond", "spy": "eye.slash",
+        "martial-arts": "figure.martial.arts", "cop": "shield.lefthalf.filled", "gangster": "person.3",
+        "assassin": "scope", "revenge": "arrow.uturn.backward", "prison": "lock", "courtroom": "building.columns",
+        "disaster": "cloud.bolt", "survival": "tree", "racing": "car", "road-trip": "road.lanes",
+        "pirate": "sailboat", "ww2": "flag", "space": "airplane.departure", "alien": "antenna.radiowaves.left.and.right",
+        "time-travel": "hourglass", "dystopia": "flame", "robot": "cpu", "zombie": "ladybug", "slasher": "moon.stars",
+        "haunted": "moon.stars", "creature-features": "ladybug", "found-footage": "video", "witch": "wand.and.stars",
+        "buddy-comedies": "person.2", "spoof": "face.smiling", "animal": "pawprint", "book": "book", "cult": "star",
+        "just-added": "sparkle", "christmas": "snowflake", "halloween": "moon.stars", "valentines": "heart",
+    ]
+
+    static func symbol(for key: String) -> String {
+        if let symbol = symbols[key] { return symbol }
+        let base = key.replacingOccurrences(of: #"-(tv|movies)$"#, with: "", options: .regularExpression)
+        return symbols[base] ?? "film"
+    }
+
+    /// "'80s" or "2010s" for era channels such as "80s-movies".
+    static func eraLabel(for key: String) -> String? {
+        guard let match = key.range(of: #"^(\d{2}s|\d{4}s)-"#, options: .regularExpression) else { return nil }
+        let era = String(key[match].dropLast())
+        return era.count == 3 ? "'\(era)" : era
     }
 }
 

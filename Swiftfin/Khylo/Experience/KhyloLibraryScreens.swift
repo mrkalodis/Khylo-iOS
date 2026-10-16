@@ -776,6 +776,16 @@ struct KhyloLibraryHome<Header: View>: View {
             KhyloStyle.canvas.ignoresSafeArea()
 
             switch tab {
+            case .forYou where library.collectionType == .music:
+                // Music has its own For You: Jump Back In, mixes, On Repeat and more.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        top
+                        KhyloMusicForYou(library: library)
+                    }
+                    .padding(.bottom, 40)
+                }
+
             case .forYou:
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {

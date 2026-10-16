@@ -53,6 +53,7 @@ struct KhyloReaderScreen: View {
     @AppStorage("khylo.reader.spacing") private var spacing: KhyloReaderSpacing = .normal
     @AppStorage("khylo.reader.margins") private var margins: KhyloReaderMargins = .normal
     @AppStorage("khylo.reader.justified") private var justified = true
+    @AppStorage("khylo.reader.pageCurl") private var pageCurl = true
 
     @State private var book: KhyloBook?
     @State private var errorMessage: String?
@@ -71,7 +72,7 @@ struct KhyloReaderScreen: View {
                     itemID: item.id ?? "",
                     book: epub,
                     theme: theme,
-                    style: KhyloEPUBStyle(fontScale: fontScale, font: font, spacing: spacing, margins: margins, justified: justified),
+                    style: KhyloEPUBStyle(pageCurl: pageCurl, fontScale: fontScale, font: font, spacing: spacing, margins: margins, justified: justified),
                     isChromeVisible: $isChromeVisible,
                     isShowingContents: $isShowingContents,
                     title: item.name ?? "",
@@ -114,9 +115,10 @@ struct KhyloReaderScreen: View {
                 spacing: $spacing,
                 margins: $margins,
                 justified: $justified,
+                pageCurl: $pageCurl,
                 showsTextOptions: isEPUB
             )
-            .presentationDetents(isEPUB ? [.height(470), .large] : [.height(200)])
+            .presentationDetents(isEPUB ? [.height(520), .large] : [.height(200)])
             .presentationDragIndicator(.visible)
             .presentationBackground(.regularMaterial)
             .preferredColorScheme(theme.isDark ? .dark : .light)
@@ -210,6 +212,13 @@ final class KhyloEPUBPager: NSObject, ObservableObject, WKNavigationDelegate {
     private var landing: Landing = .first
     private var css = ""
     var onFinished: (() -> Void)?
+    /// Turn pages with a paper curl rather than a slide.
+    var usesPageCurl = true
+    /// Holds the web view and draws the page-curl animation over it.
+    private(set) lazy var container = KhyloPageCurlContainer(webView: webView)
+    private var isTurning = false
+    /// A curl waiting for the next chapter to finish laying out.
+    private var pendingCurlForward: Bool?
 
     init(itemID: String, book: KhyloBook.EPUB) {
         self.itemID = itemID
@@ -264,21 +273,88 @@ final class KhyloEPUBPager: NSObject, ObservableObject, WKNavigationDelegate {
     }
 
     func next() {
+        guard !isTurning else { return }
         if page < pageCount - 1 {
-            show(page: page + 1, animated: true)
+            turn(forward: true) { self.show(page: self.page + 1, animated: !self.usesPageCurl) }
         } else if chapterIndex < book.chapters.count - 1 {
-            loadChapter(chapterIndex + 1, landing: .first)
+            turnChapter(to: chapterIndex + 1, landing: .first, forward: true)
         } else {
             onFinished?()
         }
     }
 
     func previous() {
+        guard !isTurning else { return }
         if page > 0 {
-            show(page: page - 1, animated: true)
+            turn(forward: false) { self.show(page: self.page - 1, animated: !self.usesPageCurl) }
         } else if chapterIndex > 0 {
-            loadChapter(chapterIndex - 1, landing: .last)
+            turnChapter(to: chapterIndex - 1, landing: .last, forward: false)
         }
+    }
+
+    // MARK: Page curl
+
+    /// Covers the page with a picture of itself, moves the real page underneath,
+    /// then curls the picture away to reveal it.
+    private func turn(forward: Bool, move: @escaping () -> Void) {
+        guard usesPageCurl else {
+            move()
+            return
+        }
+        isTurning = true
+        snapshot { [weak self] current in
+            guard let self else { return }
+            guard let current else {
+                move()
+                isTurning = false
+                return
+            }
+            container.cover(with: current)
+            move()
+            snapshot { [weak self] revealed in
+                guard let self else { return }
+                container.curl(to: revealed ?? current, forward: forward) { self.isTurning = false }
+            }
+        }
+    }
+
+    /// Same as `turn`, but the next page is in another chapter that has to load first.
+    private func turnChapter(to index: Int, landing: Landing, forward: Bool) {
+        guard usesPageCurl else {
+            loadChapter(index, landing: landing)
+            return
+        }
+        isTurning = true
+        snapshot { [weak self] current in
+            guard let self else { return }
+            if let current {
+                container.cover(with: current)
+                pendingCurlForward = forward
+            } else {
+                isTurning = false
+            }
+            loadChapter(index, landing: landing)
+        }
+    }
+
+    private func finishPendingCurl() {
+        guard let forward = pendingCurlForward else { return }
+        pendingCurlForward = nil
+        snapshot { [weak self] revealed in
+            guard let self else { return }
+            if let revealed {
+                container.curl(to: revealed, forward: forward) { self.isTurning = false }
+            } else {
+                container.uncover()
+                isTurning = false
+            }
+        }
+    }
+
+    private func snapshot(_ completion: @escaping (UIImage?) -> Void) {
+        let configuration = WKSnapshotConfiguration()
+        configuration.afterScreenUpdates = true
+        webView.takeSnapshot(with: configuration) { image, _ in completion(image) }
     }
 
     private func loadChapter(_ index: Int, landing: Landing) {
@@ -336,6 +412,7 @@ final class KhyloEPUBPager: NSObject, ObservableObject, WKNavigationDelegate {
             }
             show(page: target, animated: false)
             withAnimation(.easeOut(duration: 0.2)) { self.isReady = true }
+            self.finishPendingCurl()
         }
     }
 
@@ -348,23 +425,100 @@ final class KhyloEPUBPager: NSObject, ObservableObject, WKNavigationDelegate {
 }
 
 private struct KhyloEPUBWebView: UIViewRepresentable {
-    let webView: WKWebView
+    let container: KhyloPageCurlContainer
     let background: Color
+    let isReady: Bool
 
-    func makeUIView(context: Context) -> WKWebView {
-        webView.backgroundColor = UIColor(background)
-        webView.scrollView.backgroundColor = UIColor(background)
-        return webView
+    func makeUIView(context: Context) -> KhyloPageCurlContainer {
+        container.setPaper(UIColor(background))
+        container.webView.alpha = isReady ? 1 : 0
+        return container
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {
-        uiView.backgroundColor = UIColor(background)
-        uiView.scrollView.backgroundColor = UIColor(background)
+    func updateUIView(_ uiView: KhyloPageCurlContainer, context: Context) {
+        uiView.setPaper(UIColor(background))
+        let alpha: CGFloat = isReady ? 1 : 0
+        if uiView.webView.alpha != alpha {
+            UIView.animate(withDuration: 0.2) { uiView.webView.alpha = alpha }
+        }
+    }
+}
+
+/// The book's web view with a page-curl layer above it. Turning a page shows a
+/// picture of the old page on top and curls it away, like turning real paper.
+final class KhyloPageCurlContainer: UIView {
+
+    let webView: WKWebView
+    private let pageController = UIPageViewController(
+        transitionStyle: .pageCurl,
+        navigationOrientation: .horizontal,
+        options: [.spineLocation: NSNumber(value: UIPageViewController.SpineLocation.min.rawValue)]
+    )
+    private var paper: UIColor = .white
+
+    init(webView: WKWebView) {
+        self.webView = webView
+        super.init(frame: .zero)
+        addSubview(webView)
+        pageController.isDoubleSided = false
+        pageController.view.isHidden = true
+        // Turning is driven by the reader's own taps and swipes.
+        pageController.view.isUserInteractionEnabled = false
+        pageController.gestureRecognizers.forEach { $0.isEnabled = false }
+        addSubview(pageController.view)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        webView.frame = bounds
+        pageController.view.frame = bounds
+    }
+
+    func setPaper(_ color: UIColor) {
+        paper = color
+        backgroundColor = color
+        webView.backgroundColor = color
+        webView.scrollView.backgroundColor = color
+    }
+
+    /// Shows a still of the current page above the web view.
+    func cover(with image: UIImage) {
+        pageController.setViewControllers([page(image)], direction: .forward, animated: false)
+        pageController.view.isHidden = false
+    }
+
+    func uncover() {
+        pageController.view.isHidden = true
+    }
+
+    /// Curls the covering page away (forward) or back in (reverse) to show `image`, then steps aside.
+    func curl(to image: UIImage, forward: Bool, completion: @escaping () -> Void) {
+        pageController.setViewControllers([page(image)], direction: forward ? .forward : .reverse, animated: true) { [weak self] _ in
+            self?.pageController.view.isHidden = true
+            completion()
+        }
+    }
+
+    private func page(_ image: UIImage) -> UIViewController {
+        let controller = UIViewController()
+        controller.view.backgroundColor = paper
+        let imageView = UIImageView(image: image)
+        imageView.contentMode = .scaleToFill
+        imageView.frame = controller.view.bounds
+        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        controller.view.addSubview(imageView)
+        return controller
     }
 }
 
 /// Text settings for EPUB pages.
 struct KhyloEPUBStyle: Equatable {
+    var pageCurl: Bool = true
     var fontScale: Double
     var font: KhyloReaderFont
     var spacing: KhyloReaderSpacing
@@ -448,9 +602,9 @@ struct KhyloEPUBReader: View {
 
     var body: some View {
         ZStack {
-            KhyloEPUBWebView(webView: pager.webView, background: theme.background)
+            // The page itself fades in once laid out; the curl layer above it stays visible.
+            KhyloEPUBWebView(container: pager.container, background: theme.background, isReady: pager.isReady)
                 .ignoresSafeArea()
-                .opacity(pager.isReady ? 1 : 0)
 
             if !pager.isReady {
                 ProgressView().tint(theme.foreground.opacity(0.5))
@@ -512,12 +666,16 @@ struct KhyloEPUBReader: View {
         }
         .onAppear {
             pager.onFinished = onFinished
+            pager.usesPageCurl = style.pageCurl
             pager.start(css: css)
             // Hide controls once reading starts.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { isChromeVisible = false }
         }
         .onChange(of: css) { _, newValue in
             pager.updateStyle(css: newValue)
+        }
+        .onChange(of: style.pageCurl) { _, newValue in
+            pager.usesPageCurl = newValue
         }
         .sheet(isPresented: $isShowingContents) {
             contents

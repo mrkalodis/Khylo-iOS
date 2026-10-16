@@ -95,6 +95,7 @@ final class KhyloAudioPlayer: ObservableObject {
     private var endObserver: NSObjectProtocol?
     private var statusCancellable: AnyCancellable?
     private var itemCancellable: AnyCancellable?
+    private var videoObserver: NSObjectProtocol?
     private var qualityTask: Task<Void, Never>?
     private var playSessionID = UUID().uuidString
     private var lastReport = Date.distantPast
@@ -129,6 +130,15 @@ final class KhyloAudioPlayer: ObservableObject {
         ) { [weak self] notification in
             let ended = notification.object as? AVPlayerItem
             MainActor.assumeIsolated { self?.itemDidEnd(ended) }
+        }
+        videoObserver = NotificationCenter.default.addObserver(
+            forName: .khyloVideoWillPlay,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                if self?.isPlaying == true { self?.pause() }
+            }
         }
         configureRemoteCommands()
     }

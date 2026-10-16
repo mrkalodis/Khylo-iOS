@@ -327,6 +327,7 @@ struct KhyloReaderSettingsSheet: View {
     @Binding var spacing: KhyloReaderSpacing
     @Binding var margins: KhyloReaderMargins
     @Binding var justified: Bool
+    @Binding var pageCurl: Bool
     let showsTextOptions: Bool
 
     var body: some View {
@@ -359,6 +360,15 @@ struct KhyloReaderSettingsSheet: View {
                         }
                         Toggle(isOn: $justified) {
                             Text("Justify Text").font(.system(size: 15, weight: .medium))
+                        }
+                        .tint(KhyloStyle.accent)
+                        Toggle(isOn: $pageCurl) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Page Curl").font(.system(size: 15, weight: .medium))
+                                Text("Pages turn like paper. Off slides them instead.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .tint(KhyloStyle.accent)
                     }

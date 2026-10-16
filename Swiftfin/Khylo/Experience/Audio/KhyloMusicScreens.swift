@@ -19,13 +19,12 @@ struct KhyloMusicLibraryScreen: View {
     var header: AnyView? = nil
 
     enum Section: String, CaseIterable {
-        case forYou = "For You"
         case albums = "Albums"
         case artists = "Artists"
         case songs = "Songs"
     }
 
-    @State private var section: Section = .forYou
+    @State private var section: Section = .albums
     @State private var query = ""
     @State private var searchTerm = ""
     @State private var contentWidth: CGFloat = UIScreen.main.bounds.width
@@ -39,8 +38,6 @@ struct KhyloMusicLibraryScreen: View {
                     sectionHeader
 
                     switch section {
-                    case .forYou:
-                        KhyloMusicForYou(library: library)
                     case .albums:
                         KhyloAlbumGrid(libraryID: library.id, searchTerm: searchTerm, width: contentWidth)
                             .id("albums-\(searchTerm)")
@@ -58,10 +55,6 @@ struct KhyloMusicLibraryScreen: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
         }
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: searchTerm) { _, term in
-            // Searching from For You searches albums.
-            if !term.isEmpty, section == .forYou { section = .albums }
-        }
         .task(id: query) {
             let trimmed = query.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty {
@@ -103,7 +96,7 @@ struct KhyloMusicLibraryScreen: View {
             .padding(.horizontal, KhyloStyle.gutter)
 
             KhyloLibrarySearchField(
-                placeholder: section == .forYou ? "Search your music" : "Search \(section.rawValue.lowercased())",
+                placeholder: "Search \(section.rawValue.lowercased())",
                 text: $query
             )
         }

@@ -104,9 +104,8 @@ class AVMediaPlayerProxy: VideoMediaPlayerProxy {
     }
 
     func jumpForward(_ seconds: Duration) {
-        let currentTime = player.currentTime()
-        let newTime = currentTime + CMTime(seconds: seconds.seconds, preferredTimescale: 1)
-        player.seek(to: newTime, toleranceBefore: .zero, toleranceAfter: .zero)
+        let target = Duration.seconds(player.currentTime().seconds) + seconds
+        setSeconds(target)
     }
 
     func jumpBackward(_ seconds: Duration) {
@@ -116,6 +115,7 @@ class AVMediaPlayerProxy: VideoMediaPlayerProxy {
     }
 
     func setSeconds(_ seconds: Duration) {
+        let seconds = MediaPlayerLiveEdge.clamp(seconds, itemID: manager?.item.id)
         let time = CMTime(seconds: seconds.seconds, preferredTimescale: 1)
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
     }

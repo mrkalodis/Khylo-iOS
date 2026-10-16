@@ -61,13 +61,18 @@ class VLCMediaPlayerProxy: VideoMediaPlayerProxy,
     }
 
     func jumpForward(_ seconds: Duration) {
-        let target: Duration
+        var target: Duration
 
         if let runtime = manager?.item.runtime, let current = manager?.seconds {
             let remaining = max(.zero, runtime - current)
             target = min(seconds, remaining)
         } else {
             target = seconds
+        }
+
+        // Scheduled channels: not past the broadcast.
+        if let limit = MediaPlayerLiveEdge.limit(for: manager?.item.id), let current = manager?.seconds {
+            target = min(target, max(.zero, limit - current))
         }
 
         guard target > .zero else { return }
@@ -89,6 +94,7 @@ class VLCMediaPlayerProxy: VideoMediaPlayerProxy,
 
     func setSeconds(_ seconds: Duration) {
         guard player.isSeekable else { return }
+        let seconds = MediaPlayerLiveEdge.clamp(seconds, itemID: manager?.item.id)
 
         pendingStartTime = nil
 

@@ -56,7 +56,7 @@ class MPVMediaPlayerProxy: @MainActor VideoMediaPlayerProxy,
     }
 
     func setSeconds(_ seconds: Duration) {
-        player.seek(to: seconds)
+        player.seek(to: MediaPlayerLiveEdge.clamp(seconds, itemID: manager?.item.id))
     }
 
     func setRate(_ rate: Float) {
