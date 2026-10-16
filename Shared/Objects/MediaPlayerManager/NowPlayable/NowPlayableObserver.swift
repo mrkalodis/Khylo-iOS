@@ -180,13 +180,12 @@ class NowPlayableObserver: ViewModel, MediaPlayerObserver {
             do {
                 try startSession()
 
+                // Pick back up whenever we were playing before the other app took the
+                // audio. Many apps never pass `.shouldResume` when they finish, and
+                // people expect their show to carry on once the other app is done.
                 if playbackRequestStateBeforeInterruption == .playing {
-                    if options.contains(.shouldResume) {
-                        manager?.setPlaybackRequestStatus(status: .playing)
-                        manager?.proxy?.play()
-                    } else {
-                        manager?.setPlaybackRequestStatus(status: .paused)
-                    }
+                    manager?.setPlaybackRequestStatus(status: .playing)
+                    manager?.proxy?.play()
                 }
             } catch {
                 logger.critical("Unable to reactivate audio session after interruption: \(error.localizedDescription)")

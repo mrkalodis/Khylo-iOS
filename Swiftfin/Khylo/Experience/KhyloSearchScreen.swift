@@ -453,6 +453,14 @@ private struct KhyloTopResultCard: View {
 
 // MARK: - Categories
 
+/// A genre from the library's own metadata, with its most popular title.
+struct KhyloCategory: Identifiable, Hashable {
+    let name: String
+    let titleCount: Int
+    let top: BaseItemDto?
+    var id: String { name }
+}
+
 /// A scope's categories as artwork tiles.
 private struct KhyloCategoryGrid: View {
 
@@ -461,16 +469,8 @@ private struct KhyloCategoryGrid: View {
     let limit: Int?
     let onSeeAll: (() -> Void)?
 
-    @State private var genres: [BaseItemDto] = []
+    @State private var categories: [KhyloCategory] = []
     @Router private var router
-
-    private var itemTypes: [BaseItemKind] {
-        switch scope {
-        case .music: [.musicAlbum]
-        case .books: [.book]
-        default: [.movie, .series]
-        }
-    }
 
     private var title: String {
         switch scope {
@@ -482,13 +482,13 @@ private struct KhyloCategoryGrid: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if !genres.isEmpty {
+            if !categories.isEmpty {
                 HStack(alignment: .lastTextBaseline) {
                     Text(limit == nil ? "Browse \(scope.rawValue)" : title)
                         .font(KhyloStyle.title(20))
                         .foregroundColor(.white)
                     Spacer()
-                    if let onSeeAll, let limit, genres.count > limit {
+                    if let onSeeAll, let limit, categories.count > limit {
                         Button("See All", action: onSeeAll)
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(KhyloStyle.accent)
@@ -499,11 +499,11 @@ private struct KhyloCategoryGrid: View {
                     columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
                     spacing: 12
                 ) {
-                    ForEach(Array(genres.prefix(limit ?? genres.count).enumerated()), id: \.offset) { index, genre in
+                    ForEach(Array(categories.prefix(limit ?? categories.count).enumerated()), id: \.element.id) { index, category in
                         Button {
-                            open(genre)
+                            open(category)
                         } label: {
-                            KhyloCategoryTile(name: genre.name ?? "", scope: scope, itemTypes: itemTypes, index: index)
+                            KhyloCategoryTile(category: category, scope: scope, index: index)
                         }
                         .buttonStyle(KhyloScaleButtonStyle())
                     }
@@ -512,15 +512,16 @@ private struct KhyloCategoryGrid: View {
         }
         .padding(.horizontal, KhyloStyle.gutter)
         .task(id: scope) {
-            if genres.isEmpty {
-                genres = await KhyloCategoryCache.shared.genres(for: scope, types: itemTypes)
+            if categories.isEmpty {
+                let found = await KhyloCategoryCache.shared.categories(for: scope)
+                withAnimation(.easeOut(duration: 0.25)) { categories = found }
             }
         }
     }
 
-    private func open(_ genre: BaseItemDto) {
-        guard let name = genre.name else { return }
-        let types = itemTypes
+    private func open(_ category: KhyloCategory) {
+        let name = category.name
+        let types = KhyloCategoryCache.itemTypes(for: scope)
         let isMusic = scope == .music
         router.route(to: NavigationRoute(id: "khylo-genre-\(scope.rawValue)-\(name)") {
             KhyloGridScreen(title: name, shape: isMusic ? .square : .poster) { start, limit in
@@ -540,16 +541,33 @@ private struct KhyloCategoryGrid: View {
 /// A category tile fronted by the most popular title in it.
 private struct KhyloCategoryTile: View {
 
-    let name: String
+    let category: KhyloCategory
     let scope: KhyloSearchScreen.Scope
-    let itemTypes: [BaseItemKind]
     let index: Int
 
-    @State private var art: URL?
     @State private var tint: Color?
 
     /// Music and books show their cover tilted on the tile; video fills it.
     private var usesCover: Bool { scope == .music || scope == .books }
+
+    private var art: URL? {
+        guard let top = category.top else { return nil }
+        switch scope {
+        case .music: return KhyloArtwork.url(for: top, style: .square, width: 180)
+        case .books: return KhyloArtwork.url(for: top, style: .poster, width: 140)
+        default: return KhyloArtwork.url(for: top, style: .backdrop, width: 420)
+        }
+    }
+
+    /// The top title's name: the artist for music, the title otherwise.
+    private var topLabel: String? {
+        guard let top = category.top else { return nil }
+        if scope == .music {
+            let artist = top.khyloArtistLine
+            return artist.isEmpty ? top.name : artist
+        }
+        return top.name
+    }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -564,25 +582,31 @@ private struct KhyloCategoryTile: View {
                         .rotationEffect(.degrees(18))
                         .offset(x: 18, y: 14)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                        .transition(.opacity)
                 } else {
                     KhyloImage(url: art, showsPlaceholder: false)
-                        .transition(.opacity)
                     LinearGradient(
-                        colors: [.black.opacity(0.05), .black.opacity(0.35), .black.opacity(0.85)],
+                        colors: [.black.opacity(0.05), .black.opacity(0.35), .black.opacity(0.88)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 }
             }
 
-            Text(name)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-                .shadow(color: .black.opacity(0.4), radius: 4, y: 1)
-                .padding(12)
-                .frame(maxWidth: usesCover ? 110 : .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(category.name)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                if let topLabel {
+                    Text(topLabel)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.75))
+                        .lineLimit(1)
+                }
+            }
+            .shadow(color: .black.opacity(0.45), radius: 4, y: 1)
+            .padding(12)
+            .frame(maxWidth: usesCover ? 112 : .infinity, alignment: .leading)
         }
         .frame(height: 96)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -590,13 +614,10 @@ private struct KhyloCategoryTile: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
         )
-        .task(id: name) {
-            let url = await KhyloCategoryCache.shared.art(for: name, scope: scope, types: itemTypes)
-            withAnimation(.easeOut(duration: 0.3)) { art = url }
-            if url != nil, usesCover {
-                let color = await KhyloArtColor.color(for: url)
-                withAnimation(.easeOut(duration: 0.3)) { tint = color }
-            }
+        .task(id: category.id) {
+            guard usesCover, let art else { return }
+            let color = await KhyloArtColor.color(for: art)
+            withAnimation(.easeOut(duration: 0.3)) { tint = color }
         }
     }
 
@@ -607,50 +628,79 @@ private struct KhyloCategoryTile: View {
     }
 }
 
-/// Remembers genres and each genre's lead artwork for the session.
+/// Builds each scope's categories once per session from the library's genre metadata.
+///
+/// One request per scope fetches a large sample of titles, most popular first,
+/// with just their genres and artwork. Every genre that appears becomes a
+/// category (most common first), fronted by its most popular title with art.
 @MainActor
 private final class KhyloCategoryCache {
 
     static let shared = KhyloCategoryCache()
 
-    private var genreLists: [String: [BaseItemDto]] = [:]
-    private var arts: [String: URL?] = [:]
+    private var results: [String: [KhyloCategory]] = [:]
+    /// Loads run apart from any one screen, so leaving the page doesn't cancel them.
+    private var loads: [String: Task<[KhyloCategory], Never>] = [:]
 
-    func genres(for scope: KhyloSearchScreen.Scope, types: [BaseItemKind]) async -> [BaseItemDto] {
-        if let cached = genreLists[scope.rawValue] { return cached }
-        let found = (try? await KhyloAPI.genres(types: types)) ?? []
-        if !found.isEmpty { genreLists[scope.rawValue] = found }
+    static func itemTypes(for scope: KhyloSearchScreen.Scope) -> [BaseItemKind] {
+        switch scope {
+        case .music: [.musicAlbum]
+        case .books: [.book]
+        default: [.movie, .series]
+        }
+    }
+
+    func categories(for scope: KhyloSearchScreen.Scope) async -> [KhyloCategory] {
+        let key = scope.rawValue
+        if let cached = results[key] { return cached }
+        if let load = loads[key] { return await load.value }
+
+        let load = Task<[KhyloCategory], Never> {
+            let types = Self.itemTypes(for: scope)
+            let popularity: [ItemSortBy] = switch scope {
+            case .music: [.playCount, .communityRating, .dateCreated]
+            case .books: [.communityRating, .dateCreated]
+            default: [.communityRating, .criticRating, .dateCreated]
+            }
+            guard let sample = try? await KhyloAPI.genreSample(types: types, sortBy: popularity) else { return [] }
+            return Self.build(from: sample, scope: scope)
+        }
+        loads[key] = load
+        let found = await load.value
+        loads[key] = nil
+        // Keep only a real answer; an empty one is retried next time.
+        if !found.isEmpty { results[key] = found }
         return found
     }
 
-    func art(for genre: String, scope: KhyloSearchScreen.Scope, types: [BaseItemKind]) async -> URL? {
-        let key = "\(scope.rawValue)|\(genre)"
-        if let cached = arts[key] { return cached }
+    private static func build(from sample: [BaseItemDto], scope: KhyloSearchScreen.Scope) -> [KhyloCategory] {
+        var counts: [String: Int] = [:]
+        var top: [String: BaseItemDto] = [:]
+        // Several spellings of one genre ("Sci-Fi", "Science Fiction") stay separate,
+        // as they are in the library; only case and spacing are folded together.
+        var display: [String: String] = [:]
 
-        let url: URL?
-        switch scope {
-        case .music:
-            // The genre's most played album, else its best rated.
-            let top = try? await KhyloAPI.items(
-                types: types, sortBy: [.playCount, .communityRating], sortOrder: .descending,
-                genres: [genre], limit: 1, requiredImages: [.primary]
-            ).items.first
-            url = top.flatMap { KhyloArtwork.url(for: $0, style: .square, width: 180) }
-        case .books:
-            let top = try? await KhyloAPI.items(
-                types: types, sortBy: [.communityRating, .dateCreated], sortOrder: .descending,
-                genres: [genre], limit: 1, requiredImages: [.primary]
-            ).items.first
-            url = top.flatMap { KhyloArtwork.url(for: $0, style: .poster, width: 140) }
-        default:
-            // The genre's most popular title: highest rated by viewers, then critics.
-            let top = try? await KhyloAPI.items(
-                types: types, sortBy: [.communityRating, .criticRating], sortOrder: .descending,
-                genres: [genre], limit: 1, requiredImages: [.backdrop]
-            ).items.first
-            url = top.flatMap { KhyloArtwork.url(for: $0, style: .backdrop, width: 420) }
+        for item in sample {
+            for raw in item.genres ?? [] {
+                let name = raw.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { continue }
+                let key = name.lowercased()
+                counts[key, default: 0] += 1
+                if display[key] == nil { display[key] = name }
+                // The sample is most popular first, so the first title with art wins.
+                if top[key] == nil, hasArt(item, scope: scope) { top[key] = item }
+            }
         }
-        arts[key] = url
-        return url
+
+        return counts
+            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .map { key, count in KhyloCategory(name: display[key] ?? key, titleCount: count, top: top[key]) }
+    }
+
+    private static func hasArt(_ item: BaseItemDto, scope: KhyloSearchScreen.Scope) -> Bool {
+        switch scope {
+        case .music, .books: item.imageTags?["Primary"] != nil
+        default: item.backdropImageTags?.isEmpty == false
+        }
     }
 }

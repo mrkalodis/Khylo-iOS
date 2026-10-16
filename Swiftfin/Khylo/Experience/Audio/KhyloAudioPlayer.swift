@@ -96,6 +96,10 @@ final class KhyloAudioPlayer: ObservableObject {
     private var statusCancellable: AnyCancellable?
     private var itemCancellable: AnyCancellable?
     private var videoObserver: NSObjectProtocol?
+    private var interruptionObserver: NSObjectProtocol?
+    private var foregroundObserver: NSObjectProtocol?
+    /// Another app took the audio while we were playing; pick back up when it's done.
+    private var resumeAfterInterruption = false
     private var qualityTask: Task<Void, Never>?
     private var playSessionID = UUID().uuidString
     private var lastReport = Date.distantPast
@@ -140,7 +144,53 @@ final class KhyloAudioPlayer: ObservableObject {
                 if self?.isPlaying == true { self?.pause() }
             }
         }
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] notification in
+            let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let type = raw.flatMap(AVAudioSession.InterruptionType.init(rawValue:))
+            MainActor.assumeIsolated { self?.handleInterruption(type) }
+        }
+        // Some apps never announce that they've finished with the audio; coming
+        // back to Khylo picks up then.
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.resumeIfInterrupted() }
+        }
         configureRemoteCommands()
+    }
+
+    // MARK: - Interruptions
+
+    /// Another app (or a call) took the audio, or gave it back.
+    private func handleInterruption(_ type: AVAudioSession.InterruptionType?) {
+        switch type {
+        case .began:
+            guard isPlaying else { return }
+            resumeAfterInterruption = true
+            isPlaying = false
+            report(force: true)
+            updateNowPlaying()
+        case .ended:
+            // Give the other app a moment to let go of the audio, then carry on.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(400))
+                self?.resumeIfInterrupted()
+            }
+        default:
+            break
+        }
+    }
+
+    private func resumeIfInterrupted() {
+        guard resumeAfterInterruption, isActive else { return }
+        resumeAfterInterruption = false
+        resume()
     }
 
     // MARK: - Control
@@ -185,6 +235,7 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     func pause() {
+        resumeAfterInterruption = false
         player.pause()
         isPlaying = false
         report(force: true)

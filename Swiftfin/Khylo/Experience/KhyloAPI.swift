@@ -211,6 +211,24 @@ enum KhyloAPI {
         }
     }
 
+    /// A large, lightweight sample of titles (genres and artwork only), most
+    /// popular first, used to build search categories from real genre metadata.
+    static func genreSample(types: [BaseItemKind], sortBy: [ItemSortBy], limit: Int = 1500) async throws -> [BaseItemDto] {
+        let session = try requireSession()
+        var parameters = Paths.GetItemsParameters()
+        parameters.userID = session.user.id
+        parameters.includeItemTypes = types
+        parameters.isRecursive = true
+        parameters.sortBy = sortBy
+        parameters.sortOrder = [.descending]
+        parameters.limit = limit
+        parameters.fields = [.genres]
+        parameters.enableUserData = false
+        parameters.enableImageTypes = [.primary, .backdrop]
+        parameters.imageTypeLimit = 1
+        return try await send(session, Paths.getItems(parameters: parameters)).items ?? []
+    }
+
     /// Movie and show genres, for browsing.
     static func genres(parentID: String? = nil, types: [BaseItemKind] = [.movie, .series]) async throws -> [BaseItemDto] {
         let session = try requireSession()
