@@ -30,7 +30,14 @@ private extension KhyloAudioPlayer {
         guard let item = current else { return "" }
         switch kind {
         case .audiobook: return collectionTitle ?? item.album ?? ""
-        case .music: return item.album ?? ""
+        case .music: return collectionTitle ?? item.album ?? ""
+        }
+    }
+
+    var sourceLabel: String {
+        switch kind {
+        case .audiobook: "LISTENING TO"
+        case .music: collectionTitle == nil ? "PLAYING FROM ALBUM" : "PLAYING FROM MIX"
         }
     }
 }
@@ -97,15 +104,8 @@ struct KhyloMiniPlayer: View {
                         .fill((tint ?? Color.white.opacity(0.1)).opacity(0.55))
                 )
                 .overlay(alignment: .bottom) {
-                    if player.duration > 0 {
-                        GeometryReader { proxy in
-                            Capsule()
-                                .fill(Color.white)
-                                .frame(width: proxy.size.width * min(1, player.currentTime / player.duration), height: 2)
-                        }
-                        .frame(height: 2)
+                    KhyloMiniProgress(clock: player.clock)
                         .padding(.horizontal, 16)
-                    }
                 }
                 .backport
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -131,7 +131,6 @@ struct KhyloNowPlayingScreen: View {
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var scrubValue: Double?
     @State private var isShowingQueue = false
     @State private var tint: Color?
     @State private var isFavorite = false
@@ -166,17 +165,15 @@ struct KhyloNowPlayingScreen: View {
                 titleRow
                     .padding(.horizontal, 28)
 
-                KhyloScrubber(
-                    value: scrubValue ?? player.currentTime,
-                    duration: player.duration,
-                    onChanged: { scrubValue = $0 },
-                    onEnded: { value in
-                        player.seek(to: value)
-                        scrubValue = nil
-                    }
-                )
-                .padding(.horizontal, 28)
-                .padding(.top, 20)
+                KhyloClockScrubber(clock: player.clock) { player.seek(to: $0) }
+                    .padding(.horizontal, 28)
+                    .padding(.top, 20)
+
+                if let quality = player.quality {
+                    KhyloQualityLabel(quality: quality)
+                        .padding(.top, 2)
+                        .transition(.opacity)
+                }
 
                 transport
                     .padding(.horizontal, 22)
@@ -246,7 +243,7 @@ struct KhyloNowPlayingScreen: View {
             Spacer()
 
             VStack(spacing: 1) {
-                Text(player.kind == .audiobook ? "LISTENING TO" : "PLAYING FROM ALBUM")
+                Text(player.sourceLabel)
                     .font(.system(size: 10, weight: .bold))
                     .tracking(1.2)
                     .foregroundColor(.white.opacity(0.65))
@@ -529,6 +526,69 @@ struct KhyloNowPlayingScreen: View {
     static func formatSpeed(_ speed: Float) -> String {
         let text = speed == speed.rounded() ? String(format: "%.0f", speed) : String(format: "%g", speed)
         return text + "×"
+    }
+}
+
+// MARK: - Progress
+
+/// The mini player's thin progress line; the only part of it that redraws as time passes.
+private struct KhyloMiniProgress: View {
+    @ObservedObject var clock: KhyloPlaybackClock
+
+    var body: some View {
+        if clock.duration > 0 {
+            GeometryReader { proxy in
+                Capsule()
+                    .fill(Color.white)
+                    .frame(width: proxy.size.width * min(1, clock.currentTime / clock.duration), height: 2)
+            }
+            .frame(height: 2)
+        }
+    }
+}
+
+/// Scrubber bound to the playback clock, holding its own drag state.
+private struct KhyloClockScrubber: View {
+    @ObservedObject var clock: KhyloPlaybackClock
+    let onSeek: (Double) -> Void
+
+    @State private var scrubValue: Double?
+
+    var body: some View {
+        KhyloScrubber(
+            value: scrubValue ?? clock.currentTime,
+            duration: clock.duration,
+            onChanged: { scrubValue = $0 },
+            onEnded: { value in
+                onSeek(value)
+                scrubValue = nil
+            }
+        )
+    }
+}
+
+/// "HI-RES  FLAC · 24-bit / 96 kHz" under the scrubber.
+struct KhyloQualityLabel: View {
+    let quality: KhyloAudioQuality
+
+    var body: some View {
+        HStack(spacing: 7) {
+            if let badge = quality.badge {
+                Text(badge.uppercased())
+                    .font(.system(size: 9, weight: .heavy))
+                    .tracking(0.8)
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(quality.isHiRes ? KhyloStyle.accent : Color.white.opacity(0.85)))
+            }
+            Text(quality.detail)
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .tracking(0.4)
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Audio quality \(quality.detail)")
     }
 }
 

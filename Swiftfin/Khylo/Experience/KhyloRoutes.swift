@@ -107,6 +107,14 @@ enum KhyloPlayback {
         router.route(to: .videoPlayer(provider: provider, queue: queue))
     }
 
+    /// Plays an item exactly as given (already fetched, start position set), with no episode queue.
+    static func play(prepared item: BaseItemDto, router: Router.Wrapper) throws {
+        guard let provider = item.getPlaybackItemProvider(userSession: KhyloAPI.session) else {
+            throw PlaybackError.unavailable
+        }
+        router.route(to: .videoPlayer(provider: provider, queue: nil))
+    }
+
     /// Resolves what Play should actually start, with full media source info.
     private static func playableItem(for item: BaseItemDto) async throws -> BaseItemDto {
         switch item.type {

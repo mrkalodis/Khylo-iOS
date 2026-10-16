@@ -46,16 +46,38 @@ final class KhyloAudioPlayer: ObservableObject {
     @Published private(set) var kind: Kind = .music
     @Published private(set) var isPlaying = false
     @Published private(set) var isBuffering = false
-    @Published private(set) var currentTime: Double = 0
-    @Published private(set) var duration: Double = 0
     @Published var rate: Float = 1 {
-        didSet { if isPlaying { player.rate = rate } }
+        didSet {
+            player.defaultRate = rate
+            if isPlaying { player.rate = rate }
+        }
+    }
+    /// Source quality of the current track (codec, bitrate, bit depth, sample rate).
+    @Published private(set) var quality: KhyloAudioQuality?
+
+    /// Position and length live on their own object so that only progress views
+    /// redraw while playing, not every screen that shows what's playing.
+    let clock = KhyloPlaybackClock()
+
+    private(set) var currentTime: Double {
+        get { clock.currentTime }
+        set { clock.currentTime = newValue }
+    }
+
+    private(set) var duration: Double {
+        get { clock.duration }
+        set { if clock.duration != newValue { clock.duration = newValue } }
     }
     @Published private(set) var sleepTimerEnd: Date?
     /// Title of the audiobook (its folder), shown instead of the part name.
     @Published private(set) var collectionTitle: String?
     @Published private(set) var artworkURL: URL?
-    @Published var repeatMode: RepeatMode = .off
+    @Published var repeatMode: RepeatMode = .off {
+        didSet {
+            player.actionAtItemEnd = repeatMode == .one ? .none : .advance
+            preloadNext()
+        }
+    }
     @Published private(set) var isShuffled = false
     /// The queue's order before shuffling, so shuffle can be turned back off.
     private var unshuffledQueue: [BaseItemDto] = []
@@ -63,10 +85,17 @@ final class KhyloAudioPlayer: ObservableObject {
     var current: BaseItemDto? { queue.indices.contains(index) ? queue[index] : nil }
     var isActive: Bool { current != nil }
 
-    private let player = AVPlayer()
+    /// A queue player so the next track is already buffering when this one ends.
+    private let player = AVQueuePlayer()
+    /// The next track, loaded into the player ahead of time.
+    private var preloaded: (item: AVPlayerItem, index: Int)?
+    /// The item playing the current track (other players post end notifications too).
+    private weak var activeItem: AVPlayerItem?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusCancellable: AnyCancellable?
+    private var itemCancellable: AnyCancellable?
+    private var qualityTask: Task<Void, Never>?
     private var playSessionID = UUID().uuidString
     private var lastReport = Date.distantPast
     private var sleepTask: Task<Void, Never>?
@@ -85,8 +114,22 @@ final class KhyloAudioPlayer: ObservableObject {
         statusCancellable = player.publisher(for: \.timeControlStatus)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
-                self?.isBuffering = status == .waitingToPlayAtSpecifiedRate
+                let buffering = status == .waitingToPlayAtSpecifiedRate
+                if self?.isBuffering != buffering { self?.isBuffering = buffering }
             }
+        itemCancellable = player.publisher(for: \.currentItem)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] item in
+                self?.currentItemChanged(item)
+            }
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let ended = notification.object as? AVPlayerItem
+            MainActor.assumeIsolated { self?.itemDidEnd(ended) }
+        }
         configureRemoteCommands()
     }
 
@@ -119,8 +162,13 @@ final class KhyloAudioPlayer: ObservableObject {
 
     func resume() {
         guard isActive else { return }
+        // The queue ran out: start the current track again.
+        guard player.currentItem != nil else {
+            load(index: index, startTicks: 0)
+            return
+        }
         activateSession()
-        player.playImmediately(atRate: rate)
+        player.play()
         isPlaying = true
         report(force: true)
         updateNowPlaying()
@@ -160,6 +208,7 @@ final class KhyloAudioPlayer: ObservableObject {
             index = 0
             isShuffled = true
         }
+        preloadNext()
         updateNowPlaying()
     }
 
@@ -169,8 +218,11 @@ final class KhyloAudioPlayer: ObservableObject {
             play([item], kind: .music, startTicks: 0)
             return
         }
-        queue.removeAll { $0.id == item.id && $0.id != current?.id }
+        let currentID = current?.id
+        queue.removeAll { $0.id == item.id && $0.id != currentID }
+        index = queue.firstIndex { $0.id == currentID } ?? index
         queue.insert(item, at: min(index + 1, queue.count))
+        preloadNext()
     }
 
     func addToQueue(_ item: BaseItemDto) {
@@ -179,6 +231,7 @@ final class KhyloAudioPlayer: ObservableObject {
             return
         }
         queue.append(item)
+        preloadNext()
     }
 
     func previous() {
@@ -210,7 +263,8 @@ final class KhyloAudioPlayer: ObservableObject {
 
     func stop() {
         reportStopped()
-        player.replaceCurrentItem(with: nil)
+        preloaded = nil
+        player.removeAllItems()
         isPlaying = false
         queue = []
         index = 0
@@ -248,42 +302,91 @@ final class KhyloAudioPlayer: ObservableObject {
         currentTime = start
         playSessionID = UUID().uuidString
 
-        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
-        let playerItem = AVPlayerItem(url: url)
-        playerItem.audioTimePitchAlgorithm = .timeDomain
-        endObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.itemFinished() }
-        }
-
-        player.replaceCurrentItem(with: playerItem)
+        let playerItem = makePlayerItem(url)
+        preloaded = nil
+        player.removeAllItems()
+        player.insert(playerItem, after: nil)
+        activeItem = playerItem
         if start > 1 {
             player.seek(to: CMTime(seconds: start, preferredTimescale: 600))
         }
         activateSession()
-        player.playImmediately(atRate: rate)
+        player.defaultRate = rate
+        // play() (not playImmediately) lets the player buffer enough to avoid stutter.
+        player.play()
         isPlaying = true
+        trackDidStart()
+        preloadNext()
+    }
+
+    private func makePlayerItem(_ url: URL) -> AVPlayerItem {
+        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: [AVURLAssetAllowsCellularAccessKey: true]))
+        item.audioTimePitchAlgorithm = kind == .audiobook ? .timeDomain : .spectral
+        item.preferredForwardBufferDuration = 30
+        return item
+    }
+
+    /// Bookkeeping when a track begins, whether picked or reached from the queue.
+    private func trackDidStart() {
         reportStart()
         loadArtwork()
+        loadQuality()
         updateNowPlaying()
     }
 
-    private func itemFinished() {
-        report(force: true)
+    /// Which queue position plays after the current one, if any.
+    private var nextIndex: Int? {
+        guard repeatMode != .one, !queue.isEmpty else { return nil }
+        if index + 1 < queue.count { return index + 1 }
+        return repeatMode == .all && queue.count > 1 ? 0 : nil
+    }
+
+    /// Puts the next track into the player so it starts without a gap.
+    private func preloadNext() {
+        if let preloaded {
+            player.remove(preloaded.item)
+            self.preloaded = nil
+        }
+        guard player.currentItem != nil,
+              let next = nextIndex,
+              let url = streamURL(for: queue[next])
+        else { return }
+        let item = makePlayerItem(url)
+        player.insert(item, after: player.currentItem)
+        preloaded = (item, next)
+    }
+
+    /// The queue player moved on to the preloaded track.
+    private func currentItemChanged(_ item: AVPlayerItem?) {
+        guard let item, let preloaded, item === preloaded.item else { return }
         reportStopped()
+        self.preloaded = nil
+        activeItem = item
+        index = preloaded.index
+        duration = Double(current?.runTimeTicks ?? 0) / 10_000_000
+        currentTime = 0
+        playSessionID = UUID().uuidString
+        trackDidStart()
+        preloadNext()
+    }
+
+    private func itemDidEnd(_ ended: AVPlayerItem?) {
+        guard let ended, ended === activeItem else { return }
         if repeatMode == .one {
-            load(index: index, startTicks: 0)
-        } else if index + 1 < queue.count {
-            load(index: index + 1, startTicks: 0)
-        } else if repeatMode == .all, !queue.isEmpty {
-            load(index: 0, startTicks: 0)
-        } else {
+            report(force: true)
+            player.seek(to: .zero)
+            player.play()
+            return
+        }
+        if preloaded == nil {
+            // End of the queue.
+            report(force: true)
+            reportStopped()
             isPlaying = false
+            currentTime = 0
             updateNowPlaying()
         }
+        // Otherwise the queue player advances by itself; currentItemChanged picks it up.
     }
 
     private func streamURL(for item: BaseItemDto) -> URL? {
@@ -417,6 +520,16 @@ final class KhyloAudioPlayer: ObservableObject {
         return KhyloArtwork.url(for: item, style: .square, width: width) ?? artworkURL
     }
 
+    private func loadQuality() {
+        qualityTask?.cancel()
+        quality = nil
+        guard kind == .music, let id = current?.id else { return }
+        qualityTask = Task { [weak self] in
+            guard let item = try? await KhyloAPI.item(id), !Task.isCancelled else { return }
+            self?.quality = KhyloAudioQuality(item)
+        }
+    }
+
     private func loadArtwork() {
         artworkTask?.cancel()
         artworkImage = nil
@@ -455,5 +568,93 @@ final class KhyloAudioPlayer: ObservableObject {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: artworkImage.size) { _ in artworkImage }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+}
+
+// MARK: - Clock
+
+/// Playback position, published apart from the player so progress bars can
+/// update twice a second without redrawing everything else.
+@MainActor
+final class KhyloPlaybackClock: ObservableObject {
+    @Published var currentTime: Double = 0
+    @Published var duration: Double = 0
+}
+
+// MARK: - Quality
+
+/// A track's source quality, e.g. "FLAC · 24-bit / 96 kHz" or "MP3 · 320 kbps".
+struct KhyloAudioQuality: Equatable {
+
+    let codec: String
+    let bitrate: Int?
+    let bitDepth: Int?
+    let sampleRate: Int?
+
+    private static let losslessCodecs: Set<String> = ["flac", "alac", "wav", "pcm", "aiff", "ape", "wavpack", "dsd", "truehd"]
+
+    init?(_ item: BaseItemDto) {
+        let source = item.mediaSources?.first
+        let stream = (source?.mediaStreams ?? item.mediaStreams)?.first { $0.type == .audio }
+        guard let codec = stream?.codec ?? source?.container else { return nil }
+        self.codec = codec.lowercased()
+        self.bitrate = stream?.bitRate ?? source?.bitrate
+        self.bitDepth = stream?.bitDepth
+        self.sampleRate = stream?.sampleRate
+    }
+
+    var isLossless: Bool {
+        Self.losslessCodecs.contains(codec) || codec.hasPrefix("pcm")
+    }
+
+    var isHiRes: Bool {
+        isLossless && ((bitDepth ?? 16) > 16 || (sampleRate ?? 44100) > 48000)
+    }
+
+    /// "Hi-Res", "Lossless", or nil for lossy files.
+    var badge: String? {
+        isHiRes ? "Hi-Res" : (isLossless ? "Lossless" : nil)
+    }
+
+    var codecName: String {
+        switch codec {
+        case "flac": "FLAC"
+        case "alac": "ALAC"
+        case "aac": "AAC"
+        case "mp3": "MP3"
+        case "opus": "Opus"
+        case "vorbis": "Vorbis"
+        case "wav", "pcm": "WAV"
+        default: codec.hasPrefix("pcm") ? "WAV" : codec.uppercased()
+        }
+    }
+
+    /// Full description for Now Playing.
+    var detail: String {
+        if isLossless {
+            var parts = [codecName]
+            let depth = bitDepth.map { "\($0)-bit" }
+            let rate = sampleRate.map { Self.formatRate($0) }
+            let spec = [depth, rate].compactMap { $0 }.joined(separator: " / ")
+            if !spec.isEmpty { parts.append(spec) }
+            return parts.joined(separator: " · ")
+        }
+        guard let bitrate, bitrate > 0 else { return codecName }
+        return "\(codecName) · \(Int((Double(bitrate) / 1000).rounded())) kbps"
+    }
+
+    /// Short form for album headers and rows: "24/96", "16/44.1" or "320".
+    var short: String {
+        if isLossless, let bitDepth, let sampleRate {
+            return "\(bitDepth)/\(Self.formatRate(sampleRate, unit: false))"
+        }
+        if let bitrate, bitrate > 0 { return "\(Int((Double(bitrate) / 1000).rounded())) kbps" }
+        return codecName
+    }
+
+    private static func formatRate(_ rate: Int, unit: Bool = true) -> String {
+        let khz = Double(rate) / 1000
+        let text = khz == khz.rounded() ? String(format: "%.0f", khz) : String(format: "%.1f", khz)
+        return unit ? "\(text) kHz" : text
     }
 }

@@ -26,7 +26,7 @@ struct KhyloFeedSection: Identifiable {
     var subtitle: String? = nil
     var shape: KhyloShelfCard.Shape = .portrait
     var action: Action = .open
-    let items: [BaseItemDto]
+    var items: [BaseItemDto]
     /// Where the row's "See All" leads, if anywhere.
     var seeAll: NavigationRoute? = nil
     /// Per-item caption override (e.g. a rating).
@@ -162,6 +162,60 @@ enum KhyloFeedBuilder {
     }
 }
 
+// MARK: - Removing from rows
+
+extension Notification.Name {
+    /// Watch progress changed outside the player (removed from a row, marked watched).
+    static let khyloProgressDidChange = Notification.Name("khyloProgressDidChange")
+}
+
+/// Items taken off Continue Watching or Up Next.
+///
+/// Continue Watching removal clears the saved position on the server, so it's
+/// gone on every device. The server has no way to hide an Up Next episode, so
+/// those are remembered here by episode: once you watch on, the show's next
+/// episode appears again.
+@MainActor
+final class KhyloRowRemovals: ObservableObject {
+
+    static let shared = KhyloRowRemovals()
+
+    /// Removed this session, hidden at once while the server catches up.
+    @Published private(set) var removedIDs: Set<String> = []
+
+    private static let upNextKey = "khylo.upnext.hidden"
+    private var hiddenUpNext: [String] = UserDefaults.standard.stringArray(forKey: upNextKey) ?? []
+    private var playbackObserver: NSObjectProtocol?
+
+    private init() {
+        // After watching something, the server's rows are the truth again
+        // (a removed title you went back to belongs in Continue Watching).
+        playbackObserver = NotificationCenter.default.addObserver(forName: .khyloPlaybackDidEnd, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.removedIDs.removeAll() }
+        }
+    }
+
+    func removeFromContinueWatching(_ item: BaseItemDto) {
+        guard let id = item.id else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { _ = removedIDs.insert(id) }
+        Task {
+            try? await KhyloAPI.removeFromResume(itemID: id)
+            NotificationCenter.default.post(name: .khyloProgressDidChange, object: nil)
+        }
+    }
+
+    func removeFromUpNext(_ item: BaseItemDto) {
+        guard let id = item.id else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { _ = removedIDs.insert(id) }
+        hiddenUpNext = Array(([id] + hiddenUpNext.filter { $0 != id }).prefix(200))
+        UserDefaults.standard.set(hiddenUpNext, forKey: Self.upNextKey)
+    }
+
+    func visibleUpNext(_ items: [BaseItemDto]) -> [BaseItemDto] {
+        items.filter { !hiddenUpNext.contains($0.id ?? "") }
+    }
+}
+
 // MARK: - Rendering
 
 struct KhyloFeedView: View {
@@ -169,10 +223,11 @@ struct KhyloFeedView: View {
     let sections: [KhyloFeedSection]
 
     @Router private var router
+    @ObservedObject private var removals = KhyloRowRemovals.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 30) {
-            ForEach(sections) { section in
+            ForEach(visibleSections) { section in
                 KhyloRow(
                     title: section.title,
                     subtitle: section.subtitle,
@@ -190,11 +245,34 @@ struct KhyloFeedView: View {
                             )
                         }
                         .buttonStyle(KhyloScaleButtonStyle())
-                        .contextMenu { menu(for: item) }
+                        .contextMenu { menu(for: item, in: section) }
                     }
                 }
             }
         }
+    }
+
+    /// Sections without anything just removed (and without rows left empty by it).
+    private var visibleSections: [KhyloFeedSection] {
+        guard !removals.removedIDs.isEmpty else { return sections }
+        return sections.compactMap { section in
+            let items = section.items.filter { !removals.removedIDs.contains($0.id ?? "") }
+            guard !items.isEmpty else { return nil }
+            var copy = section
+            copy.items = items
+            return copy
+        }
+    }
+
+    private enum Removal {
+        case continueWatching
+        case upNext
+    }
+
+    private func removal(for section: KhyloFeedSection) -> Removal? {
+        if section.id.hasSuffix("-resume") { return .continueWatching }
+        if section.id.hasSuffix("-upnext") { return .upNext }
+        return nil
     }
 
     private func open(_ item: BaseItemDto, in section: KhyloFeedSection) {
@@ -215,7 +293,23 @@ struct KhyloFeedView: View {
     }
 
     @ViewBuilder
-    private func menu(for item: BaseItemDto) -> some View {
+    private func menu(for item: BaseItemDto, in section: KhyloFeedSection) -> some View {
+        switch removal(for: section) {
+        case .continueWatching:
+            Button(role: .destructive) {
+                removals.removeFromContinueWatching(item)
+            } label: {
+                Label("Remove from Continue Watching", systemImage: "minus.circle")
+            }
+        case .upNext:
+            Button(role: .destructive) {
+                removals.removeFromUpNext(item)
+            } label: {
+                Label("Remove from Up Next", systemImage: "minus.circle")
+            }
+        case nil:
+            EmptyView()
+        }
         Button {
             router.route(to: .khyloItem(item))
         } label: {
@@ -234,7 +328,10 @@ struct KhyloFeedView: View {
         }
         if item.type == .movie || item.type == .episode || item.type == .series {
             Button {
-                Task { try? await KhyloAPI.setPlayed(!item.khyloIsPlayed, itemID: item.id ?? "") }
+                Task {
+                    try? await KhyloAPI.setPlayed(!item.khyloIsPlayed, itemID: item.id ?? "")
+                    NotificationCenter.default.post(name: .khyloProgressDidChange, object: nil)
+                }
             } label: {
                 Label(item.khyloIsPlayed ? "Mark as Unwatched" : "Mark as Watched", systemImage: "checkmark.circle")
             }

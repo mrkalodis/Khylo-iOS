@@ -19,14 +19,16 @@ struct KhyloMusicLibraryScreen: View {
     var header: AnyView? = nil
 
     enum Section: String, CaseIterable {
+        case forYou = "For You"
         case albums = "Albums"
         case artists = "Artists"
         case songs = "Songs"
     }
 
-    @State private var section: Section = .albums
+    @State private var section: Section = .forYou
     @State private var query = ""
     @State private var searchTerm = ""
+    @State private var contentWidth: CGFloat = UIScreen.main.bounds.width
 
     var body: some View {
         ZStack {
@@ -37,11 +39,13 @@ struct KhyloMusicLibraryScreen: View {
                     sectionHeader
 
                     switch section {
+                    case .forYou:
+                        KhyloMusicForYou(library: library)
                     case .albums:
-                        KhyloAlbumGrid(libraryID: library.id, searchTerm: searchTerm)
+                        KhyloAlbumGrid(libraryID: library.id, searchTerm: searchTerm, width: contentWidth)
                             .id("albums-\(searchTerm)")
                     case .artists:
-                        KhyloArtistGrid(libraryID: library.id, searchTerm: searchTerm)
+                        KhyloArtistGrid(libraryID: library.id, searchTerm: searchTerm, width: contentWidth)
                             .id("artists-\(searchTerm)")
                     case .songs:
                         KhyloSongList(libraryID: library.id, searchTerm: searchTerm)
@@ -51,8 +55,13 @@ struct KhyloMusicLibraryScreen: View {
                 .padding(.bottom, 40)
             }
             .scrollDismissesKeyboard(.immediately)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: searchTerm) { _, term in
+            // Searching from For You searches albums.
+            if !term.isEmpty, section == .forYou { section = .albums }
+        }
         .task(id: query) {
             let trimmed = query.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty {
@@ -75,13 +84,10 @@ struct KhyloMusicLibraryScreen: View {
             }
 
             HStack(spacing: 8) {
-                ForEach(Section.allCases, id: \.self) { option in
-                    KhyloPill(title: option.rawValue, isSelected: section == option) {
-                        UISelectionFeedbackGenerator().selectionChanged()
-                        withAnimation(.easeInOut(duration: 0.2)) { section = option }
-                    }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    KhyloSegmentTabs(tabs: Section.allCases.map { ($0, $0.rawValue) }, selection: $section)
                 }
-                Spacer()
+                .scrollClipDisabled()
                 Button {
                     shuffleAll()
                 } label: {
@@ -96,7 +102,10 @@ struct KhyloMusicLibraryScreen: View {
             }
             .padding(.horizontal, KhyloStyle.gutter)
 
-            KhyloLibrarySearchField(placeholder: "Search \(section.rawValue.lowercased())", text: $query)
+            KhyloLibrarySearchField(
+                placeholder: section == .forYou ? "Search your music" : "Search \(section.rawValue.lowercased())",
+                text: $query
+            )
         }
     }
 
@@ -151,8 +160,10 @@ private final class KhyloPager: ObservableObject {
 private struct KhyloAlbumGrid: View {
     @StateObject private var pager: KhyloPager
     @Router private var router
+    let width: CGFloat
 
-    init(libraryID: String?, searchTerm: String) {
+    init(libraryID: String?, searchTerm: String, width: CGFloat) {
+        self.width = width
         let term = searchTerm.isEmpty ? nil : searchTerm
         _pager = StateObject(wrappedValue: KhyloPager { start, limit in
             if let term {
@@ -175,22 +186,22 @@ private struct KhyloAlbumGrid: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let width = (proxy.size.width - KhyloStyle.gutter * 2 - 14) / 2
-            LazyVGrid(columns: [GridItem(.fixed(width), spacing: 14), GridItem(.fixed(width), spacing: 14)], spacing: 20) {
-                ForEach(pager.items, id: \.id) { album in
-                    Button {
-                        router.route(to: .khyloItem(album))
-                    } label: {
-                        KhyloAlbumCard(album: album, width: width)
-                    }
-                    .buttonStyle(KhyloScaleButtonStyle())
-                    .task { await pager.loadMore(after: album) }
+        // Sized from the screen width (not a GeometryReader) so the grid grows with
+        // its content and the page scrolls all the way down.
+        let cell = max(100, (width - KhyloStyle.gutter * 2 - 14) / 2)
+        LazyVGrid(columns: [GridItem(.fixed(cell), spacing: 14), GridItem(.fixed(cell), spacing: 14)], spacing: 22) {
+            ForEach(pager.items, id: \.id) { album in
+                Button {
+                    router.route(to: .khyloItem(album))
+                } label: {
+                    KhyloAlbumCard(album: album, width: cell)
                 }
+                .buttonStyle(KhyloScaleButtonStyle())
+                .task { await pager.loadMore(after: album) }
             }
-            .padding(.horizontal, KhyloStyle.gutter)
         }
-        .frame(minHeight: 600)
+        .padding(.horizontal, KhyloStyle.gutter)
+        .frame(maxWidth: .infinity, minHeight: 400, alignment: .top)
         .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "albums") }
         .task { await pager.loadFirst() }
     }
@@ -199,8 +210,10 @@ private struct KhyloAlbumGrid: View {
 private struct KhyloArtistGrid: View {
     @StateObject private var pager: KhyloPager
     @Router private var router
+    let width: CGFloat
 
-    init(libraryID: String?, searchTerm: String) {
+    init(libraryID: String?, searchTerm: String, width: CGFloat) {
+        self.width = width
         let term = searchTerm.isEmpty ? nil : searchTerm
         _pager = StateObject(wrappedValue: KhyloPager { start, limit in
             try await KhyloAPI.albumArtists(parentID: libraryID, searchTerm: term, startIndex: start, limit: limit)
@@ -208,22 +221,20 @@ private struct KhyloArtistGrid: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let size = (proxy.size.width - KhyloStyle.gutter * 2 - 32) / 3
-            LazyVGrid(columns: Array(repeating: GridItem(.fixed(size), spacing: 16), count: 3), spacing: 22) {
-                ForEach(pager.items, id: \.id) { artist in
-                    Button {
-                        router.route(to: .khyloItem(artist))
-                    } label: {
-                        KhyloArtistCell(artist: artist, size: size)
-                    }
-                    .buttonStyle(KhyloScaleButtonStyle())
-                    .task { await pager.loadMore(after: artist) }
+        let size = max(80, (width - KhyloStyle.gutter * 2 - 32) / 3)
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(size), spacing: 16), count: 3), spacing: 24) {
+            ForEach(pager.items, id: \.id) { artist in
+                Button {
+                    router.route(to: .khyloItem(artist))
+                } label: {
+                    KhyloArtistCell(artist: artist, size: size)
                 }
+                .buttonStyle(KhyloScaleButtonStyle())
+                .task { await pager.loadMore(after: artist) }
             }
-            .padding(.horizontal, KhyloStyle.gutter)
         }
-        .frame(minHeight: 600)
+        .padding(.horizontal, KhyloStyle.gutter)
+        .frame(maxWidth: .infinity, minHeight: 400, alignment: .top)
         .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "artists") }
         .task { await pager.loadFirst() }
     }
@@ -562,9 +573,14 @@ struct KhyloAlbumScreen: View {
                 }
                 .buttonStyle(.plain)
 
-                Text(metadata)
-                    .font(.system(size: 13))
-                    .foregroundColor(KhyloStyle.secondaryText)
+                HStack(spacing: 8) {
+                    Text(metadata)
+                        .font(.system(size: 13))
+                        .foregroundColor(KhyloStyle.secondaryText)
+                    if let quality = tracks.lazy.compactMap(KhyloAudioQuality.init).first {
+                        KhyloQualityBadge(quality: quality)
+                    }
+                }
             }
 
             HStack(spacing: 22) {
@@ -720,6 +736,7 @@ struct KhyloArtistScreen: View {
     @State private var tint: Color?
     @State private var showsAllPopular = false
     @State private var isLoading = true
+    @State private var similar: [BaseItemDto] = []
     @ObservedObject private var player = KhyloAudioPlayer.shared
     @Router private var router
 
@@ -754,6 +771,7 @@ struct KhyloArtistScreen: View {
                             .foregroundColor(KhyloStyle.tertiaryText)
                             .padding(.horizontal, KhyloStyle.gutter)
                     }
+                    if !similar.isEmpty { similarSection }
                     if let overview = artist.overview, !overview.isEmpty {
                         about(overview)
                     }
@@ -824,16 +842,22 @@ struct KhyloArtistScreen: View {
     private var controls: some View {
         HStack(spacing: 22) {
             Button {
-                toggleFavorite()
+                playMix()
             } label: {
-                Text(artist.khyloIsFavorite ? "Following" : "Follow")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .frame(height: 32)
-                    .overlay(Capsule().strokeBorder(Color.white.opacity(0.5), lineWidth: 1))
+                HStack(spacing: 7) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("Artist Mix")
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .frame(height: 34)
+                .background(Capsule().fill(Color.white.opacity(0.12)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
             }
             .buttonStyle(KhyloScaleButtonStyle())
+            .accessibilityHint("Plays songs by this artist and similar artists")
 
             Spacer()
 
@@ -893,6 +917,19 @@ struct KhyloArtistScreen: View {
         }
     }
 
+    private var similarSection: some View {
+        KhyloRow(title: "Fans Also Like") {
+            ForEach(similar, id: \.id) { other in
+                Button {
+                    router.route(to: .khyloItem(other))
+                } label: {
+                    KhyloArtistCell(artist: other, size: 118)
+                }
+                .buttonStyle(KhyloScaleButtonStyle())
+            }
+        }
+    }
+
     private func about(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("About")
@@ -946,6 +983,20 @@ struct KhyloArtistScreen: View {
                 .flatMap { KhyloArtwork.url(for: $0, style: .square, width: 1000) }
         }
         tint = await KhyloArtColor.color(for: heroURL)
+        similar = (try? await KhyloAPI.similarArtists(to: id)) ?? []
+    }
+
+    private func playMix() {
+        guard let id = artist.id else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        Task {
+            let songs = (try? await KhyloAPI.instantMix(from: id)) ?? []
+            if !songs.isEmpty {
+                player.play(songs, kind: .music, collectionTitle: "\(artist.name ?? "Artist") Mix", startTicks: 0)
+            } else {
+                playAll(shuffled: true)
+            }
+        }
     }
 
     private func playAll(shuffled: Bool) {
@@ -957,15 +1008,6 @@ struct KhyloArtistScreen: View {
             ))?.items ?? popular
             guard !songs.isEmpty else { return }
             player.play(songs, kind: .music, startTicks: 0)
-        }
-    }
-
-    private func toggleFavorite() {
-        guard let id = artist.id else { return }
-        Task {
-            if let data = try? await KhyloAPI.setFavorite(!artist.khyloIsFavorite, itemID: id) {
-                artist.userData = data
-            }
         }
     }
 

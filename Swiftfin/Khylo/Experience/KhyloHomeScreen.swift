@@ -32,7 +32,7 @@ final class KhyloHomeModel: ObservableObject {
         async let next = KhyloAPI.nextUp(limit: 20)
         guard let resumeItems = try? await resume else { return }
         let resumeIDs = Set(resumeItems.compactMap(\.id))
-        let upNext = ((try? await next) ?? []).filter { !resumeIDs.contains($0.id ?? "") }
+        let upNext = KhyloRowRemovals.shared.visibleUpNext(((try? await next) ?? []).filter { !resumeIDs.contains($0.id ?? "") })
 
         var lead: [KhyloFeedSection] = []
         if !resumeItems.isEmpty {
@@ -57,7 +57,7 @@ final class KhyloHomeModel: ObservableObject {
 
             let resumeItems = (try? await resume) ?? []
             let resumeIDs = Set(resumeItems.compactMap(\.id))
-            let upNext = ((try? await next) ?? []).filter { !resumeIDs.contains($0.id ?? "") }
+            let upNext = KhyloRowRemovals.shared.visibleUpNext(((try? await next) ?? []).filter { !resumeIDs.contains($0.id ?? "") })
 
             var rows: [KhyloFeedSection] = []
             if !resumeItems.isEmpty {
@@ -155,6 +155,9 @@ struct KhyloHomeScreen: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            Task { await model.refreshInProgress() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .khyloProgressDidChange)) { _ in
             Task { await model.refreshInProgress() }
         }
     }

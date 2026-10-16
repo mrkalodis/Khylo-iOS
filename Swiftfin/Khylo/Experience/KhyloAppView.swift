@@ -18,6 +18,7 @@ struct KhyloAppView: View {
     enum TabID: Hashable {
         case home
         case libraries
+        case khyloTV
         case liveTV
         case search
     }
@@ -25,6 +26,7 @@ struct KhyloAppView: View {
     @State private var selection: TabID = .home
     /// Remembered so a slow or failed check doesn't hide the tab.
     @AppStorage("khylo.hasLiveTV") private var hasLiveTV = false
+    @AppStorage("khylo.hasKhyloTV") private var hasKhyloTV = false
     @ObservedObject private var libraryStore = KhyloLibraryStore.shared
 
     /// Choosing Libraries also brings up the library picker.
@@ -54,6 +56,15 @@ struct KhyloAppView: View {
                 tabLabel("Libraries", "books.vertical")
             }
 
+            // The server's always-on channels, built from your library.
+            if hasKhyloTV {
+                Tab(value: TabID.khyloTV) {
+                    stack { KhyloTVScreen() }
+                } label: {
+                    tabLabel("Khylo TV", "play.tv")
+                }
+            }
+
             // Only servers with a tuner or IPTV source have channels.
             if hasLiveTV {
                 Tab(value: TabID.liveTV) {
@@ -74,6 +85,13 @@ struct KhyloAppView: View {
         .background(KhyloStyle.canvas.ignoresSafeArea())
         .sheet(isPresented: $libraryStore.isPickerPresented) {
             KhyloLibraryPickerSheet()
+        }
+        .task {
+            // Khylo TV shows when the server has it turned on and has channels.
+            if let enabled = try? await KhyloAPI.khyloTVEnabled() {
+                let channels = enabled ? ((try? await KhyloAPI.khyloTVGuide(hours: 1)) ?? []) : []
+                hasKhyloTV = !channels.isEmpty
+            }
         }
         .task {
             await libraryStore.load()

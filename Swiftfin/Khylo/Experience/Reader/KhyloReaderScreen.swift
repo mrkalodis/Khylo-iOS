@@ -20,45 +20,6 @@ extension NavigationRoute {
     }
 }
 
-// MARK: - Settings
-
-enum KhyloReaderTheme: String, CaseIterable, Identifiable {
-    case night
-    case sepia
-    case paper
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .night: "Night"
-        case .sepia: "Sepia"
-        case .paper: "Paper"
-        }
-    }
-
-    var background: Color { Color(hex: backgroundHex) }
-    var foreground: Color { Color(hex: foregroundHex) }
-
-    var backgroundHex: String {
-        switch self {
-        case .night: "#0E0F11"
-        case .sepia: "#F4ECD8"
-        case .paper: "#FFFFFF"
-        }
-    }
-
-    var foregroundHex: String {
-        switch self {
-        case .night: "#D9D6CF"
-        case .sepia: "#4A3B28"
-        case .paper: "#1C1C1E"
-        }
-    }
-
-    var isDark: Bool { self == .night }
-}
-
 /// Saved reading position: chapter (or page for PDFs and comics) plus fraction within it.
 private struct ReaderPosition: Codable {
     var section: Int
@@ -86,9 +47,12 @@ struct KhyloReaderScreen: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    @AppStorage("khylo.reader.theme") private var theme: KhyloReaderTheme = .night
+    @AppStorage("khylo.reader.paper") private var theme: KhyloReaderTheme = .paper
     @AppStorage("khylo.reader.fontScale") private var fontScale: Double = 1.0
-    @AppStorage("khylo.reader.serif") private var useSerif = true
+    @AppStorage("khylo.reader.font") private var font: KhyloReaderFont = .newYork
+    @AppStorage("khylo.reader.spacing") private var spacing: KhyloReaderSpacing = .normal
+    @AppStorage("khylo.reader.margins") private var margins: KhyloReaderMargins = .normal
+    @AppStorage("khylo.reader.justified") private var justified = true
 
     @State private var book: KhyloBook?
     @State private var errorMessage: String?
@@ -99,7 +63,7 @@ struct KhyloReaderScreen: View {
 
     var body: some View {
         ZStack {
-            theme.background.ignoresSafeArea()
+            KhyloPaperBackground(theme: theme)
 
             switch book {
             case let .epub(epub):
@@ -107,8 +71,7 @@ struct KhyloReaderScreen: View {
                     itemID: item.id ?? "",
                     book: epub,
                     theme: theme,
-                    fontScale: fontScale,
-                    useSerif: useSerif,
+                    style: KhyloEPUBStyle(fontScale: fontScale, font: font, spacing: spacing, margins: margins, justified: justified),
                     isChromeVisible: $isChromeVisible,
                     isShowingContents: $isShowingContents,
                     title: item.name ?? "",
@@ -144,9 +107,19 @@ struct KhyloReaderScreen: View {
         .statusBarHidden(!isChromeVisible)
         .animation(.easeInOut(duration: 0.2), value: isChromeVisible)
         .sheet(isPresented: $isShowingSettings) {
-            KhyloReaderSettingsSheet(theme: $theme, fontScale: $fontScale, useSerif: $useSerif, showsTextOptions: isEPUB)
-                .presentationDetents([.height(320)])
-                .presentationDragIndicator(.visible)
+            KhyloReaderSettingsSheet(
+                theme: $theme,
+                fontScale: $fontScale,
+                font: $font,
+                spacing: $spacing,
+                margins: $margins,
+                justified: $justified,
+                showsTextOptions: isEPUB
+            )
+            .presentationDetents(isEPUB ? [.height(470), .large] : [.height(200)])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(.regularMaterial)
+            .preferredColorScheme(theme.isDark ? .dark : .light)
         }
         .task { await load() }
     }
@@ -210,185 +183,6 @@ struct KhyloReaderScreen: View {
     private func markFinished() {
         guard let id = item.id else { return }
         Task { try? await KhyloAPI.setPlayed(true, itemID: id) }
-    }
-}
-
-// MARK: - Shared chrome
-
-private struct KhyloReaderCloseButton: View {
-    let theme: KhyloReaderTheme
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "xmark")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundColor(theme.foreground)
-                .frame(width: 38, height: 38)
-                .background(Circle().fill(theme.foreground.opacity(0.1)))
-        }
-        .accessibilityLabel("Close")
-    }
-}
-
-/// Top bar with close, title and actions; bottom bar with progress.
-private struct KhyloReaderChrome<Trailing: View>: View {
-
-    let theme: KhyloReaderTheme
-    let title: String
-    let subtitle: String
-    let progress: Double
-    let status: String
-    let onClose: () -> Void
-    @ViewBuilder let trailing: () -> Trailing
-
-    var body: some View {
-        VStack {
-            HStack(spacing: 12) {
-                KhyloReaderCloseButton(theme: theme, action: onClose)
-                VStack(spacing: 1) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .lineLimit(1)
-                    if !subtitle.isEmpty {
-                        Text(subtitle)
-                            .font(.system(size: 12))
-                            .opacity(0.6)
-                            .lineLimit(1)
-                    }
-                }
-                .foregroundColor(theme.foreground)
-                .frame(maxWidth: .infinity)
-                HStack(spacing: 6) { trailing() }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background {
-                Rectangle()
-                    .fill(theme.background)
-                    .ignoresSafeArea(edges: .top)
-                    .overlay(alignment: .bottom) {
-                        LinearGradient(colors: [theme.background, theme.background.opacity(0)], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 18)
-                            .offset(y: 18)
-                    }
-            }
-
-            Spacer()
-
-            VStack(spacing: 8) {
-                GeometryReader { proxy in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(theme.foreground.opacity(0.15))
-                        Capsule().fill(KhyloStyle.accent).frame(width: max(3, proxy.size.width * progress))
-                    }
-                }
-                .frame(height: 3)
-                Text(status)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(theme.foreground.opacity(0.6))
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
-            .background {
-                Rectangle()
-                    .fill(theme.background)
-                    .ignoresSafeArea(edges: .bottom)
-                    .overlay(alignment: .top) {
-                        LinearGradient(colors: [theme.background.opacity(0), theme.background], startPoint: .top, endPoint: .bottom)
-                            .frame(height: 18)
-                            .offset(y: -18)
-                    }
-            }
-        }
-        .transition(.opacity)
-    }
-}
-
-private struct KhyloReaderIconButton: View {
-    let systemImage: String
-    let theme: KhyloReaderTheme
-    let label: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(theme.foreground)
-                .frame(width: 38, height: 38)
-                .background(Circle().fill(theme.foreground.opacity(0.1)))
-        }
-        .accessibilityLabel(label)
-    }
-}
-
-// MARK: - Settings sheet
-
-private struct KhyloReaderSettingsSheet: View {
-
-    @Binding var theme: KhyloReaderTheme
-    @Binding var fontScale: Double
-    @Binding var useSerif: Bool
-    let showsTextOptions: Bool
-
-    var body: some View {
-        VStack(spacing: 22) {
-            Text("Appearance")
-                .font(.system(size: 17, weight: .semibold))
-                .padding(.top, 20)
-
-            HStack(spacing: 14) {
-                ForEach(KhyloReaderTheme.allCases) { option in
-                    Button {
-                        theme = option
-                    } label: {
-                        VStack(spacing: 8) {
-                            Text("Aa")
-                                .font(.system(size: 20, weight: .semibold, design: .serif))
-                                .foregroundColor(option.foreground)
-                                .frame(width: 72, height: 54)
-                                .background(RoundedRectangle(cornerRadius: 12).fill(option.background))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .strokeBorder(theme == option ? KhyloStyle.accent : Color.gray.opacity(0.3), lineWidth: theme == option ? 2 : 1)
-                                )
-                            Text(option.title)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            if showsTextOptions {
-                HStack(spacing: 0) {
-                    Button {
-                        fontScale = max(0.7, fontScale - 0.1)
-                    } label: {
-                        Text("A").font(.system(size: 15, weight: .medium)).frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                    Divider().frame(height: 24)
-                    Button {
-                        fontScale = min(2.0, fontScale + 0.1)
-                    } label: {
-                        Text("A").font(.system(size: 23, weight: .medium)).frame(maxWidth: .infinity, minHeight: 44)
-                    }
-                }
-                .foregroundStyle(.primary)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color.gray.opacity(0.15)))
-
-                Picker("Font", selection: $useSerif) {
-                    Text("Serif").tag(true)
-                    Text("Sans Serif").tag(false)
-                }
-                .pickerStyle(.segmented)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 24)
     }
 }
 
@@ -569,12 +363,20 @@ private struct KhyloEPUBWebView: UIViewRepresentable {
     }
 }
 
+/// Text settings for EPUB pages.
+struct KhyloEPUBStyle: Equatable {
+    var fontScale: Double
+    var font: KhyloReaderFont
+    var spacing: KhyloReaderSpacing
+    var margins: KhyloReaderMargins
+    var justified: Bool
+}
+
 struct KhyloEPUBReader: View {
 
     let itemID: String
     let theme: KhyloReaderTheme
-    let fontScale: Double
-    let useSerif: Bool
+    let style: KhyloEPUBStyle
     @Binding var isChromeVisible: Bool
     @Binding var isShowingContents: Bool
     let title: String
@@ -588,8 +390,7 @@ struct KhyloEPUBReader: View {
         itemID: String,
         book: KhyloBook.EPUB,
         theme: KhyloReaderTheme,
-        fontScale: Double,
-        useSerif: Bool,
+        style: KhyloEPUBStyle,
         isChromeVisible: Binding<Bool>,
         isShowingContents: Binding<Bool>,
         title: String,
@@ -599,8 +400,7 @@ struct KhyloEPUBReader: View {
     ) {
         self.itemID = itemID
         self.theme = theme
-        self.fontScale = fontScale
-        self.useSerif = useSerif
+        self.style = style
         self._isChromeVisible = isChromeVisible
         self._isShowingContents = isShowingContents
         self.title = title
@@ -611,32 +411,38 @@ struct KhyloEPUBReader: View {
     }
 
     private var css: String {
-        let family = useSerif
-            ? "'New York', 'Iowan Old Style', Georgia, serif"
-            : "-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif"
+        let margin = style.margins.points
+        let fontRule = style.font.cssFamily.map { "font-family: \($0) !important;" } ?? ""
+        let inheritFont = style.font.cssFamily == nil ? "" : "font-family: inherit !important;"
         return """
         html { -webkit-text-size-adjust: 100%; }
-        html, body { margin: 0 !important; background: \(theme.backgroundHex) !important; }
+        html { margin: 0 !important; background-color: \(theme.backgroundHex) !important; \(theme.texture.css(dark: theme.isDark)) }
+        body { margin: 0 !important; background: transparent !important; }
         body {
           box-sizing: border-box !important;
           height: 100vh !important;
-          padding: 72px 24px 64px 24px !important;
-          column-width: calc(100vw - 48px) !important;
-          column-gap: 48px !important;
+          padding: 74px \(margin)px 62px \(margin)px !important;
+          column-width: calc(100vw - \(margin * 2)px) !important;
+          column-gap: \(margin * 2)px !important;
           column-fill: auto !important;
-          font-family: \(family) !important;
-          font-size: \(Int(fontScale * 112))% !important;
-          line-height: 1.6 !important;
+          \(fontRule)
+          font-size: \(Int(style.fontScale * 112))% !important;
+          line-height: \(style.spacing.lineHeight) !important;
           color: \(theme.foregroundHex) !important;
-          text-align: justify;
-          -webkit-hyphens: auto; hyphens: auto;
+          text-align: \(style.justified ? "justify" : "left");
+          -webkit-hyphens: \(style.justified ? "auto" : "manual"); hyphens: \(style.justified ? "auto" : "manual");
+          text-rendering: optimizeLegibility;
+          -webkit-font-smoothing: antialiased;
+          font-feature-settings: "kern", "liga", "onum";
           widows: 2; orphans: 2;
         }
-        body * { color: inherit !important; background-color: transparent !important; font-family: inherit !important; max-width: 100% !important; }
+        body * { color: inherit !important; background-color: transparent !important; \(inheritFont) max-width: 100% !important; line-height: inherit; }
         p { margin-top: 0 !important; margin-bottom: 0.85em !important; }
-        h1, h2, h3 { text-align: left; line-height: 1.25 !important; -webkit-hyphens: none; hyphens: none; }
+        h1, h2, h3 { text-align: left; line-height: 1.25 !important; -webkit-hyphens: none; hyphens: none; letter-spacing: -0.01em; }
+        h1 { font-size: 1.6em !important; margin: 0.4em 0 0.9em !important; }
         img, svg, video { max-width: 100% !important; max-height: calc(100vh - 150px) !important; height: auto !important; object-fit: contain; break-inside: avoid; display: block; margin: 0 auto; }
-        a { color: #D97732 !important; text-decoration: none !important; }
+        a { color: \(theme.linkHex) !important; text-decoration: none !important; }
+        ::selection { background: rgba(217, 119, 50, 0.3); }
         """
     }
 
@@ -648,6 +454,12 @@ struct KhyloEPUBReader: View {
 
             if !pager.isReady {
                 ProgressView().tint(theme.foreground.opacity(0.5))
+            }
+
+            if !isChromeVisible, pager.isReady {
+                runningHeadAndFoot
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
             }
 
             // Tap the edges to turn pages, the middle to show controls; swipe also turns.
@@ -683,6 +495,10 @@ struct KhyloEPUBReader: View {
                     subtitle: pager.chapterTitle,
                     progress: pager.overallProgress,
                     status: status,
+                    onScrub: { fraction in
+                        let count = pager.book.chapters.count
+                        pager.goToChapter(min(count - 1, max(0, Int(fraction * Double(count)))))
+                    },
                     onClose: onClose
                 ) {
                     KhyloReaderIconButton(systemImage: "list.bullet", theme: theme, label: "Contents") {
@@ -706,6 +522,28 @@ struct KhyloEPUBReader: View {
         .sheet(isPresented: $isShowingContents) {
             contents
         }
+    }
+
+    /// Chapter title above the page and pages left below it, like a printed book.
+    private var runningHeadAndFoot: some View {
+        VStack {
+            Text(pager.chapterTitle)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.6)
+                .lineLimit(1)
+                .padding(.top, 14)
+                .padding(.horizontal, 60)
+            Spacer()
+            HStack {
+                Text(pager.pagesLeftInChapter == 0 ? "Last page in chapter" : "\(pager.pagesLeftInChapter) page\(pager.pagesLeftInChapter == 1 ? "" : "s") left in chapter")
+                Spacer()
+                Text("\(Int((pager.overallProgress * 100).rounded()))%")
+            }
+            .font(.system(size: 11, weight: .medium).monospacedDigit())
+            .padding(.horizontal, CGFloat(style.margins.points))
+            .padding(.bottom, 8)
+        }
+        .foregroundColor(theme.foreground.opacity(0.42))
     }
 
     private var status: String {

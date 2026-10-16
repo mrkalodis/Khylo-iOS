@@ -120,7 +120,8 @@ enum KhyloAPI {
         recursive: Bool = true,
         startIndex: Int = 0,
         limit: Int = 60,
-        extraFields: [ItemFields] = []
+        extraFields: [ItemFields] = [],
+        requiredImages: [ImageType]? = nil
     ) async throws -> Page {
         let session = try requireSession()
         var parameters = Paths.GetItemsParameters()
@@ -140,6 +141,7 @@ enum KhyloAPI {
         parameters.startIndex = startIndex
         parameters.limit = limit
         parameters.fields = cardFields + extraFields
+        parameters.imageTypes = requiredImages
         parameters.enableUserData = true
         parameters.enableImageTypes = imageTypes
         parameters.imageTypeLimit = 1
@@ -245,8 +247,29 @@ enum KhyloAPI {
             parentID: albumID,
             types: [.audio],
             sortBy: [.parentIndexNumber, .indexNumber, .sortName],
-            limit: 500
+            limit: 500,
+            extraFields: [.mediaStreams]
         ).items
+    }
+
+    /// A mix of songs in the style of an artist, album, song or genre.
+    static func instantMix(from itemID: String, limit: Int = 80) async throws -> [BaseItemDto] {
+        let session = try requireSession()
+        var parameters = Paths.GetInstantMixFromItemParameters()
+        parameters.userID = session.user.id
+        parameters.limit = limit
+        parameters.fields = cardFields
+        parameters.enableUserData = true
+        return try await send(session, Paths.getInstantMixFromItem(itemID: itemID, parameters: parameters)).items ?? []
+    }
+
+    static func similarArtists(to artistID: String, limit: Int = 12) async throws -> [BaseItemDto] {
+        let session = try requireSession()
+        var parameters = Paths.GetSimilarArtistsParameters()
+        parameters.userID = session.user.id
+        parameters.limit = limit
+        parameters.fields = [.primaryImageAspectRatio, .genres]
+        return try await send(session, Paths.getSimilarArtists(itemID: artistID, parameters: parameters)).items ?? []
     }
 
     // MARK: - Live TV
@@ -308,6 +331,15 @@ enum KhyloAPI {
             ? Paths.markPlayedItem(itemID: itemID, userID: session.user.id)
             : Paths.markUnplayedItem(itemID: itemID, userID: session.user.id)
         return try await session.client.send(request).value
+    }
+
+    /// Takes an item out of Continue Watching by clearing its saved position.
+    /// It stays unwatched and is still in its library.
+    static func removeFromResume(itemID: String) async throws {
+        let session = try requireSession()
+        var body = UpdateUserItemDataDto()
+        body.playbackPositionTicks = 0
+        _ = try await session.client.send(Paths.updateItemUserData(itemID: itemID, userID: session.user.id, body))
     }
 
     // MARK: - Lenient decoding
@@ -401,5 +433,138 @@ enum KhyloAPI {
 
     static var accessToken: String? {
         session?.user.accessToken
+    }
+}
+
+// MARK: - Khylo TV
+
+/// Khylo TV: always-on channels the server builds from your own libraries.
+/// The server keeps the schedule; tuning in returns what's on and how far in.
+extension KhyloAPI {
+
+    struct TVProgram: Decodable, Hashable {
+        let itemID: String
+        let type: String?
+        let name: String
+        let seriesName: String?
+        let seriesID: String?
+        let seasonNumber: Int?
+        let episodeNumber: Int?
+        let productionYear: Int?
+        let officialRating: String?
+        let overview: String?
+        let start: Date
+        let end: Date
+
+        enum CodingKeys: String, CodingKey {
+            case itemID = "ItemId"
+            case type = "Type"
+            case name = "Name"
+            case seriesName = "SeriesName"
+            case seriesID = "SeriesId"
+            case seasonNumber = "SeasonNumber"
+            case episodeNumber = "EpisodeNumber"
+            case productionYear = "ProductionYear"
+            case officialRating = "OfficialRating"
+            case overview = "Overview"
+            case start = "StartUtc"
+            case end = "EndUtc"
+        }
+
+        /// The show for episodes, otherwise the title.
+        var title: String { seriesName ?? name }
+
+        /// "S2 · E5 · Episode name" for episodes, the year for movies.
+        var subtitle: String {
+            guard seriesName != nil else { return productionYear.map(String.init) ?? "" }
+            var parts: [String] = []
+            if let seasonNumber { parts.append("S\(seasonNumber)") }
+            if let episodeNumber { parts.append("E\(episodeNumber)") }
+            parts.append(name)
+            return parts.joined(separator: " · ")
+        }
+
+        func isOn(at date: Date) -> Bool { start <= date && end > date }
+
+        func progress(at date: Date) -> Double {
+            let length = end.timeIntervalSince(start)
+            guard length > 0 else { return 0 }
+            return min(1, max(0, date.timeIntervalSince(start) / length))
+        }
+    }
+
+    struct TVChannel: Decodable, Identifiable, Hashable {
+        let id: String
+        let key: String?
+        let number: Int
+        let name: String
+        /// TV, Movies, Networks or Collections.
+        let category: String
+        let description: String?
+        let programs: [TVProgram]
+
+        enum CodingKeys: String, CodingKey {
+            case id = "Id"
+            case key = "Key"
+            case number = "Number"
+            case name = "Name"
+            case category = "Category"
+            case description = "Description"
+            case programs = "Programs"
+        }
+
+        func current(at date: Date) -> TVProgram? { programs.first { $0.isOn(at: date) } }
+
+        func next(after date: Date) -> TVProgram? { programs.first { $0.start > date } }
+    }
+
+    struct TVTuneResult: Decodable {
+        let channel: TVChannel
+        let current: TVProgram?
+        let startPositionTicks: Int
+        let upNext: [TVProgram]
+        let serverTime: Date
+
+        enum CodingKeys: String, CodingKey {
+            case channel = "Channel"
+            case current = "Current"
+            case startPositionTicks = "StartPositionTicks"
+            case upNext = "UpNext"
+            case serverTime = "ServerTimeUtc"
+        }
+    }
+
+    private struct TVStatus: Decodable {
+        let enabled: Bool
+
+        enum CodingKeys: String, CodingKey {
+            case enabled = "Enabled"
+        }
+    }
+
+    static func khyloTVEnabled() async throws -> Bool {
+        let session = try requireSession()
+        return try await send(session, Request<TVStatus>(path: "/LiveChannels/Status")).enabled
+    }
+
+    static func khyloTVGuide(from start: Date = Date(), hours: Int = 6) async throws -> [TVChannel] {
+        let session = try requireSession()
+        let formatter = ISO8601DateFormatter()
+        let request = Request<[TVChannel]>(
+            path: "/LiveChannels/Guide",
+            query: [("startTime", formatter.string(from: start)), ("hours", String(hours))]
+        )
+        return try await send(session, request)
+    }
+
+    static func tuneKhyloTV(channelID: String) async throws -> TVTuneResult {
+        let session = try requireSession()
+        return try await send(session, Request<TVTuneResult>(path: "/LiveChannels/\(channelID)/Tune", method: "POST"))
+    }
+
+    /// Tells the server this device stopped watching channels.
+    static func leaveKhyloTV() async {
+        guard let session else { return }
+        _ = try? await session.client.send(Request<Void>(path: "/LiveChannels/Leave", method: "POST"))
     }
 }

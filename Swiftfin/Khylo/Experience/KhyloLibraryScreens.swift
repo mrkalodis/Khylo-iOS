@@ -821,6 +821,9 @@ struct KhyloLibraryHome<Header: View>: View {
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             Task { await refreshResume() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .khyloProgressDidChange)) { _ in
+            Task { await refreshResume() }
+        }
     }
 
     /// Swaps in a fresh Continue Watching row for this library.
