@@ -1,98 +1,61 @@
-<div align="center">
-  <img alt="Khylo" src="./Swiftfin/Khylo/Resources/khylo_wordmark.png" width="340">
+<p align="center">
+  <img src=".github/khylo-banner.png" alt="Khylo" width="560">
+</p>
 
-  <p align="center">
-    <b>The Next-Generation Native iOS Client for Khylo Media Ecosystem</b>
-  </p>
+<h1 align="center">Khylo for iPhone, iPad and Apple TV</h1>
 
-  <p align="center">
-    <img src="https://img.shields.io/badge/Platform-iOS%2018%2B-D97732?style=flat-square&labelColor=08090A"/>
-    <img src="https://img.shields.io/badge/Architecture-Swift%206%20%2F%20SwiftUI-D97732?style=flat-square&labelColor=08090A"/>
-    <img src="https://img.shields.io/badge/Theme-Charcoal%20%26%20Amber-D97732?style=flat-square&labelColor=08090A"/>
-    <img src="https://img.shields.io/badge/License-MPL--2.0-D97732?style=flat-square&labelColor=08090A"/>
-    <img src="https://img.shields.io/badge/Version-DEV--V26.10.010-D97732?style=flat-square&labelColor=08090A"/>
-  </p>
-</div>
+<p align="center">
+  Khylo for iPhone and iPad, with a calm, premium look built for touch. The Apple TV app is on the way.
+</p>
 
 ---
 
-## 🌟 Overview
+## Highlights
 
-**Khylo for iOS** is a 100% native Apple client built to deliver complete feature parity with the Khylo Android TV ecosystem. Styled in our signature charcoal (`#08090A`) and warm amber accent (`#D97732`), it pairs high-fidelity media playback with a fluid, touch-optimized mobile experience designed specifically for iOS.
+- **Easy to get started.** Type your server's address (http or https) or let Khylo find it on your Wi-Fi, then sign in.
+- **Home** with Continue Watching (cover, progress, time left, season and episode) and Up Next, kept in step with your other devices.
+- **Libraries** with For You, Browse and Collections, and a search box in every library.
+- **A video player** with subtitles and audio tracks that saves your place on the server.
+- **Khylo TV:** join your always-on channels mid-show, with network logos. Pause and go back, but no skipping ahead of what's on air.
+- **Live TV** with On Now, Channels and a guide, shown only when your server has a tuner or IPTV.
+- **Music** with For You, artist mixes, every album on artist pages, a Now Playing screen that shows each song's quality, a mini player, the lock screen and AirPlay.
+- **Audiobooks** with speed, sleep timer, back 15 / forward 30, and your place saved across devices.
+- **Books:** EPUB, PDF and comics, with eight paper types, eight fonts, layout options and a real page curl.
+- **Search** across everything, with All, Movies & TV, Music and Books, and categories made from your library's own genres.
 
----
+## Khylo apps
 
-## 🚀 Key Features
+| Part | Repository |
+| --- | --- |
+| Server | [Khylo-Server](https://github.com/mrkalodis/Khylo-Server) |
+| Web app and dashboard | [Khylo-Web](https://github.com/mrkalodis/Khylo-Web) |
+| Android TV and Google TV | [Khylo-AndroidTV](https://github.com/mrkalodis/Khylo-AndroidTV) |
 
-### 🎬 Unified Video Player
-- **Direct Playback Engine:** High-performance playback powered by native AVPlayer and VLCKit with hardware-accelerated HEVC, AV1, and VP9 decoding.
-- **Intelligent Media Segments:** Auto-detects and offers one-tap skipping for Intros, Recaps, and Outros.
-- **Gesture HUDs:** Vertical swipe controls for Brightness (left) and Volume (right); horizontal scrub with millisecond-precision feedback.
-- **Up Next Countdown:** Non-intrusive 10-second end-credits transition card automatically queueing subsequent episodes.
-- **Advanced Stream Selector:** Instant switching between audio tracks (Dolby Atmos, TrueHD, 5.1) and subtitle streams (SRT, PGS, VTT) with offset synchronization.
+## Building
 
-### 📺 Live TV & Multi-View
-- **Multi-Stream Multi-View:** Watch up to **4 live streams simultaneously** with five distinct layout modes (Single, Split, Quad, 1+3 Focus PIP).
-- **One-Tap Audio Focus:** Instant tap to redirect primary audio to any active stream.
-- **24/7 Linear EPG:** Virtual linear channel guide with mid-program join and real-time progress indicators.
+**You need:** a Mac with Xcode 26 or newer. The app runs on iOS and iPadOS 18.6 or newer.
 
-### 🎵 Lossless Music Player
-- **Equalizer Visualization:** Real-time 5-band animated equalizer bars reflecting playback status.
-- **Ambient Ken Burns:** Dynamic artist backdrop motion creating a living music experience.
-- **Queue Management:** Interactive drag-to-reorder play queue with smart shuffle and repeat modes.
-
-### 🎧 Warm Paper Audiobook Player
-- **Parchment Theme:** Specially tuned warm paper interface designed for comfortable long listening sessions.
-- **Dual Progress Metrics:** Real-time chapter progress and overall audiobook completion percentages.
-- **Narration Controls:** Variable playback speeds ($0.5\times$ to $2.5\times$), sleep timers (15m, 30m, 45m, 60m, end of chapter), and 10s rewind / 30s skip.
-
-### 📖 Integrated EPUB Reader
-- **Paginated Reading Engine:** Fluid page flips with dynamic font scaling and margin adjustment.
-- **Reading Themes:** Dedicated Sepia, Paper, and Night modes.
-- **Interactive TOC:** Full chapter navigation drawer with reading progress bookmarks.
-
-### 🛡️ Profiles & Family PIN Protection
-- **Multi-Profile Switcher:** Instant account and profile switching with personalized Continue Watching, Next Up, and Recommendations.
-- **Biometric Security:** PIN protection enhanced with **Face ID** and **Touch ID** authentication.
-- **Kids Mode:** Dedicated curated environment restricting content strictly to G, PG, TV-Y, and TV-G ratings.
-
-### 🥚 Klyrp Easter Egg
-- Hidden interactive easter egg accessible via 7 rapid taps on the app build version in Settings.
-
----
-
-## 📱 Architecture & Tech Stack
-
-| Layer | Technology |
-| :--- | :--- |
-| **Language** | Swift 6.0 |
-| **UI Framework** | SwiftUI + UIKit Interop |
-| **Design Tokens** | Khylo Charcoal (`#08090A`), Khylo Amber (`#D97732`), Zinc Highlights |
-| **Media Engine** | AVFoundation + VLCKit |
-| **Authentication** | Direct Token Auth, QR Code Quick Connect, Face ID / Touch ID |
-| **EPUB Engine** | Native ZIP & XML / XHTML Parsing |
-
----
-
-## 📦 Building & Development
-
-### Requirements
-- **macOS:** macOS 14.0 (Sonoma) or newer
-- **Xcode:** 15.4 or newer
-- **iOS Target:** iOS 18.0+
-
-### Setup
 ```bash
-# Clone the repository
-git clone https://github.com/mrkalodis/Khylo-iOS.git
-cd Khylo-iOS
-
-# Open in Xcode
 open Swiftfin.xcodeproj
 ```
 
----
+Choose the **Swiftfin** scheme and an iPhone or iPad, then build and run. The first time, Xcode asks you to trust the project's Swift macros; allow them.
 
-## 📄 License
+### Signing for your own device
 
-Khylo iOS is licensed under the [Mozilla Public License 2.0 (MPL-2.0)](LICENSE).
+To install on your own iPhone with a free Apple account, create `XcodeConfig/DevelopmentTeam.xcconfig` (it's ignored by git) with your team ID:
+
+```
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+KHYLO_IOS_ENTITLEMENTS = Swiftfin/Resources/Swiftfin-PersonalTeam.entitlements
+```
+
+The second line uses entitlements that free (Personal Team) accounts allow.
+
+### Build number
+
+The version and build number come from the Khylo hub's release script, in the form `DEV-V<year>.<month>.<increment>` (for example `DEV-V26.10.019` becomes version `26.10.19`, build `2610019`). Don't change them by hand.
+
+## License
+
+Khylo is free software under the [Mozilla Public License 2.0](LICENSE.md). It is built on open-source components, including the Jellyfin project, whose copyright notices are kept in the source files as the license requires.
