@@ -9,4 +9,8 @@
 DEVELOPMENT_TEAM = 
 PRODUCT_BUNDLE_IDENTIFIER = org.khylo.app
 
+// Free (Personal Team) Apple accounts can't use Access Wi-Fi Information.
+// DevelopmentTeam.xcconfig may point this at Swiftfin-PersonalTeam.entitlements.
+KHYLO_IOS_ENTITLEMENTS = Swiftfin/Resources/Swiftfin.entitlements
+
 #include? "DevelopmentTeam.xcconfig"
