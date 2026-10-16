@@ -29,8 +29,10 @@ extension UserState {
 
     var accessToken: String {
         get {
+            // Can be missing legitimately: a restored backup, a reinstall, or a
+            // signing change that moves the app to a different keychain group.
+            // Callers treat an empty token as signed out.
             guard let accessToken = Container.shared.keychainService().get("\(id)-accessToken") else {
-                assertionFailure("access token missing in keychain")
                 return ""
             }
 

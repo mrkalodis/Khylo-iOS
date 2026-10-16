@@ -335,6 +335,12 @@ final class UserSessionManager: ObservableObject {
             throw UserSessionError.invalidStoredSession(userID: userId)
         }
 
+        // Without its token the session can't talk to the server; ask the user to sign in again.
+        guard !user.accessToken.isEmpty else {
+            Defaults[.lastSignedInUserID] = .signedOut
+            return nil
+        }
+
         return .init(
             server: server,
             user: user

@@ -8,7 +8,7 @@
 
 import Combine
 import Foundation
-import Network
+import JellyfinAPI
 
 // MARK: - Discovered Server Model
 
@@ -55,9 +55,7 @@ public final class KhyloServerDiscovery: ObservableObject {
     @Published public private(set) var isScanning: Bool = false
     @Published public var errorMessage: String?
 
-    private var broadcastConnection: NWConnection?
     private var scanTask: Task<Void, Never>?
-    private let discoveryPort: NWEndpoint.Port = 7359
 
     public init() {}
 
@@ -77,8 +75,6 @@ public final class KhyloServerDiscovery: ObservableObject {
         isScanning = false
         scanTask?.cancel()
         scanTask = nil
-        broadcastConnection?.cancel()
-        broadcastConnection = nil
     }
 
     /// Manually verifies and pings a server URL.
@@ -178,60 +174,95 @@ public final class KhyloServerDiscovery: ObservableObject {
     }
 
     private func performDiscoveryScan() async {
-        // Send UDP discovery packet on 7359
-        sendBroadcastQuery()
-
-        // Probe common local network host addresses concurrently
-        let commonAddresses = [
-            "http://localhost:8096",
-            "http://127.0.0.1:8096"
-        ]
-
-        for address in commonAddresses {
-            guard isScanning else { break }
-            if let server = try? await pingServer(urlString: address) {
-                if !discoveredServers.contains(where: { $0.id == server.id }) {
-                    discoveredServers.append(server)
-                }
+        // 1. Ask the network: servers answer the standard UDP discovery broadcast.
+        do {
+            for try await response in JellyfinClient.discover(duration: .seconds(3)) {
+                guard isScanning else { break }
+                await add(urlString: response.url.absoluteString)
             }
+        } catch {
+            // Broadcast can be unavailable (no Wi-Fi, blocked by the network); fall through.
         }
 
-        // Allow background listening for broadcast responses
-        try? await Task.sleep(nanoseconds: 3_000_000_000)
-        if isScanning {
-            isScanning = false
+        // 2. Some routers drop broadcasts: check each address on this Wi-Fi network directly.
+        if isScanning, discoveredServers.isEmpty {
+            await scanSubnet()
+        }
+
+        isScanning = false
+    }
+
+    private func add(urlString: String) async {
+        guard let server = try? await pingServer(urlString: urlString) else { return }
+        if !discoveredServers.contains(where: { $0.id == server.id }) {
+            discoveredServers.append(server)
         }
     }
 
-    private func sendBroadcastQuery() {
-        let host = NWEndpoint.Host("255.255.255.255")
-        let params = NWParameters.udp
-        params.allowLocalEndpointReuse = true
+    /// Probes every host on the device's IPv4 subnet (up to a /24) on port 8096.
+    private func scanSubnet() async {
+        let hosts = Self.localSubnetHosts()
+        guard !hosts.isEmpty else { return }
 
-        let connection = NWConnection(host: host, port: discoveryPort, using: params)
-        broadcastConnection = connection
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 1.5
+        configuration.timeoutIntervalForResource = 2
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
 
-        connection.stateUpdateHandler = { [weak self] state in
-            if case .ready = state {
-                let message = "who is JellyfinServer?".data(using: .utf8) ?? Data()
-                connection.send(content: message, completion: .contentProcessed({ _ in }))
-                self?.receiveBroadcastResponse(on: connection)
+        await withTaskGroup(of: String?.self) { group in
+            var iterator = hosts.makeIterator()
+            func next() -> Bool {
+                guard let host = iterator.next() else { return false }
+                group.addTask {
+                    let base = "http://\(host):8096"
+                    guard let url = URL(string: base + "/System/Info/Public"),
+                          let (_, response) = try? await session.data(from: url),
+                          (response as? HTTPURLResponse)?.statusCode == 200
+                    else { return nil }
+                    return base
+                }
+                return true
+            }
+            // Keep ~32 probes in flight.
+            for _ in 0 ..< 32 where next() {}
+            for await found in group {
+                if let found { await add(urlString: found) }
+                guard isScanning else { group.cancelAll(); break }
+                _ = next()
             }
         }
-
-        connection.start(queue: .global(qos: .utility))
     }
 
-    nonisolated private func receiveBroadcastResponse(on connection: NWConnection) {
-        connection.receiveMessage { [weak self] content, _, _, _ in
-            guard let self = self, let content = content else { return }
-            if let json = try? JSONSerialization.jsonObject(with: content) as? [String: Any],
-               let addressString = json["Address"] as? String,
-               let url = URL(string: addressString) {
-                Task { @MainActor in
-                    _ = try? await self.pingServer(urlString: url.absoluteString)
-                }
+    /// Other addresses on the Wi-Fi (en0) IPv4 network, nearest first; empty when not on Wi-Fi.
+    nonisolated static func localSubnetHosts() -> [String] {
+        var pointer: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&pointer) == 0, let first = pointer else { return [] }
+        defer { freeifaddrs(pointer) }
+
+        for entry in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let interface = entry.pointee
+            guard String(cString: interface.ifa_name) == "en0",
+                  let address = interface.ifa_addr, address.pointee.sa_family == UInt8(AF_INET),
+                  let mask = interface.ifa_netmask
+            else { continue }
+
+            let ip = address.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { UInt32(bigEndian: $0.pointee.sin_addr.s_addr) }
+            var netmask = mask.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { UInt32(bigEndian: $0.pointee.sin_addr.s_addr) }
+            // Never scan more than a /24.
+            netmask |= 0xFFFF_FF00
+            let network = ip & netmask
+            let broadcast = network | ~netmask
+
+            var hosts: [UInt32] = []
+            var candidate = network + 1
+            while candidate < broadcast {
+                if candidate != ip { hosts.append(candidate) }
+                candidate += 1
             }
+            hosts.sort { abs(Int64($0) - Int64(ip)) < abs(Int64($1) - Int64(ip)) }
+            return hosts.map { "\($0 >> 24 & 0xFF).\($0 >> 16 & 0xFF).\($0 >> 8 & 0xFF).\($0 & 0xFF)" }
         }
+        return []
     }
 }
