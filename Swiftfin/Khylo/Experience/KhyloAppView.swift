@@ -30,12 +30,15 @@ struct KhyloAppView: View {
     @AppStorage("khylo.hasKhyloTV") private var hasKhyloTV = false
     @ObservedObject private var libraryStore = KhyloLibraryStore.shared
 
-    /// Choosing Libraries also brings up the library picker.
+    /// Libraries goes back to the library you were last in. The library list comes
+    /// up the first time (nothing picked yet) or when you tap Libraries again while
+    /// you're already on it.
     private var tabSelection: Binding<TabID> {
         Binding(
             get: { selection },
             set: { newValue in
-                if newValue == .libraries {
+                if newValue == .libraries,
+                   selection == .libraries || libraryStore.selectedID.isEmpty {
                     libraryStore.isPickerPresented = true
                 }
                 selection = newValue
