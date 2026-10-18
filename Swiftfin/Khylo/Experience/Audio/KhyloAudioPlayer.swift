@@ -75,7 +75,7 @@ final class KhyloAudioPlayer: ObservableObject {
     @Published var repeatMode: RepeatMode = .off {
         didSet {
             player.actionAtItemEnd = repeatMode == .one ? .none : .advance
-            preloadNext()
+            discardPreload()
         }
     }
     @Published private(set) var isShuffled = false
@@ -101,6 +101,11 @@ final class KhyloAudioPlayer: ObservableObject {
     /// Another app took the audio while we were playing; pick back up when it's done.
     private var resumeAfterInterruption = false
     private var qualityTask: Task<Void, Never>?
+    private var itemStatusCancellable: AnyCancellable?
+    private var failureObserver: NSObjectProtocol?
+    private var videoEndObserver: NSObjectProtocol?
+    /// Fresh attempts at the current track after a network failure.
+    private var retries = 0
     private var playSessionID = UUID().uuidString
     private var lastReport = Date.distantPast
     private var sleepTask: Task<Void, Never>?
@@ -127,6 +132,32 @@ final class KhyloAudioPlayer: ObservableObject {
             .sink { [weak self] item in
                 self?.currentItemChanged(item)
             }
+        itemStatusCancellable = player.publisher(for: \.currentItem?.status)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                if status == .failed { self?.recoverFromFailure() }
+            }
+        // A dropped connection mid-song (common in the car) ends the item early.
+        failureObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let failed = notification.object as? AVPlayerItem
+            MainActor.assumeIsolated {
+                guard let self, failed === self.activeItem else { return }
+                self.recoverFromFailure()
+            }
+        }
+        // The video player takes over the lock screen controls while it plays and
+        // clears them when it closes; take them back afterwards.
+        videoEndObserver = NotificationCenter.default.addObserver(
+            forName: .khyloPlaybackDidEnd,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.reclaimAfterVideo() }
+        }
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: nil,
@@ -162,7 +193,17 @@ final class KhyloAudioPlayer: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.resumeIfInterrupted() }
         }
-        configureRemoteCommands()
+        claimRemoteCommands()
+    }
+
+    /// Takes the lock screen controls back once the video player has let go of them.
+    private func reclaimAfterVideo() {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard let self, self.isActive else { return }
+            self.claimRemoteCommands()
+            self.updateNowPlaying()
+        }
     }
 
     // MARK: - Interruptions
@@ -228,6 +269,7 @@ final class KhyloAudioPlayer: ObservableObject {
             return
         }
         activateSession()
+        claimRemoteCommands()
         player.play()
         isPlaying = true
         report(force: true)
@@ -269,7 +311,7 @@ final class KhyloAudioPlayer: ObservableObject {
             index = 0
             isShuffled = true
         }
-        preloadNext()
+        discardPreload()
         updateNowPlaying()
     }
 
@@ -283,7 +325,7 @@ final class KhyloAudioPlayer: ObservableObject {
         queue.removeAll { $0.id == item.id && $0.id != currentID }
         index = queue.firstIndex { $0.id == currentID } ?? index
         queue.insert(item, at: min(index + 1, queue.count))
-        preloadNext()
+        discardPreload()
     }
 
     func addToQueue(_ item: BaseItemDto) {
@@ -292,7 +334,7 @@ final class KhyloAudioPlayer: ObservableObject {
             return
         }
         queue.append(item)
-        preloadNext()
+        discardPreload()
     }
 
     func previous() {
@@ -372,12 +414,43 @@ final class KhyloAudioPlayer: ObservableObject {
             player.seek(to: CMTime(seconds: start, preferredTimescale: 600))
         }
         activateSession()
+        claimRemoteCommands()
         player.defaultRate = rate
         // play() (not playImmediately) lets the player buffer enough to avoid stutter.
         player.play()
         isPlaying = true
         trackDidStart()
-        preloadNext()
+    }
+
+    /// Plays the track at `newIndex` again from `seconds`, with a fresh connection.
+    private func reload(at seconds: Double) {
+        let wasPlaying = isPlaying
+        load(index: index, startTicks: Int(seconds * 10_000_000))
+        if !wasPlaying { pause() }
+    }
+
+    /// The stream for the current track failed (lost connection, server hiccup).
+    /// Try it again from where it stopped; after two tries, move on.
+    private func recoverFromFailure() {
+        guard isActive else { return }
+        let position = currentTime
+        if retries < 2 {
+            retries += 1
+            Task { @MainActor [weak self] in
+                // A moment for the connection to come back.
+                try? await Task.sleep(for: .seconds(Double(self?.retries ?? 1)))
+                guard let self, self.isActive else { return }
+                self.reload(at: position)
+            }
+        } else if let next = nextIndex {
+            retries = 0
+            reportStopped()
+            load(index: next, startTicks: 0)
+        } else {
+            retries = 0
+            isPlaying = false
+            updateNowPlaying()
+        }
     }
 
     private func makePlayerItem(_ url: URL) -> AVPlayerItem {
@@ -402,12 +475,22 @@ final class KhyloAudioPlayer: ObservableObject {
         return repeatMode == .all && queue.count > 1 ? 0 : nil
     }
 
-    /// Puts the next track into the player so it starts without a gap.
-    private func preloadNext() {
+    /// Forgets a loaded-ahead next track (the queue changed).
+    private func discardPreload() {
         if let preloaded {
             player.remove(preloaded.item)
             self.preloaded = nil
         }
+    }
+
+    /// Seconds before the end of a track when the next one starts loading. Late
+    /// enough that the connection is fresh and the server isn't asked for two
+    /// songs at once; early enough that the next song starts without a gap.
+    private static let preloadLead: Double = 20
+
+    /// Puts the next track into the player so it starts without a gap.
+    private func preloadNext() {
+        discardPreload()
         guard player.currentItem != nil,
               let next = nextIndex,
               let url = streamURL(for: queue[next])
@@ -419,7 +502,21 @@ final class KhyloAudioPlayer: ObservableObject {
 
     /// The queue player moved on to the preloaded track.
     private func currentItemChanged(_ item: AVPlayerItem?) {
-        guard let item, let preloaded, item === preloaded.item else { return }
+        guard let item else {
+            // The player ran dry while it should be playing (a queued song failed to load).
+            if isPlaying, player.currentItem == nil {
+                preloaded = nil
+                if let next = nextIndex {
+                    reportStopped()
+                    load(index: next, startTicks: 0)
+                } else {
+                    isPlaying = false
+                    updateNowPlaying()
+                }
+            }
+            return
+        }
+        guard let preloaded, item === preloaded.item else { return }
         reportStopped()
         self.preloaded = nil
         activeItem = item
@@ -427,8 +524,8 @@ final class KhyloAudioPlayer: ObservableObject {
         duration = Double(current?.runTimeTicks ?? 0) / 10_000_000
         currentTime = 0
         playSessionID = UUID().uuidString
+        retries = 0
         trackDidStart()
-        preloadNext()
     }
 
     private func itemDidEnd(_ ended: AVPlayerItem?) {
@@ -439,7 +536,17 @@ final class KhyloAudioPlayer: ObservableObject {
             player.play()
             return
         }
+        if let preloaded, preloaded.item.status == .failed {
+            // The song loaded ahead went bad while waiting; load it fresh instead.
+            discardPreload()
+        }
         if preloaded == nil {
+            if let next = nextIndex {
+                // The next song wasn't loaded ahead (short track or slow start): start it now.
+                reportStopped()
+                load(index: next, startTicks: 0)
+                return
+            }
             // End of the queue.
             report(force: true)
             reportStopped()
@@ -480,6 +587,11 @@ final class KhyloAudioPlayer: ObservableObject {
         currentTime = seconds
         if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0 {
             duration = itemDuration
+        }
+        if player.timeControlStatus == .playing { retries = 0 }
+        if preloaded == nil, isPlaying, duration > 0, duration - seconds <= Self.preloadLead,
+           player.currentItem?.status == .readyToPlay {
+            preloadNext()
         }
         report(force: false)
     }
@@ -524,8 +636,24 @@ final class KhyloAudioPlayer: ObservableObject {
 
     // MARK: - Lock screen
 
-    private func configureRemoteCommands() {
+    /// Makes the lock screen, Control Center, headphone and car controls drive this
+    /// player. Other players (the video player) replace these handlers while they
+    /// run, so this is called again whenever music starts or resumes.
+    private func claimRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
+        let commands: [MPRemoteCommand] = [
+            center.playCommand, center.pauseCommand, center.togglePlayPauseCommand,
+            center.nextTrackCommand, center.previousTrackCommand,
+            center.skipForwardCommand, center.skipBackwardCommand,
+            center.changePlaybackPositionCommand,
+        ]
+        for command in commands {
+            command.removeTarget(nil)
+        }
+        center.playCommand.isEnabled = true
+        center.pauseCommand.isEnabled = true
+        center.togglePlayPauseCommand.isEnabled = true
+        center.changePlaybackPositionCommand.isEnabled = true
         center.playCommand.addTarget { [weak self] _ in
             MainActor.assumeIsolated { self?.resume() }
             return .success
@@ -629,6 +757,7 @@ final class KhyloAudioPlayer: ObservableObject {
             info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: artworkImage.size) { _ in artworkImage }
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
     }
 }
 

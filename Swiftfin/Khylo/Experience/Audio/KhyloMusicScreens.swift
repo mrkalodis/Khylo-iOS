@@ -333,10 +333,13 @@ struct KhyloTrackRow: View {
                         .foregroundColor(isCurrent ? KhyloStyle.accent : .white)
                         .lineLimit(1)
                     if !hidesArtist {
-                        Text(track.khyloArtistLine)
-                            .font(.system(size: 13))
-                            .foregroundColor(KhyloStyle.tertiaryText)
-                            .lineLimit(1)
+                        KhyloArtistLinks(artists: track.khyloArtistLinks, fallback: track.khyloArtistLine) { artistID in
+                            Task {
+                                if let artist = try? await KhyloAPI.item(artistID) { router.route(to: .khyloItem(artist)) }
+                            }
+                        }
+                        .font(.system(size: 13))
+                        .foregroundColor(KhyloStyle.tertiaryText)
                     }
                 }
 

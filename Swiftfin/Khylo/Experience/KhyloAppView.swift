@@ -6,6 +6,7 @@
 // Copyright (c) 2026 Khylo & Khylo Contributors
 //
 
+import Combine
 import SwiftUI
 
 /// Signed-in app. Each tab hosts its own navigation stack so screens can
@@ -45,13 +46,13 @@ struct KhyloAppView: View {
     var body: some View {
         TabView(selection: tabSelection) {
             Tab(value: TabID.home) {
-                stack { KhyloHomeScreen() }
+                stack(.home) { KhyloHomeScreen() }
             } label: {
                 tabLabel("Home", "house")
             }
 
             Tab(value: TabID.libraries) {
-                stack { KhyloLibrariesScreen() }
+                stack(.libraries) { KhyloLibrariesScreen() }
             } label: {
                 tabLabel("Libraries", "books.vertical")
             }
@@ -59,7 +60,7 @@ struct KhyloAppView: View {
             // The server's always-on channels, built from your library.
             if hasKhyloTV {
                 Tab(value: TabID.khyloTV) {
-                    stack { KhyloTVScreen() }
+                    stack(.khyloTV) { KhyloTVScreen() }
                 } label: {
                     tabLabel("Khylo TV", "play.tv")
                 }
@@ -68,14 +69,14 @@ struct KhyloAppView: View {
             // Only servers with a tuner or IPTV source have channels.
             if hasLiveTV {
                 Tab(value: TabID.liveTV) {
-                    stack { KhyloLiveTVScreen() }
+                    stack(.liveTV) { KhyloLiveTVScreen() }
                 } label: {
                     tabLabel("Live TV", "tv")
                 }
             }
 
             Tab(value: TabID.search) {
-                stack { KhyloSearchScreen() }
+                stack(.search) { KhyloSearchScreen() }
             } label: {
                 tabLabel("Search", "magnifyingglass")
             }
@@ -116,9 +117,10 @@ struct KhyloAppView: View {
         }
     }
 
-    private func stack(@ViewBuilder _ content: @escaping () -> some View) -> some View {
+    private func stack(_ tab: TabID, @ViewBuilder _ content: @escaping () -> some View) -> some View {
         NavigationInjectionView(coordinator: NavigationCoordinator()) {
             content()
+                .background { KhyloRouteRelay(isActive: selection == tab) }
         }
         .overlay { KhyloStatusBarScrim() }
         // Sits just above the tab bar on every screen of the tab.
@@ -148,5 +150,42 @@ struct KhyloProfileButton: View {
         }
         .buttonStyle(KhyloScaleButtonStyle())
         .accessibilityLabel("Account")
+    }
+}
+
+// MARK: - Opening pages from outside a tab
+
+/// Lets places that sit above the tabs (Now Playing, the mini player) open a
+/// page in whichever tab is showing, e.g. tapping an artist's name.
+@MainActor
+final class KhyloPageRelay {
+    static let shared = KhyloPageRelay()
+
+    let routes = PassthroughSubject<NavigationRoute, Never>()
+
+    func open(_ route: NavigationRoute) {
+        routes.send(route)
+    }
+
+    /// Opens an artist's page by ID.
+    func openArtist(id: String) {
+        Task {
+            if let artist = try? await KhyloAPI.item(id) {
+                open(.khyloItem(artist))
+            }
+        }
+    }
+}
+
+/// Sits in each tab's stack and pushes relayed pages onto the tab that's showing.
+private struct KhyloRouteRelay: View {
+    let isActive: Bool
+    @Router private var router
+
+    var body: some View {
+        Color.clear
+            .onReceive(KhyloPageRelay.shared.routes) { route in
+                if isActive { router.route(to: route) }
+            }
     }
 }

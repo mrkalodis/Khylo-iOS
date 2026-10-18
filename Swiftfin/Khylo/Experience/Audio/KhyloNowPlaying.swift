@@ -275,10 +275,23 @@ struct KhyloNowPlayingScreen: View {
                     .font(.system(size: 23, weight: .bold))
                     .foregroundColor(.white)
                     .lineLimit(1)
-                Text(player.displaySubtitle)
+                if player.kind == .music, let track = player.current, !track.khyloArtistLinks.isEmpty {
+                    // Tap an artist to go to their page, like Spotify.
+                    KhyloArtistLinks(artists: track.khyloArtistLinks, fallback: player.displaySubtitle) { artistID in
+                        dismiss()
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(350))
+                            KhyloPageRelay.shared.openArtist(id: artistID)
+                        }
+                    }
                     .font(.system(size: 17))
                     .foregroundColor(.white.opacity(0.7))
-                    .lineLimit(1)
+                } else {
+                    Text(player.displaySubtitle)
+                        .font(.system(size: 17))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

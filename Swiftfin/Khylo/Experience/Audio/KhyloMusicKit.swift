@@ -203,3 +203,57 @@ extension BaseItemDto {
         return albumArtist ?? ""
     }
 }
+
+// MARK: - Artist links
+
+extension BaseItemDto {
+    /// The song's artists with their IDs, for linking to artist pages: the
+    /// track's own artists first, else the album artists.
+    var khyloArtistLinks: [NameIDPair] {
+        let own = (artistItems ?? []).filter { $0.id != nil }
+        if !own.isEmpty { return own }
+        return (albumArtists ?? []).filter { $0.id != nil }
+    }
+}
+
+/// An artist line where the name opens the artist's page. With several
+/// artists, a tap offers a short menu to pick one.
+struct KhyloArtistLinks: View {
+    let artists: [NameIDPair]
+    /// Shown as plain text when there's nothing to link to.
+    let fallback: String
+    let open: (String) -> Void
+
+    private var label: String {
+        let names = artists.compactMap(\.name)
+        return names.isEmpty ? fallback : names.joined(separator: ", ")
+    }
+
+    var body: some View {
+        if artists.count > 1 {
+            Menu {
+                ForEach(artists, id: \.id) { artist in
+                    Button {
+                        if let id = artist.id { open(id) }
+                    } label: {
+                        Label(artist.name ?? "Artist", systemImage: "music.mic")
+                    }
+                }
+            } label: {
+                Text(label).lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Shows the artists' pages")
+        } else if let id = artists.first?.id {
+            Text(label)
+                .lineLimit(1)
+                .contentShape(Rectangle())
+                // Wins over the row's own tap, so the name opens the artist instead of playing.
+                .highPriorityGesture(TapGesture().onEnded { open(id) })
+                .accessibilityAddTraits(.isLink)
+                .accessibilityHint("Opens the artist's page")
+        } else {
+            Text(fallback).lineLimit(1)
+        }
+    }
+}
