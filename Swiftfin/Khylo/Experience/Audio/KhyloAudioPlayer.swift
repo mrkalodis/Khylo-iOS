@@ -9,6 +9,7 @@
 import AVFoundation
 import Combine
 import JellyfinAPI
+import Logging
 import MediaPlayer
 import UIKit
 
@@ -119,6 +120,14 @@ final class KhyloAudioPlayer: ObservableObject {
     private weak var startedItem: AVPlayerItem?
     /// Waiting for the sign-in token (the phone was locked) before starting a song.
     private var tokenWaitTask: Task<Void, Never>?
+    /// Notices a song that loaded but never started.
+    private var startWatchdog: Task<Void, Never>?
+    /// The song that has actually made sound.
+    private weak var playingItem: AVPlayerItem?
+    /// After a stream stalls or fails, the song is retried as one plain MP3
+    /// stream instead of HLS.
+    private var usePlainStream = false
+    private let logger = Logger.swiftfin()
     private var lastReport = Date.distantPast
     private var sleepTask: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
@@ -141,6 +150,7 @@ final class KhyloAudioPlayer: ObservableObject {
             .sink { [weak self] status in
                 let buffering = status == .waitingToPlayAtSpecifiedRate
                 if self?.isBuffering != buffering { self?.isBuffering = buffering }
+                if status == .playing { self?.playingItem = self?.player.currentItem }
             }
         itemCancellable = player.publisher(for: \.currentItem)
             .receive(on: DispatchQueue.main)
@@ -389,6 +399,7 @@ final class KhyloAudioPlayer: ObservableObject {
 
     func stop() {
         tokenWaitTask?.cancel()
+        startWatchdog?.cancel()
         reportStopped()
         preloaded = nil
         player.removeAllItems()
@@ -422,7 +433,10 @@ final class KhyloAudioPlayer: ObservableObject {
 
     private func load(index newIndex: Int, startTicks: Int?) {
         // A different song starts fresh; reloading the same one keeps its retry count.
-        if newIndex != index || current?.id != queue[safe: newIndex]?.id { retries = 0 }
+        if newIndex != index || current?.id != queue[safe: newIndex]?.id {
+            retries = 0
+            usePlainStream = false
+        }
         index = newIndex
         tokenWaitTask?.cancel()
         guard let item = current else { return }
@@ -452,7 +466,47 @@ final class KhyloAudioPlayer: ObservableObject {
         // play() (not playImmediately) lets the player buffer enough to avoid stutter.
         player.play()
         isPlaying = true
+        logger.info("Music: loading \(item.name ?? "") from \(url.isFileURL ? "download" : (usePlainStream ? "plain stream" : "stream"))")
+        armStartWatchdog(for: playerItem)
         trackDidStart()
+    }
+
+    /// A song that loads its playlist but never asks for any audio would spin
+    /// forever. If it hasn't started after a while, treat it as failed: the
+    /// retry opens a fresh, plain stream.
+    private func armStartWatchdog(for item: AVPlayerItem) {
+        startWatchdog?.cancel()
+        startWatchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(15))
+            guard let self, !Task.isCancelled, item === self.activeItem,
+                  self.isPlaying, self.playingItem !== item
+            else { return }
+            self.logger.warning(
+                "Music: song didn't start within 15s",
+                metadata: [
+                    "status": "\(item.status.rawValue)",
+                    "waiting": "\(self.player.reasonForWaitingToPlay?.rawValue ?? "none")",
+                    "details": "\(Self.describe(item))",
+                ]
+            )
+            self.usePlainStream = true
+            self.recoverFromFailure(item)
+        }
+    }
+
+    /// What the player saw of a stream, for the log.
+    private static func describe(_ item: AVPlayerItem) -> String {
+        var parts: [String] = []
+        if let error = item.error as NSError? {
+            parts.append("error \(error.domain) \(error.code): \(error.localizedDescription)")
+        }
+        for event in item.errorLog()?.events.suffix(3) ?? [] {
+            parts.append("errorLog \(event.errorStatusCode) \(event.errorDomain): \(event.errorComment ?? "")")
+        }
+        if let access = item.accessLog()?.events.last {
+            parts.append("access requests=\(access.numberOfMediaRequests) bytes=\(access.numberOfBytesTransferred) uri=\(access.uri?.components(separatedBy: "?").first ?? "")")
+        }
+        return parts.isEmpty ? "nothing logged" : parts.joined(separator: " | ")
     }
 
     /// The sign-in token couldn't be read yet (e.g. right after a restart, before
@@ -495,8 +549,12 @@ final class KhyloAudioPlayer: ObservableObject {
     private func recoverFromFailure(_ item: AVPlayerItem?) {
         guard isActive, let item, item === activeItem, item !== handledItem else { return }
         handledItem = item
+        startWatchdog?.cancel()
         let position = currentTime
         let rejected = Self.wasRejected(item)
+        logger.warning("Music: stream failed", metadata: ["details": "\(Self.describe(item))"])
+        // Anything but a refused link: try the plain stream next time.
+        if !rejected { usePlainStream = true }
         if retries < 3 {
             retries += 1
             // A refused link is rebuilt with the current token right away; a dropped
@@ -706,9 +764,17 @@ final class KhyloAudioPlayer: ObservableObject {
         parameters.userID = session.user.id
         parameters.deviceID = UIDevice.current.identifierForVendor?.uuidString
         parameters.maxStreamingBitrate = 320_000_000
-        parameters.transcodingContainer = "mp4"
-        parameters.transcodingProtocol = .hls
-        parameters.audioCodec = "aac"
+        if usePlainStream {
+            // One continuous MP3 stream: plays anywhere, nothing to piece together.
+            parameters.transcodingContainer = "mp3"
+            parameters.transcodingProtocol = .http
+            parameters.audioCodec = "mp3"
+        } else {
+            // HLS made of MPEG-TS segments, the kind iPhone has always played reliably.
+            parameters.transcodingContainer = "ts"
+            parameters.transcodingProtocol = .hls
+            parameters.audioCodec = "aac"
+        }
         guard let base = session.client.url(with: Paths.getUniversalAudioStream(itemID: id, parameters: parameters)),
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
         else { return nil }
