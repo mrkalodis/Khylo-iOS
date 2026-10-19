@@ -127,6 +127,8 @@ final class KhyloAudioPlayer: ObservableObject {
     /// After a stream stalls or fails, the song is retried as one plain MP3
     /// stream instead of HLS.
     private var usePlainStream = false
+    /// Which load is current, so a slow lookup can't start an old song.
+    private var loadGeneration: UUID?
     private let logger = Logger.swiftfin()
     private var lastReport = Date.distantPast
     private var sleepTask: Task<Void, Never>?
@@ -400,6 +402,7 @@ final class KhyloAudioPlayer: ObservableObject {
     func stop() {
         tokenWaitTask?.cancel()
         startWatchdog?.cancel()
+        loadGeneration = nil
         reportStopped()
         preloaded = nil
         player.removeAllItems()
@@ -451,24 +454,80 @@ final class KhyloAudioPlayer: ObservableObject {
         currentTime = start
         playSessionID = UUID().uuidString
 
-        let playerItem = makePlayerItem(url)
         preloaded = nil
         player.removeAllItems()
-        player.insert(playerItem, after: nil)
-        activeItem = playerItem
+        activeItem = nil
         waitingForAutoplay = false
-        if start > 1 {
-            player.seek(to: CMTime(seconds: start, preferredTimescale: 600))
-        }
         activateSession()
         claimRemoteCommands()
         player.defaultRate = rate
-        // play() (not playImmediately) lets the player buffer enough to avoid stutter.
-        player.play()
         isPlaying = true
-        logger.info("Music: loading \(item.name ?? "") from \(url.isFileURL ? "download" : (usePlainStream ? "plain stream" : "stream"))")
-        armStartWatchdog(for: playerItem)
+        isBuffering = true
+        let generation = UUID()
+        loadGeneration = generation
+        let name = item.name ?? ""
+
+        if url.isFileURL || usePlainStream {
+            attach(url, start: start, name: name)
+        } else {
+            // Find out what the server will send before handing it to the player.
+            Task { @MainActor [weak self] in
+                let resolved = await Self.resolveStream(url)
+                guard let self, self.loadGeneration == generation, self.isActive else { return }
+                self.attach(resolved.url, start: start, name: name, note: resolved.note)
+            }
+        }
         trackDidStart()
+    }
+
+    /// Puts a song's stream into the player and starts it.
+    private func attach(_ url: URL, start: Double, name: String, note: String? = nil) {
+        let playerItem = makePlayerItem(url)
+        player.removeAllItems()
+        player.insert(playerItem, after: nil)
+        activeItem = playerItem
+        if start > 1 {
+            player.seek(to: CMTime(seconds: start, preferredTimescale: 600))
+        }
+        // Paused while the stream was being looked up: stay paused.
+        if isPlaying {
+            // play() (not playImmediately) lets the player buffer enough to avoid stutter.
+            player.play()
+        }
+        let source = url.isFileURL ? "download" : (usePlainStream ? "plain stream" : (note ?? "stream"))
+        logger.info("Music: loading \(name) from \(source)")
+        armStartWatchdog(for: playerItem)
+    }
+
+    /// When the server converts a song it answers with an HLS master playlist.
+    /// Apple's player can sit on that master forever without asking for any
+    /// audio, while the media playlist inside it starts at once. So: ask the
+    /// server (headers only) what it will send, and for HLS hand the player the
+    /// media playlist directly. Songs that stream as they are stay untouched.
+    private static func resolveStream(_ url: URL) async -> (url: URL, note: String) {
+        var head = URLRequest(url: url)
+        head.httpMethod = "HEAD"
+        head.timeoutInterval = 8
+        guard let (_, response) = try? await URLSession.shared.data(for: head),
+              let http = response as? HTTPURLResponse, http.statusCode == 200
+        else { return (url, "stream (unchecked)") }
+        let type = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
+        guard type.contains("mpegurl") else { return (url, "direct stream") }
+
+        var get = URLRequest(url: url)
+        get.timeoutInterval = 8
+        guard let (data, _) = try? await URLSession.shared.data(for: get),
+              let text = String(data: data, encoding: .utf8)
+        else { return (url, "hls master (unread)") }
+        let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let infIndex = lines.firstIndex(where: { $0.hasPrefix("#EXT-X-STREAM-INF") }),
+              let variant = lines[(infIndex + 1)...].first(where: { !$0.isEmpty && !$0.hasPrefix("#") }),
+              let media = URL(string: variant, relativeTo: url)?.absoluteURL
+        else {
+            // Already a media playlist.
+            return (url, "hls")
+        }
+        return (media, "hls media playlist")
     }
 
     /// A song that loads its playlist but never asks for any audio would spin
@@ -477,12 +536,12 @@ final class KhyloAudioPlayer: ObservableObject {
     private func armStartWatchdog(for item: AVPlayerItem) {
         startWatchdog?.cancel()
         startWatchdog = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(15))
+            try? await Task.sleep(for: .seconds(10))
             guard let self, !Task.isCancelled, item === self.activeItem,
                   self.isPlaying, self.playingItem !== item
             else { return }
             self.logger.warning(
-                "Music: song didn't start within 15s",
+                "Music: song didn't start within 10s",
                 metadata: [
                     "status": "\(item.status.rawValue)",
                     "waiting": "\(self.player.reasonForWaitingToPlay?.rawValue ?? "none")",
