@@ -90,19 +90,49 @@ enum KhyloPlayback {
         from start: StartPoint = .resume,
         router: Router.Wrapper
     ) async throws {
-        var playable = try await playableItem(for: item)
+        let downloads = KhyloDownloads.shared
+
+        // Downloaded titles play from the phone; nothing needs the connection.
+        if item.type != .series, item.type != .season, !KhyloNetwork.shared.isOnline,
+           let provider = downloads.offlineProvider(for: item, from: start) {
+            router.route(to: .videoPlayer(provider: provider, queue: nil))
+            return
+        }
+
+        var playable: BaseItemDto
+        do {
+            playable = try await playableItem(for: item)
+        } catch {
+            // No connection: carry on with what's downloaded.
+            let local = downloads.nextDownloadedEpisode(in: item) ?? item
+            if let provider = downloads.offlineProvider(for: local, from: start) {
+                router.route(to: .videoPlayer(provider: provider, queue: nil))
+                return
+            }
+            throw error
+        }
 
         if start == .beginning {
             playable.userData?.playbackPositionTicks = 0
         }
 
-        guard let provider = playable.getPlaybackItemProvider(userSession: KhyloAPI.session) else {
-            throw PlaybackError.unavailable
-        }
-
         let queue: (any MediaPlayerQueue)? = playable.type == .episode
             ? EpisodeMediaPlayerQueue(episode: playable)
             : nil
+
+        if playable.type == .episode {
+            Task { await downloads.prepareNextEpisodes(after: playable) }
+        }
+
+        // The downloaded copy plays first; streaming only when it isn't downloaded.
+        if let provider = downloads.offlineProvider(for: playable, from: start) {
+            router.route(to: .videoPlayer(provider: provider, queue: queue))
+            return
+        }
+
+        guard let provider = playable.getPlaybackItemProvider(userSession: KhyloAPI.session) else {
+            throw PlaybackError.unavailable
+        }
 
         router.route(to: .videoPlayer(provider: provider, queue: queue))
     }

@@ -56,7 +56,12 @@ enum KhyloBook {
 
         if !fileManager.fileExists(atPath: file.path) {
             try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
-            try await download(itemID: itemID, to: file, progress: progress)
+            if let downloaded = KhyloDownloads.storedFile(itemID: itemID) {
+                // Downloaded for offline reading: open that copy.
+                try fileManager.copyItem(at: downloaded, to: file)
+            } else {
+                try await download(itemID: itemID, to: file, progress: progress)
+            }
         }
 
         let data = try Data(contentsOf: file, options: .mappedIfSafe)

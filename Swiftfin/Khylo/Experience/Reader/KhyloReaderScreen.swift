@@ -1013,6 +1013,7 @@ struct KhyloBookScreen: View {
                             }
                         }
                     }
+                    KhyloDownloadButton(item: book)
                 }
 
                 if let overview = book.overview, !overview.isEmpty {

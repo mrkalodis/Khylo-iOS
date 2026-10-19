@@ -42,6 +42,11 @@ struct KhyloProfileScreen: View {
                     .padding(.vertical, 6)
                 }
 
+                KhyloDownloadSettingsSection {
+                    dismiss()
+                    KhyloPageRelay.shared.showDownloads.send()
+                }
+
                 Section("Server") {
                     LabeledContent("Name", value: session?.server.name ?? "–")
                     LabeledContent("Address", value: session?.server.effectiveServerURL.host() ?? "–")

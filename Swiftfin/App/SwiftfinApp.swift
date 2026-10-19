@@ -13,6 +13,9 @@ import UIKit
 @main
 struct SwiftfinApp: App {
 
+    @UIApplicationDelegateAdaptor(KhyloAppDelegate.self)
+    private var appDelegate
+
     init() {
         Self.configure()
 
@@ -36,6 +39,32 @@ struct SwiftfinApp: App {
             }
             .ignoresSafeArea()
         }
+    }
+}
+
+/// Hands finished background downloads back to Khylo when the system wakes it.
+final class KhyloAppDelegate: NSObject, UIApplicationDelegate {
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Reconnects to downloads that carried on while Khylo was closed.
+        _ = KhyloNetwork.shared
+        _ = KhyloDownloads.shared
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        handleEventsForBackgroundURLSession identifier: String,
+        completionHandler: @escaping () -> Void
+    ) {
+        guard identifier == KhyloDownloads.sessionIdentifier else {
+            completionHandler()
+            return
+        }
+        KhyloDownloads.shared.backgroundCompletion = completionHandler
     }
 }
 

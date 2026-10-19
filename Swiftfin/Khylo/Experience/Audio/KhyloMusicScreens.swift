@@ -319,6 +319,7 @@ struct KhyloTrackRow: View {
     let action: () -> Void
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
+    @ObservedObject private var downloads = KhyloDownloads.shared
     @Router private var router
 
     private var isCurrent: Bool { player.current?.id == track.id }
@@ -345,6 +346,13 @@ struct KhyloTrackRow: View {
                 }
 
                 Spacer(minLength: 8)
+
+                if downloads.isDownloaded(track.id) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(KhyloStyle.accent)
+                        .accessibilityLabel("Downloaded")
+                }
 
                 Text(track.khyloRuntimeClock ?? "")
                     .font(.system(size: 13).monospacedDigit())
@@ -635,6 +643,8 @@ struct KhyloAlbumScreen: View {
                 }
                 .buttonStyle(KhyloScaleButtonStyle())
                 .accessibilityLabel(album.khyloIsFavorite ? "Remove from favorites" : "Add to favorites")
+
+                KhyloDownloadButton(item: album, style: .icon)
 
                 Spacer()
 

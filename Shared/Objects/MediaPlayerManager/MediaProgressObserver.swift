@@ -111,7 +111,19 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         }
     }
 
+    /// A video playing from a downloaded file also keeps its progress on the
+    /// phone, so it's saved without a connection and sent to the server later.
+    private func recordOffline(_ item: MediaPlayerItem, seconds: Duration?, isFinal: Bool) {
+        guard item.url.isFileURL, let id = item.baseItem.id, let seconds else { return }
+        NotificationCenter.default.post(
+            name: .khyloOfflineProgress,
+            object: nil,
+            userInfo: ["itemID": id, "ticks": seconds.ticks, "final": isFinal]
+        )
+    }
+
     private func sendStartReport(for item: MediaPlayerItem, seconds: Duration?) {
+        recordOffline(item, seconds: seconds, isFinal: false)
 
         #if DEBUG
         guard Defaults[.sendProgressReports] else { return }
@@ -136,6 +148,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     }
 
     private func sendStopReport(for item: MediaPlayerItem, seconds: Duration?) {
+        recordOffline(item, seconds: seconds, isFinal: true)
 
         #if DEBUG
         guard Defaults[.sendProgressReports] else { return }
@@ -156,6 +169,7 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     }
 
     private func sendProgressReport(for item: MediaPlayerItem, seconds: Duration?, isPaused: Bool = false) {
+        recordOffline(item, seconds: seconds, isFinal: false)
 
         #if DEBUG
         guard Defaults[.sendProgressReports] else { return }

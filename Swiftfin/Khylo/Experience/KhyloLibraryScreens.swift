@@ -18,6 +18,7 @@ final class KhyloLibraryStore: ObservableObject {
 
     static let shared = KhyloLibraryStore()
     static let favoritesID = "khylo-favorites"
+    static let downloadsID = "khylo-downloads"
 
     @Published private(set) var libraries: [BaseItemDto] = []
     @Published private(set) var isLoading = true
@@ -32,6 +33,7 @@ final class KhyloLibraryStore: ObservableObject {
     }
 
     var isFavoritesSelected: Bool { selectedID == Self.favoritesID }
+    var isDownloadsSelected: Bool { selectedID == Self.downloadsID }
 
     func load() async {
         do {
@@ -62,7 +64,11 @@ struct KhyloLibrariesScreen: View {
         ZStack {
             KhyloStyle.canvas.ignoresSafeArea()
 
-            if store.isLoading {
+            if store.isDownloadsSelected {
+                // On the phone, so it works without a connection.
+                KhyloDownloadsScreen { header(title: "Downloads") }
+                    .id(KhyloLibraryStore.downloadsID)
+            } else if store.isLoading {
                 KhyloLoadingState()
             } else if store.libraries.isEmpty {
                 KhyloEmptyState(
@@ -145,6 +151,7 @@ struct KhyloLibrariesScreen: View {
 struct KhyloLibraryPickerSheet: View {
 
     @ObservedObject private var store = KhyloLibraryStore.shared
+    @ObservedObject private var downloads = KhyloDownloads.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -162,7 +169,7 @@ struct KhyloLibraryPickerSheet: View {
                             title: library.name ?? "",
                             subtitle: subtitle(for: library),
                             symbol: KhyloLibraryKind(library).symbol,
-                            isSelected: !store.isFavoritesSelected && store.selected?.id == library.id
+                            isSelected: !store.isFavoritesSelected && !store.isDownloadsSelected && store.selected?.id == library.id
                         ) {
                             store.select(library.id ?? "")
                         }
@@ -175,6 +182,19 @@ struct KhyloLibraryPickerSheet: View {
                         isSelected: store.isFavoritesSelected
                     ) {
                         store.select(KhyloLibraryStore.favoritesID)
+                    }
+
+                    if KhyloDownloads.isAllowed || downloads.hasDownloads {
+                        row(
+                            title: "Downloads",
+                            subtitle: downloads.hasDownloads
+                                ? "On this iPhone · \(ByteCountFormatter.string(fromByteCount: downloads.usedBytes, countStyle: .file))"
+                                : "Watch and listen offline",
+                            symbol: "arrow.down.circle.fill",
+                            isSelected: store.isDownloadsSelected
+                        ) {
+                            store.select(KhyloLibraryStore.downloadsID)
+                        }
                     }
                 }
                 .padding(.horizontal, 12)

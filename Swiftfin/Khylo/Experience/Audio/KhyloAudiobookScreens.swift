@@ -245,6 +245,11 @@ struct KhyloAudiobookScreen: View {
             .disabled(parts.isEmpty)
             .padding(.horizontal, KhyloStyle.gutter)
             .padding(.top, 6)
+
+            if !parts.isEmpty {
+                KhyloDownloadButton(item: book, audiobookParts: parts)
+                    .padding(.top, 4)
+            }
         }
     }
 

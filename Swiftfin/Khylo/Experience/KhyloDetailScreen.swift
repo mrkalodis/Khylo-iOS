@@ -331,6 +331,7 @@ struct KhyloDetailScreen: View {
                 ) {
                     Task { await model.toggleFavorite() }
                 }
+                KhyloDownloadButton(item: item)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 4)
@@ -387,6 +388,7 @@ struct KhyloDetailScreen: View {
 
     private var episodesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(model.seasons, id: \.id) { season in
@@ -407,7 +409,14 @@ struct KhyloDetailScreen: View {
                 }
                 .padding(.horizontal, KhyloStyle.gutter)
             }
-            .padding(.horizontal, -KhyloStyle.gutter)
+
+            // Downloads the season that's showing.
+            if let season = model.seasons.first(where: { $0.id == model.selectedSeasonID }) {
+                KhyloDownloadButton(item: season, style: .compact)
+                    .padding(.leading, 4)
+            }
+            }
+            .padding(.leading, -KhyloStyle.gutter)
 
             if model.isLoadingEpisodes {
                 ProgressView().tint(.white).frame(maxWidth: .infinity).padding(.vertical, 30)
@@ -524,6 +533,7 @@ struct KhyloEpisodeRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 4) {
             Button(action: play) {
                 HStack(spacing: 14) {
                     ZStack {
@@ -569,6 +579,9 @@ struct KhyloEpisodeRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(KhyloScaleButtonStyle())
+
+            KhyloDownloadButton(item: episode, style: .compact)
+            }
 
             if let overview = episode.overview, !overview.isEmpty {
                 Text(overview)

@@ -44,4 +44,6 @@ enum MediaPlayerLiveEdge {
 extension Notification.Name {
     /// Posted when the video player opens, so other audio (music) can stop.
     static let khyloVideoWillPlay = Notification.Name("khyloVideoWillPlay")
+    /// Progress in a video playing from a downloaded file (userInfo: itemID, ticks, final).
+    static let khyloOfflineProgress = Notification.Name("khyloOfflineProgress")
 }

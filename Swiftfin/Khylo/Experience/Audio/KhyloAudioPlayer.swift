@@ -432,7 +432,7 @@ final class KhyloAudioPlayer: ObservableObject {
             return
         }
 
-        let start = Double(startTicks ?? item.userData?.playbackPositionTicks ?? 0) / 10_000_000
+        let start = Double(startTicks ?? KhyloDownloads.shared.resumeTicks(for: item) ?? 0) / 10_000_000
         duration = Double(item.runTimeTicks ?? 0) / 10_000_000
         currentTime = start
         playSessionID = UUID().uuidString
@@ -661,7 +661,8 @@ final class KhyloAudioPlayer: ObservableObject {
     /// its artist), falling back to more by the same artist.
     private func extendQueueIfNeeded() {
         guard kind == .music, repeatMode == .off, !isExtendingQueue,
-              index >= queue.count - 1, let seed = current
+              index >= queue.count - 1, let seed = current,
+              KhyloNetwork.shared.isOnline
         else { return }
         isExtendingQueue = true
         Task { @MainActor [weak self] in
@@ -693,6 +694,10 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     private func streamURL(for item: BaseItemDto) -> URL? {
+        // A downloaded copy plays first; streaming only when it isn't downloaded.
+        if let id = item.id, let file = KhyloDownloads.shared.fileURL(for: id) {
+            return file
+        }
         guard let session = KhyloAPI.session, let id = item.id,
               let token = KhyloAPI.accessToken
         else { return nil }
@@ -746,6 +751,13 @@ final class KhyloAudioPlayer: ObservableObject {
         return info
     }
 
+    /// Downloaded songs and audiobooks keep their progress on the phone too, so
+    /// it's saved without a connection and sent to the server later.
+    private func recordOffline(isFinal: Bool) {
+        guard let id = current?.id, KhyloDownloads.shared.isDownloaded(id) else { return }
+        KhyloDownloads.shared.record(itemID: id, ticks: Int(currentTime * 10_000_000), isFinal: isFinal)
+    }
+
     private func reportStart() {
         guard let info = stateInfo(), let client = KhyloAPI.session?.client else { return }
         lastReport = Date()
@@ -759,6 +771,7 @@ final class KhyloAudioPlayer: ObservableObject {
               let client = KhyloAPI.session?.client
         else { return }
         lastReport = Date()
+        recordOffline(isFinal: false)
         Task { _ = try? await client.send(Paths.reportPlaybackProgress(info)) }
     }
 
@@ -766,6 +779,7 @@ final class KhyloAudioPlayer: ObservableObject {
         // A stream that never opened was never reported as playing.
         guard startedItem != nil, startedItem === activeItem else { return }
         startedItem = nil
+        recordOffline(isFinal: true)
         guard let item = current, let client = KhyloAPI.session?.client else { return }
         var info = PlaybackStopInfo()
         info.itemID = item.id
@@ -845,6 +859,8 @@ final class KhyloAudioPlayer: ObservableObject {
     /// Album cover for music (per track); the book's cover for audiobooks.
     func displayArtworkURL(width: CGFloat) -> URL? {
         guard let item = current else { return nil }
+        // Saved artwork works offline.
+        if let local = KhyloDownloads.shared.artworkURL(for: item.id) { return local }
         if kind == .audiobook, let artworkURL { return artworkURL }
         return KhyloArtwork.url(for: item, style: .square, width: width) ?? artworkURL
     }

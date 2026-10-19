@@ -97,8 +97,21 @@ struct KhyloAppView: View {
                 hasKhyloTV = !channels.isEmpty
             }
         }
+        .onReceive(KhyloPageRelay.shared.showDownloads) { _ in
+            libraryStore.selectedID = KhyloLibraryStore.downloadsID
+            selection = .libraries
+        }
+        .task {
+            KhyloDownloads.shared.reconnect()
+            await KhyloDownloads.shared.syncProgress()
+        }
         .task {
             await libraryStore.load()
+            // No connection: open straight onto what's downloaded.
+            if libraryStore.errorMessage != nil, KhyloDownloads.shared.hasDownloads {
+                libraryStore.selectedID = KhyloLibraryStore.downloadsID
+                selection = .libraries
+            }
             // Only update on a successful answer; retry a few times if the server is slow.
             for attempt in 0 ..< 3 {
                 if let channels = try? await KhyloAPI.channels(limit: 1) {
@@ -165,6 +178,8 @@ final class KhyloPageRelay {
     static let shared = KhyloPageRelay()
 
     let routes = PassthroughSubject<NavigationRoute, Never>()
+    /// Switches to the Downloads page in the Libraries tab.
+    let showDownloads = PassthroughSubject<Void, Never>()
 
     func open(_ route: NavigationRoute) {
         routes.send(route)
