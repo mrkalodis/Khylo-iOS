@@ -496,6 +496,7 @@ struct KhyloAlbumScreen: View {
     @State private var moreByArtist: [BaseItemDto] = []
     @State private var tint: Color?
     @State private var isLoading = true
+    @State private var pageWidth: CGFloat = UIScreen.main.bounds.width
     @ObservedObject private var player = KhyloAudioPlayer.shared
     @Router private var router
 
@@ -524,6 +525,7 @@ struct KhyloAlbumScreen: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.bottom, 18)
+                    .background(alignment: .top) { coverBackdrop }
 
                 if isLoading {
                     ProgressView().tint(.white).frame(maxWidth: .infinity).padding(.top, 30)
@@ -534,25 +536,67 @@ struct KhyloAlbumScreen: View {
             }
             .padding(.bottom, 40)
         }
-        .background(KhyloTintedBackdrop(color: tint, height: 560))
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { pageWidth = $0 }
+        .background(KhyloTintedBackdrop(color: tint, height: 620))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .task { await load() }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            KhyloImage(url: coverURL, placeholderSymbol: "music.note")
-                .frame(width: 250, height: 250)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .shadow(color: .black.opacity(0.55), radius: 28, y: 14)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 64)
+    /// The album's own cover, enlarged and softly blurred behind the top of the
+    /// page, fading into the album's colour.
+    private var coverBackdrop: some View {
+        KhyloImage(url: KhyloArtwork.url(for: album, style: .square, width: 300), showsPlaceholder: false)
+            .frame(height: 640)
+            .frame(maxWidth: .infinity)
+            .scaleEffect(1.35)
+            .blur(radius: 46)
+            .saturation(1.25)
+            .opacity(0.6)
+            .clipped()
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black.opacity(0.85), location: 0.5),
+                        .init(color: .clear, location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .padding(.top, -160)
+            .allowsHitTesting(false)
+    }
 
-            VStack(alignment: .leading, spacing: 6) {
+    private var coverSize: CGFloat {
+        min(max(pageWidth - 72, 220), 340)
+    }
+
+    private var header: some View {
+        VStack(alignment: .center, spacing: 18) {
+            KhyloImage(url: coverURL, placeholderSymbol: "music.note")
+                .frame(width: coverSize, height: coverSize)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.6), radius: 34, y: 18)
+                // Eases back a little as the page scrolls up.
+                .scrollTransition(.interactive, axis: .vertical) { content, phase in
+                    content
+                        .scaleEffect(phase.value < 0 ? 1 + phase.value * 0.12 : 1)
+                        .opacity(phase.value < 0 ? 1 + phase.value * 0.5 : 1)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 70)
+
+            VStack(alignment: .center, spacing: 7) {
                 Text(album.name ?? "")
-                    .font(.system(size: 24, weight: .bold))
+                    .font(.system(size: 26, weight: .bold))
                     .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
                     .lineLimit(3)
 
                 Button {
@@ -787,7 +831,7 @@ struct KhyloArtistScreen: View {
 
     private var hero: some View {
         ZStack(alignment: .bottomLeading) {
-            Color.clear.frame(height: 400)
+            Color.clear.frame(height: 420)
                 .overlay {
                     if let heroURL {
                         KhyloImage(url: heroURL, showsPlaceholder: false)
@@ -797,17 +841,33 @@ struct KhyloArtistScreen: View {
                     }
                 }
                 .clipped()
+                // The picture itself fades away into the page, so there's no edge.
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0),
+                            .init(color: .black, location: 0.45),
+                            .init(color: .black.opacity(0.55), location: 0.72),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
 
+            // A soft shade at the top for the status bar and behind the name for legibility.
             LinearGradient(
                 stops: [
                     .init(color: .black.opacity(0.35), location: 0),
-                    .init(color: .clear, location: 0.3),
-                    .init(color: (tint ?? KhyloStyle.canvas).opacity(0.6), location: 0.75),
-                    .init(color: tint ?? KhyloStyle.canvas, location: 1),
+                    .init(color: .clear, location: 0.28),
+                    .init(color: .clear, location: 0.55),
+                    .init(color: .black.opacity(0.28), location: 0.85),
+                    .init(color: .clear, location: 1),
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
+            .allowsHitTesting(false)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(artist.name ?? "")
@@ -815,17 +875,18 @@ struct KhyloArtistScreen: View {
                     .foregroundColor(.white)
                     .lineLimit(2)
                     .minimumScaleFactor(0.6)
-                    .shadow(color: .black.opacity(0.3), radius: 8, y: 2)
+                    .shadow(color: .black.opacity(0.35), radius: 10, y: 2)
                 if !stats.isEmpty {
                     Text(stats)
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.75))
+                        .foregroundColor(.white.opacity(0.8))
+                        .shadow(color: .black.opacity(0.3), radius: 6, y: 1)
                 }
             }
             .padding(.horizontal, KhyloStyle.gutter)
-            .padding(.bottom, 18)
+            .padding(.bottom, 22)
         }
-        .frame(height: 400)
+        .frame(height: 420)
     }
 
     private var stats: String {
