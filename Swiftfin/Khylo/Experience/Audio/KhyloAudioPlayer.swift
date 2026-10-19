@@ -442,6 +442,8 @@ final class KhyloAudioPlayer: ObservableObject {
     /// Plays the track at `newIndex` again from `seconds`, with a fresh connection.
     private func reload(at seconds: Double) {
         let wasPlaying = isPlaying
+        // Tell the server the broken stream is over before opening a new one.
+        reportStopped()
         load(index: index, startTicks: Int(seconds * 10_000_000))
         if !wasPlaying { pause() }
     }
@@ -455,9 +457,10 @@ final class KhyloAudioPlayer: ObservableObject {
         let position = currentTime
         if retries < 3 {
             retries += 1
+            let wait: Double = [2, 5, 10][min(retries - 1, 2)]
             Task { @MainActor [weak self] in
-                // A moment for the connection to come back.
-                try? await Task.sleep(for: .seconds(Double(self?.retries ?? 1)))
+                // Give the connection (or the server) time to come back.
+                try? await Task.sleep(for: .seconds(wait))
                 guard let self, self.isActive else { return }
                 self.reload(at: position)
             }
@@ -510,10 +513,8 @@ final class KhyloAudioPlayer: ObservableObject {
         }
     }
 
-    /// Seconds before the end of a track when the next one starts loading. Late
-    /// enough that the connection is fresh and the server isn't asked for two
-    /// songs at once; early enough that the next song starts without a gap.
-    private static let preloadLead: Double = 20
+    // The next song is not loaded ahead: the server only ever sees one stream
+    // from this phone, so its stream limits never refuse the song that's next.
 
     /// Puts the next track into the player so it starts without a gap.
     private func preloadNext() {
@@ -561,7 +562,13 @@ final class KhyloAudioPlayer: ObservableObject {
         let reached = currentTime
         if expected > 30, reached < expected - 10, retries < 3 {
             retries += 1
-            reload(at: reached)
+            let wait: Double = [2, 5, 10][min(retries - 1, 2)]
+            isBuffering = true
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(wait))
+                guard let self, self.isActive, self.activeItem === ended else { return }
+                self.reload(at: reached)
+            }
             return
         }
 
@@ -661,10 +668,6 @@ final class KhyloAudioPlayer: ObservableObject {
         if player.timeControlStatus == .playing, seconds > 3 {
             retries = 0
             failedInARow = 0
-        }
-        if preloaded == nil, isPlaying, duration > 0, duration - seconds <= Self.preloadLead,
-           player.currentItem?.status == .readyToPlay {
-            preloadNext()
         }
         report(force: false)
     }
