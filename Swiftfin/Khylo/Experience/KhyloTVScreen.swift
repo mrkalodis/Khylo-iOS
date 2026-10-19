@@ -290,11 +290,11 @@ final class KhyloTVSession {
 enum KhyloTVArt {
     /// A network channel's official logo, served by the server.
     static func channelLogo(_ channelID: String) -> URL? {
-        guard let session = KhyloAPI.session,
+        guard let session = KhyloAPI.session, let token = KhyloAPI.accessToken,
               let base = session.client.url(with: Request<Data>(path: "/LiveChannels/\(channelID)/Logo")),
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
         else { return nil }
-        components.queryItems = [URLQueryItem(name: "api_key", value: session.user.accessToken)]
+        components.queryItems = [URLQueryItem(name: "api_key", value: token)]
         return components.url
     }
 

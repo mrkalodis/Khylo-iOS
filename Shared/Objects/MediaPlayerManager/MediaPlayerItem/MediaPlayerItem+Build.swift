@@ -202,7 +202,7 @@ extension MediaPlayerItem {
                 throw ErrorMessage("Unable to make transcoding URL")
             }
 
-            return url
+            return try withAccessToken(url, userSession: userSession)
         }
 
         if item.mediaType == .video {
@@ -225,7 +225,7 @@ extension MediaPlayerItem {
             guard let videoStreamURL = userSession.client.url(with: videoStreamRequest)
             else { throw ErrorMessage("Unable to make video stream URL") }
 
-            return videoStreamURL
+            return try withAccessToken(videoStreamURL, userSession: userSession)
         }
 
         logger.trace("Using media source path for item \(itemID)")
@@ -235,5 +235,21 @@ extension MediaPlayerItem {
         ) else { throw ErrorMessage("Unable to make stream URL") }
 
         return streamURL
+    }
+
+    /// Puts the current sign-in token on a server stream link, replacing any
+    /// (possibly empty) one already there. A stream never starts without a token:
+    /// the server would refuse it.
+    private static func withAccessToken(_ url: URL, userSession: UserSession) throws -> URL {
+        guard let token = userSession.client.accessToken, !token.isEmpty else {
+            throw ErrorMessage("Still signing in. Try again in a moment.")
+        }
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        var items = (components.percentEncodedQueryItems ?? []).filter {
+            !["api_key", "apikey"].contains($0.name.lowercased())
+        }
+        items.append(URLQueryItem(name: "ApiKey", value: token))
+        components.percentEncodedQueryItems = items
+        return components.url ?? url
     }
 }

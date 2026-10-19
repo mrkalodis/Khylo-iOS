@@ -114,6 +114,11 @@ final class KhyloAudioPlayer: ObservableObject {
     /// The queue ran out while autoplay was still fetching; play on when it arrives.
     private var waitingForAutoplay = false
     private var playSessionID = UUID().uuidString
+    /// The song whose stream the server has actually opened; only that one is
+    /// reported as playing.
+    private weak var startedItem: AVPlayerItem?
+    /// Waiting for the sign-in token (the phone was locked) before starting a song.
+    private var tokenWaitTask: Task<Void, Never>?
     private var lastReport = Date.distantPast
     private var sleepTask: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
@@ -145,8 +150,12 @@ final class KhyloAudioPlayer: ObservableObject {
         itemStatusCancellable = player.publisher(for: \.currentItem?.status)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
-                guard status == .failed, let self else { return }
-                self.recoverFromFailure(self.player.currentItem)
+                guard let self else { return }
+                switch status {
+                case .readyToPlay: self.streamDidOpen(self.player.currentItem)
+                case .failed: self.recoverFromFailure(self.player.currentItem)
+                default: break
+                }
             }
         // A dropped connection mid-song (common in the car) ends the item early.
         failureObserver = NotificationCenter.default.addObserver(
@@ -379,6 +388,7 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     func stop() {
+        tokenWaitTask?.cancel()
         reportStopped()
         preloaded = nil
         player.removeAllItems()
@@ -414,7 +424,13 @@ final class KhyloAudioPlayer: ObservableObject {
         // A different song starts fresh; reloading the same one keeps its retry count.
         if newIndex != index || current?.id != queue[safe: newIndex]?.id { retries = 0 }
         index = newIndex
-        guard let item = current, let url = streamURL(for: item) else { return }
+        tokenWaitTask?.cancel()
+        guard let item = current else { return }
+        // Never open a stream without the sign-in token: the server refuses it.
+        guard let url = streamURL(for: item) else {
+            waitForToken(index: newIndex, startTicks: startTicks)
+            return
+        }
 
         let start = Double(startTicks ?? item.userData?.playbackPositionTicks ?? 0) / 10_000_000
         duration = Double(item.runTimeTicks ?? 0) / 10_000_000
@@ -439,6 +455,31 @@ final class KhyloAudioPlayer: ObservableObject {
         trackDidStart()
     }
 
+    /// The sign-in token couldn't be read yet (e.g. right after a restart, before
+    /// the first unlock). Hold the song and start it as soon as the token is there.
+    private func waitForToken(index waitingIndex: Int, startTicks: Int?) {
+        player.pause()
+        isPlaying = false
+        updateNowPlaying()
+        tokenWaitTask = Task { @MainActor [weak self] in
+            for _ in 0 ..< 60 {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !Task.isCancelled, self.isActive, self.index == waitingIndex else { return }
+                if KhyloAPI.accessToken != nil {
+                    self.load(index: waitingIndex, startTicks: startTicks)
+                    return
+                }
+            }
+        }
+    }
+
+    /// The server opened the stream: now the song really is playing.
+    private func streamDidOpen(_ item: AVPlayerItem?) {
+        guard let item, item === activeItem, item !== startedItem else { return }
+        startedItem = item
+        reportStart()
+    }
+
     /// Plays the track at `newIndex` again from `seconds`, with a fresh connection.
     private func reload(at seconds: Double) {
         let wasPlaying = isPlaying
@@ -455,9 +496,12 @@ final class KhyloAudioPlayer: ObservableObject {
         guard isActive, let item, item === activeItem, item !== handledItem else { return }
         handledItem = item
         let position = currentTime
+        let rejected = Self.wasRejected(item)
         if retries < 3 {
             retries += 1
-            let wait: Double = [2, 5, 10][min(retries - 1, 2)]
+            // A refused link is rebuilt with the current token right away; a dropped
+            // connection gets a moment to come back.
+            let wait: Double = rejected && retries == 1 ? 0.5 : [2, 5, 10][min(retries - 1, 2)]
             Task { @MainActor [weak self] in
                 // Give the connection (or the server) time to come back.
                 try? await Task.sleep(for: .seconds(wait))
@@ -481,6 +525,20 @@ final class KhyloAudioPlayer: ObservableObject {
         }
     }
 
+    /// The server turned the stream down (signed-out or missing token), as opposed
+    /// to the connection dropping.
+    private static func wasRejected(_ item: AVPlayerItem) -> Bool {
+        if let events = item.errorLog()?.events,
+           events.contains(where: { $0.errorStatusCode == 401 || $0.errorStatusCode == 403 }) {
+            return true
+        }
+        let error = item.error as NSError?
+        let underlying = error?.userInfo[NSUnderlyingErrorKey] as? NSError
+        return [error, underlying].contains {
+            $0?.domain == NSURLErrorDomain && $0?.code == NSURLErrorUserAuthenticationRequired
+        }
+    }
+
     private func makePlayerItem(_ url: URL) -> AVPlayerItem {
         let item = AVPlayerItem(asset: AVURLAsset(url: url, options: [AVURLAssetAllowsCellularAccessKey: true]))
         item.audioTimePitchAlgorithm = kind == .audiobook ? .timeDomain : .spectral
@@ -492,7 +550,7 @@ final class KhyloAudioPlayer: ObservableObject {
     private func trackDidStart() {
         handledItem = nil
         extendQueueIfNeeded()
-        reportStart()
+        // The server hears it started once the stream really opens (streamDidOpen).
         loadArtwork()
         loadQuality()
         updateNowPlaying()
@@ -635,7 +693,9 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     private func streamURL(for item: BaseItemDto) -> URL? {
-        guard let session = KhyloAPI.session, let id = item.id else { return nil }
+        guard let session = KhyloAPI.session, let id = item.id,
+              let token = KhyloAPI.accessToken
+        else { return nil }
         var parameters = Paths.GetUniversalAudioStreamParameters()
         parameters.container = ["mp3", "aac", "m4a|aac", "m4b|aac", "flac", "alac", "m4a|alac", "wav", "mp4"]
         parameters.userID = session.user.id
@@ -647,7 +707,7 @@ final class KhyloAudioPlayer: ObservableObject {
         guard let base = session.client.url(with: Paths.getUniversalAudioStream(itemID: id, parameters: parameters)),
               var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
         else { return nil }
-        components.queryItems = (components.queryItems ?? []) + [URLQueryItem(name: "api_key", value: session.user.accessToken)]
+        components.queryItems = (components.queryItems ?? []) + [URLQueryItem(name: "api_key", value: token)]
         return components.url
     }
 
@@ -693,7 +753,8 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     private func report(force: Bool) {
-        guard force || Date().timeIntervalSince(lastReport) > 10,
+        guard startedItem != nil, startedItem === activeItem,
+              force || Date().timeIntervalSince(lastReport) > 10,
               let info = stateInfo(),
               let client = KhyloAPI.session?.client
         else { return }
@@ -702,6 +763,9 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     private func reportStopped() {
+        // A stream that never opened was never reported as playing.
+        guard startedItem != nil, startedItem === activeItem else { return }
+        startedItem = nil
         guard let item = current, let client = KhyloAPI.session?.client else { return }
         var info = PlaybackStopInfo()
         info.itemID = item.id

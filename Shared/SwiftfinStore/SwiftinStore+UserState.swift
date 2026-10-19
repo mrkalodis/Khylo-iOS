@@ -29,17 +29,32 @@ extension UserState {
 
     var accessToken: String {
         get {
+            // Once read, the token is kept in memory. The keychain can't be read
+            // while the phone is locked, and songs that start on the lock screen
+            // must not go out with an empty token.
+            if let cached = AccessTokenCache.get(id) {
+                return cached
+            }
+
             // Can be missing legitimately: a restored backup, a reinstall, or a
             // signing change that moves the app to a different keychain group.
             // Callers treat an empty token as signed out.
-            guard let accessToken = Container.shared.keychainService().get("\(id)-accessToken") else {
+            let keychain = Container.shared.keychainService()
+            guard let accessToken = keychain.get("\(id)-accessToken"), !accessToken.isEmpty else {
                 return ""
             }
 
+            AccessTokenCache.set(accessToken, for: id)
+            // Older installs saved it readable only while unlocked; save it again
+            // so it stays readable after the first unlock since restart.
+            AccessTokenCache.once(id) {
+                keychain.set(accessToken, forKey: "\(id)-accessToken", withAccess: .accessibleAfterFirstUnlock)
+            }
             return accessToken
         }
         nonmutating set {
-            Container.shared.keychainService().set(newValue, forKey: "\(id)-accessToken")
+            AccessTokenCache.set(newValue.isEmpty ? nil : newValue, for: id)
+            Container.shared.keychainService().set(newValue, forKey: "\(id)-accessToken", withAccess: .accessibleAfterFirstUnlock)
         }
     }
 
@@ -113,6 +128,7 @@ extension UserState {
 
         let keychain = Container.shared.keychainService()
         keychain.delete("\(id)-pin")
+        AccessTokenCache.set(nil, for: id)
     }
 
     /// Deletes user settings from `UserDefaults` and `StoredValues`
@@ -167,5 +183,28 @@ extension UserState {
                 )
             )
         )
+    }
+}
+
+/// Keeps each signed-in user's token in memory after the first read, so it's
+/// there even while the phone is locked and the keychain can't be read.
+enum AccessTokenCache {
+
+    private static let lock = NSLock()
+    private static var tokens: [String: String] = [:]
+    private static var resaved: Set<String> = []
+
+    static func get(_ userID: String) -> String? {
+        lock.withLock { tokens[userID] }
+    }
+
+    static func set(_ token: String?, for userID: String) {
+        lock.withLock { tokens[userID] = token }
+    }
+
+    /// Runs `work` the first time it's asked for this user in this launch.
+    static func once(_ userID: String, _ work: () -> Void) {
+        let first = lock.withLock { resaved.insert(userID).inserted }
+        if first { work() }
     }
 }

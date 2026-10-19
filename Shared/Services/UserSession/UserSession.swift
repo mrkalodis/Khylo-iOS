@@ -15,14 +15,33 @@ final class UserSession {
     let server: ServerState
     let user: UserState
 
-    lazy var client: JellyfinClient = JellyfinClient(
-        configuration: .swiftfinConfiguration(
-            url: server.effectiveServerURL,
-            accessToken: user.accessToken
-        ),
-        sessionConfiguration: .swiftfin,
-        sessionDelegate: URLSessionProxyDelegate(logger: NetworkLogger.swiftfin())
-    )
+    /// Built with the token on first use. If the token couldn't be read then
+    /// (phone locked), it's built again as soon as the token can be read, so
+    /// requests and stream links never carry an empty token.
+    var client: JellyfinClient {
+        clientLock.withLock {
+            if let existing = _client, existing.accessToken?.isEmpty == false {
+                return existing
+            }
+            let token = user.accessToken
+            if let existing = _client, token.isEmpty {
+                return existing
+            }
+            let client = JellyfinClient(
+                configuration: .swiftfinConfiguration(
+                    url: server.effectiveServerURL,
+                    accessToken: token
+                ),
+                sessionConfiguration: .swiftfin,
+                sessionDelegate: URLSessionProxyDelegate(logger: NetworkLogger.swiftfin())
+            )
+            _client = client
+            return client
+        }
+    }
+
+    private var _client: JellyfinClient?
+    private let clientLock = NSLock()
 
     @MainActor
     lazy var serverConnectionManager = ServerConnectionManager()

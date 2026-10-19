@@ -252,6 +252,24 @@ final class MediaPlayerManager: ViewModel {
         }
     }
 
+    /// The item that has already had a second try with a fresh stream link.
+    private var retriedItemID: String?
+
+    /// The stream failed or the server refused it. Try once more with a freshly
+    /// built link (carrying the current sign-in token) before showing an error.
+    func streamFailed(_ error: Error) {
+        if let playbackItem, let id = playbackItem.baseItem.id, retriedItemID != id {
+            retriedItemID = id
+            logger.warning(
+                "Stream failed, retrying with a fresh link",
+                metadata: ["error": .stringConvertible(error.localizedDescription)]
+            )
+            setBitrate(bitrate: playbackItem.requestedBitrate)
+            return
+        }
+        self.error(error)
+    }
+
     @Function(\Action.Cases.error)
     private func onError(_ error: Error) async throws {
         if let playbackItem {

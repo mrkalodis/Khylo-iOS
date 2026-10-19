@@ -196,7 +196,7 @@ extension MPVMediaPlayerProxy {
                 manager.seconds = player.position
                 manager.ended()
             case let .failed(error):
-                manager.error(error)
+                manager.streamFailed(error)
             case .idle, .ready, .buffering, .seeking, .stopped:
                 break
             }

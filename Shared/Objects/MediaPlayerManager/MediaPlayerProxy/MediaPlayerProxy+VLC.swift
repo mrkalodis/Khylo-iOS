@@ -162,7 +162,7 @@ class VLCMediaPlayerProxy: VideoMediaPlayerProxy,
 
     private func failPlayback(_ error: Error) {
         manager?.logger.error("SwiftVLC error: \(error)")
-        manager?.error(ErrorMessage("VLC player error: \(error.localizedDescription)"))
+        manager?.streamFailed(ErrorMessage("VLC player error: \(error.localizedDescription)"))
     }
 
     /// Applies the resume position as an absolute seek once libVLC has
@@ -275,7 +275,7 @@ extension VLCMediaPlayerProxy {
                             proxy.isBuffering.value = true
                         case .error:
                             proxy.isBuffering.value = false
-                            manager.error(ErrorMessage("VLC player is unable to perform playback"))
+                            manager.streamFailed(ErrorMessage("VLC player is unable to perform playback"))
                         case .playing:
                             proxy.applyPendingStartTimeIfPossible()
                             proxy.isBuffering.value = false

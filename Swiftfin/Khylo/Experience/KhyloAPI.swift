@@ -449,8 +449,13 @@ enum KhyloAPI {
         return session.client.url(with: Paths.getDownload(itemID: itemID))
     }
 
+    /// The current sign-in token, or nil when there isn't one yet. Stream and
+    /// image links are only built with a real token, never an empty one.
     static var accessToken: String? {
-        session?.user.accessToken
+        guard let session else { return nil }
+        if let token = session.client.accessToken, !token.isEmpty { return token }
+        let token = session.user.accessToken
+        return token.isEmpty ? nil : token
     }
 }
 
