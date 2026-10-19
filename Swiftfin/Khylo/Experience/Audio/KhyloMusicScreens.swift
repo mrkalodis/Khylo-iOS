@@ -247,7 +247,8 @@ private struct KhyloSongList: View {
         LazyVStack(spacing: 0) {
             ForEach(Array(pager.items.enumerated()), id: \.element.id) { index, song in
                 KhyloTrackRow(track: song, style: .artwork) {
-                    KhyloAudioPlayer.shared.play(pager.items, startAt: index, kind: .music, startTicks: 0)
+                    // The song, then a mix built from it (not the rest of an A–Z list).
+                    KhyloAudioPlayer.shared.play([song], kind: .music, startTicks: 0)
                 }
                 .task { await pager.loadMore(after: song) }
             }

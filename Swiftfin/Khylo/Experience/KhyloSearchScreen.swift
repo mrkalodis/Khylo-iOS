@@ -269,7 +269,8 @@ struct KhyloSearchScreen: View {
                     ForEach(Array(group.items.prefix(6).enumerated()), id: \.element.id) { index, song in
                         KhyloTrackRow(track: song, style: .artwork) {
                             remember(trimmed)
-                            KhyloAudioPlayer.shared.play(group.items, startAt: index, kind: .music, startTicks: 0)
+                            // The song, then a mix built from it.
+                            KhyloAudioPlayer.shared.play([song], kind: .music, startTicks: 0)
                         }
                     }
                 }

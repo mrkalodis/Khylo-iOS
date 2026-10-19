@@ -74,7 +74,6 @@ final class KhyloAudioPlayer: ObservableObject {
     @Published private(set) var artworkURL: URL?
     @Published var repeatMode: RepeatMode = .off {
         didSet {
-            player.actionAtItemEnd = repeatMode == .one ? .none : .advance
             discardPreload()
         }
     }
@@ -104,8 +103,16 @@ final class KhyloAudioPlayer: ObservableObject {
     private var itemStatusCancellable: AnyCancellable?
     private var failureObserver: NSObjectProtocol?
     private var videoEndObserver: NSObjectProtocol?
-    /// Fresh attempts at the current track after a network failure.
+    /// Fresh attempts at the current track after a network failure or an early end.
     private var retries = 0
+    /// The item whose failure or end has already been handled (each is handled once).
+    private weak var handledItem: AVPlayerItem?
+    /// Songs in a row that wouldn't play at all; past a few, pause instead of skipping on.
+    private var failedInARow = 0
+    /// Autoplay: more songs are being fetched for when the queue runs out.
+    private var isExtendingQueue = false
+    /// The queue ran out while autoplay was still fetching; play on when it arrives.
+    private var waitingForAutoplay = false
     private var playSessionID = UUID().uuidString
     private var lastReport = Date.distantPast
     private var sleepTask: Task<Void, Never>?
@@ -113,6 +120,9 @@ final class KhyloAudioPlayer: ObservableObject {
 
     private init() {
         player.automaticallyWaitsToMinimizeStalling = true
+        // The player never moves on by itself: when a song ends, Khylo checks it really
+        // finished (and didn't just lose its connection) before starting the next one.
+        player.actionAtItemEnd = .pause
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
             queue: .main
@@ -135,7 +145,8 @@ final class KhyloAudioPlayer: ObservableObject {
         itemStatusCancellable = player.publisher(for: \.currentItem?.status)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] status in
-                if status == .failed { self?.recoverFromFailure() }
+                guard status == .failed, let self else { return }
+                self.recoverFromFailure(self.player.currentItem)
             }
         // A dropped connection mid-song (common in the car) ends the item early.
         failureObserver = NotificationCenter.default.addObserver(
@@ -145,8 +156,7 @@ final class KhyloAudioPlayer: ObservableObject {
         ) { [weak self] notification in
             let failed = notification.object as? AVPlayerItem
             MainActor.assumeIsolated {
-                guard let self, failed === self.activeItem else { return }
-                self.recoverFromFailure()
+                self?.recoverFromFailure(failed)
             }
         }
         // The video player takes over the lock screen controls while it plays and
@@ -247,6 +257,10 @@ final class KhyloAudioPlayer: ObservableObject {
     ) {
         guard items.indices.contains(startIndex) else { return }
         reportStopped()
+        retries = 0
+        failedInARow = 0
+        isExtendingQueue = false
+        waitingForAutoplay = false
         queue = items
         isShuffled = false
         unshuffledQueue = []
@@ -397,6 +411,8 @@ final class KhyloAudioPlayer: ObservableObject {
     // MARK: - Loading
 
     private func load(index newIndex: Int, startTicks: Int?) {
+        // A different song starts fresh; reloading the same one keeps its retry count.
+        if newIndex != index || current?.id != queue[safe: newIndex]?.id { retries = 0 }
         index = newIndex
         guard let item = current, let url = streamURL(for: item) else { return }
 
@@ -410,6 +426,7 @@ final class KhyloAudioPlayer: ObservableObject {
         player.removeAllItems()
         player.insert(playerItem, after: nil)
         activeItem = playerItem
+        waitingForAutoplay = false
         if start > 1 {
             player.seek(to: CMTime(seconds: start, preferredTimescale: 600))
         }
@@ -430,11 +447,13 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     /// The stream for the current track failed (lost connection, server hiccup).
-    /// Try it again from where it stopped; after two tries, move on.
-    private func recoverFromFailure() {
-        guard isActive else { return }
+    /// Pick it up again from where it stopped; only after several tries move on,
+    /// and never race through the queue.
+    private func recoverFromFailure(_ item: AVPlayerItem?) {
+        guard isActive, let item, item === activeItem, item !== handledItem else { return }
+        handledItem = item
         let position = currentTime
-        if retries < 2 {
+        if retries < 3 {
             retries += 1
             Task { @MainActor [weak self] in
                 // A moment for the connection to come back.
@@ -442,12 +461,18 @@ final class KhyloAudioPlayer: ObservableObject {
                 guard let self, self.isActive else { return }
                 self.reload(at: position)
             }
-        } else if let next = nextIndex {
-            retries = 0
+            return
+        }
+        retries = 0
+        failedInARow += 1
+        if failedInARow < 3, let next = nextIndex {
             reportStopped()
             load(index: next, startTicks: 0)
         } else {
-            retries = 0
+            // Several songs in a row won't play (the server or connection is down):
+            // stop here rather than skipping through everything.
+            failedInARow = 0
+            player.pause()
             isPlaying = false
             updateNowPlaying()
         }
@@ -462,6 +487,8 @@ final class KhyloAudioPlayer: ObservableObject {
 
     /// Bookkeeping when a track begins, whether picked or reached from the queue.
     private func trackDidStart() {
+        handledItem = nil
+        extendQueueIfNeeded()
         reportStart()
         loadArtwork()
         loadQuality()
@@ -502,21 +529,7 @@ final class KhyloAudioPlayer: ObservableObject {
 
     /// The queue player moved on to the preloaded track.
     private func currentItemChanged(_ item: AVPlayerItem?) {
-        guard let item else {
-            // The player ran dry while it should be playing (a queued song failed to load).
-            if isPlaying, player.currentItem == nil {
-                preloaded = nil
-                if let next = nextIndex {
-                    reportStopped()
-                    load(index: next, startTicks: 0)
-                } else {
-                    isPlaying = false
-                    updateNowPlaying()
-                }
-            }
-            return
-        }
-        guard let preloaded, item === preloaded.item else { return }
+        guard let item, let preloaded, item === preloaded.item else { return }
         reportStopped()
         self.preloaded = nil
         activeItem = item
@@ -528,33 +541,90 @@ final class KhyloAudioPlayer: ObservableObject {
         trackDidStart()
     }
 
+    /// A song reached its end. This is the only place the next song starts, so
+    /// nothing can skip ahead on its own.
     private func itemDidEnd(_ ended: AVPlayerItem?) {
-        guard let ended, ended === activeItem else { return }
+        guard let ended, ended === activeItem, ended !== handledItem else { return }
+        handledItem = ended
+
         if repeatMode == .one {
             report(force: true)
+            handledItem = nil
             player.seek(to: .zero)
             player.play()
             return
         }
-        if let preloaded, preloaded.item.status == .failed {
-            // The song loaded ahead went bad while waiting; load it fresh instead.
-            discardPreload()
+
+        // Ended well before its real length: the stream was cut off, not finished.
+        // Carry on from the same spot instead of moving to the next song.
+        let expected = Double(current?.runTimeTicks ?? 0) / 10_000_000
+        let reached = currentTime
+        if expected > 30, reached < expected - 10, retries < 3 {
+            retries += 1
+            reload(at: reached)
+            return
         }
-        if preloaded == nil {
-            if let next = nextIndex {
-                // The next song wasn't loaded ahead (short track or slow start): start it now.
-                reportStopped()
-                load(index: next, startTicks: 0)
-                return
-            }
-            // End of the queue.
-            report(force: true)
-            reportStopped()
+
+        failedInARow = 0
+        report(force: true)
+        reportStopped()
+
+        if let preloaded, preloaded.item.status != .failed, let next = nextIndex, preloaded.index == next {
+            // The next song is already loaded: hand over to it.
+            player.advanceToNextItem()
+            player.play()
+            return
+        }
+        discardPreload()
+        if let next = nextIndex {
+            load(index: next, startTicks: 0)
+        } else if isExtendingQueue {
+            // Autoplay is still finding more music; carry on as soon as it arrives.
+            waitingForAutoplay = true
+            isBuffering = true
+        } else {
             isPlaying = false
             currentTime = 0
             updateNowPlaying()
         }
-        // Otherwise the queue player advances by itself; currentItemChanged picks it up.
+    }
+
+    // MARK: - Autoplay
+
+    /// When the last song in the queue starts, line up more music like it, so
+    /// playback carries on instead of stopping: a mix built from that song (and
+    /// its artist), falling back to more by the same artist.
+    private func extendQueueIfNeeded() {
+        guard kind == .music, repeatMode == .off, !isExtendingQueue,
+              index >= queue.count - 1, let seed = current
+        else { return }
+        isExtendingQueue = true
+        Task { @MainActor [weak self] in
+            var more = (try? await KhyloAPI.instantMix(from: seed.id ?? "", limit: 60)) ?? []
+            if more.isEmpty, let artistID = seed.khyloArtistLinks.first?.id {
+                more = (try? await KhyloAPI.items(types: [.audio], sortBy: [.random], artistIDs: [artistID], limit: 60).items) ?? []
+            }
+            guard let self else { return }
+            self.isExtendingQueue = false
+            let known = Set(self.queue.suffix(200).compactMap(\.id))
+            let fresh = more.filter { !known.contains($0.id ?? "") }
+            guard !fresh.isEmpty, self.kind == .music else {
+                if self.waitingForAutoplay {
+                    self.waitingForAutoplay = false
+                    self.isBuffering = false
+                    self.isPlaying = false
+                    self.updateNowPlaying()
+                }
+                return
+            }
+            self.queue.append(contentsOf: fresh)
+            if self.waitingForAutoplay {
+                self.waitingForAutoplay = false
+                self.load(index: self.index + 1, startTicks: 0)
+            } else {
+                self.updateCommandAvailability()
+            }
+        }
     }
 
     private func streamURL(for item: BaseItemDto) -> URL? {
@@ -588,7 +658,10 @@ final class KhyloAudioPlayer: ObservableObject {
         if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0 {
             duration = itemDuration
         }
-        if player.timeControlStatus == .playing { retries = 0 }
+        if player.timeControlStatus == .playing, seconds > 3 {
+            retries = 0
+            failedInARow = 0
+        }
         if preloaded == nil, isPlaying, duration > 0, duration - seconds <= Self.preloadLead,
            player.currentItem?.status == .readyToPlay {
             preloadNext()
@@ -846,5 +919,11 @@ struct KhyloAudioQuality: Equatable {
         let khz = Double(rate) / 1000
         let text = khz == khz.rounded() ? String(format: "%.0f", khz) : String(format: "%.1f", khz)
         return unit ? "\(text) kHz" : text
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
