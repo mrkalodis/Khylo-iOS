@@ -194,7 +194,7 @@ struct KhyloNowPlayingScreen: View {
         )
         .sheet(isPresented: $isShowingQueue) { queueSheet }
         .sheet(isPresented: $isShowingSettings) {
-            KhyloPlayerSettingsSheet { dismiss() }
+            KhyloPlayerSettingsSheet(isAudiobook: player.kind == .audiobook) { dismiss() }
         }
         .onChange(of: player.isActive) { _, isActive in
             if !isActive { dismiss() }

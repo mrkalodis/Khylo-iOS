@@ -900,6 +900,9 @@ struct KhyloThemePreview: View {
 /// The player's settings: theme, equalizer, keeping songs ready, and downloads.
 struct KhyloPlayerSettingsSheet: View {
 
+    /// Audiobooks only get the download settings; themes, the equalizer and
+    /// keeping songs ready are for music.
+    var isAudiobook = false
     let closePlayer: () -> Void
 
     @AppStorage(KhyloPlayerTheme.storageKey) private var theme: KhyloPlayerTheme = .khylo
@@ -911,74 +914,8 @@ struct KhyloPlayerSettingsSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
-                        ForEach(KhyloPlayerTheme.allCases) { option in
-                            Button {
-                                UISelectionFeedbackGenerator().selectionChanged()
-                                withAnimation(.easeInOut(duration: 0.3)) { theme = option }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    KhyloThemePreview(theme: option)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                                .strokeBorder(theme == option ? KhyloStyle.accent : Color.white.opacity(0.08), lineWidth: theme == option ? 2.5 : 1)
-                                        )
-                                        .overlay(alignment: .topTrailing) {
-                                            if theme == option {
-                                                Image(systemName: "checkmark.circle.fill")
-                                                    .font(.system(size: 18))
-                                                    .foregroundStyle(.white, KhyloStyle.accent)
-                                                    .padding(6)
-                                            }
-                                        }
-                                    Text(option.title)
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundColor(.white)
-                                    Text(option.detail)
-                                        .font(.system(size: 11))
-                                        .foregroundColor(KhyloStyle.tertiaryText)
-                                        .lineLimit(1)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 6)
-
-                    if theme == .vinyl {
-                        Toggle("Dark Vinyl", isOn: $vinylDark.animation(.easeInOut(duration: 0.3)))
-                            .tint(KhyloStyle.accent)
-                    }
-                } header: {
-                    Text("Player Theme")
-                } footer: {
-                    Text("Vinyl and Cyberpunk change the whole player. The others restyle it. Audiobooks always use the standard player.")
-                }
-
-                Section("Sound") {
-                    NavigationLink {
-                        KhyloEqualizerView()
-                    } label: {
-                        HStack {
-                            Label("Equalizer", systemImage: "slider.vertical.3")
-                            Spacer()
-                            Text(equalizer.isOn ? (equalizer.presetName ?? "Custom") : "Off")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                Section {
-                    Toggle("Keep Upcoming Songs Ready", isOn: $cacheAhead)
-                        .tint(KhyloStyle.accent)
-                        .onChange(of: cacheAhead) { _, isOn in
-                            if !isOn { KhyloSongCache.shared.clear() }
-                        }
-                } header: {
-                    Text("Listening")
-                } footer: {
-                    Text("Keeps the song you're playing and the next two on your iPhone, so music carries on through dead spots and the next song starts straight away.")
+                if !isAudiobook {
+                    musicSections
                 }
 
                 KhyloDownloadSettingsSection {
@@ -992,7 +929,7 @@ struct KhyloPlayerSettingsSheet: View {
             }
             .scrollContentBackground(.hidden)
             .background(KhyloStyle.canvas)
-            .navigationTitle("Player Settings")
+            .navigationTitle(isAudiobook ? "Settings" : "Player Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1003,5 +940,78 @@ struct KhyloPlayerSettingsSheet: View {
         }
         .preferredColorScheme(.dark)
         .tint(.white)
+    }
+
+    @ViewBuilder
+    private var musicSections: some View {
+        Section {
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 14) {
+                ForEach(KhyloPlayerTheme.allCases) { option in
+                    Button {
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        withAnimation(.easeInOut(duration: 0.3)) { theme = option }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            KhyloThemePreview(theme: option)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(theme == option ? KhyloStyle.accent : Color.white.opacity(0.08), lineWidth: theme == option ? 2.5 : 1)
+                                )
+                                .overlay(alignment: .topTrailing) {
+                                    if theme == option {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundStyle(.white, KhyloStyle.accent)
+                                            .padding(6)
+                                    }
+                                }
+                            Text(option.title)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                            Text(option.detail)
+                                .font(.system(size: 11))
+                                .foregroundColor(KhyloStyle.tertiaryText)
+                                .lineLimit(1)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 6)
+
+            if theme == .vinyl {
+                Toggle("Dark Vinyl", isOn: $vinylDark.animation(.easeInOut(duration: 0.3)))
+                    .tint(KhyloStyle.accent)
+            }
+        } header: {
+            Text("Player Theme")
+        } footer: {
+            Text("Vinyl and Cyberpunk change the whole player. The others restyle it.")
+        }
+
+        Section("Sound") {
+            NavigationLink {
+                KhyloEqualizerView()
+            } label: {
+                HStack {
+                    Label("Equalizer", systemImage: "slider.vertical.3")
+                    Spacer()
+                    Text(equalizer.isOn ? (equalizer.presetName ?? "Custom") : "Off")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        Section {
+            Toggle("Keep Upcoming Songs Ready", isOn: $cacheAhead)
+                .tint(KhyloStyle.accent)
+                .onChange(of: cacheAhead) { _, isOn in
+                    if !isOn { KhyloSongCache.shared.clear() }
+                }
+        } header: {
+            Text("Listening")
+        } footer: {
+            Text("Keeps the song you're playing and the next two on your iPhone, so music carries on through dead spots and the next song starts straight away.")
+        }
     }
 }
