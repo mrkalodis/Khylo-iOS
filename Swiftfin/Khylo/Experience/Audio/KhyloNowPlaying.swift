@@ -432,10 +432,12 @@ struct KhyloNowPlayingScreen: View {
         .accessibilityLabel(label)
     }
 
+    /// One gap between each control, every icon in the same size slot, so the
+    /// row is evenly spaced.
     private var bottomRow: some View {
-        HStack {
+        HStack(spacing: 0) {
             KhyloRoutePicker()
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
 
             Spacer()
 
@@ -482,8 +484,8 @@ struct KhyloNowPlayingScreen: View {
             }
 
             if player.kind == .music, let current = player.current {
-                Spacer()
                 KhyloDownloadButton(item: current, style: .icon)
+                    .frame(width: 44, height: 44)
                 Spacer()
                 Button {
                     toggleFavorite()
@@ -492,7 +494,7 @@ struct KhyloNowPlayingScreen: View {
                         .font(.system(size: 21))
                         .foregroundColor(isFavorite ? (activeTheme == .mono ? .white : KhyloStyle.accent) : .white.opacity(0.85))
                         .contentTransition(.symbolEffect(.replace))
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(KhyloScaleButtonStyle())
                 .accessibilityLabel(isFavorite ? "Remove from favorites" : "Add to favorites")
@@ -506,7 +508,7 @@ struct KhyloNowPlayingScreen: View {
                 Image(systemName: "list.bullet")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.white.opacity(0.85))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel(player.kind == .audiobook ? "Parts" : "Up Next")
         }

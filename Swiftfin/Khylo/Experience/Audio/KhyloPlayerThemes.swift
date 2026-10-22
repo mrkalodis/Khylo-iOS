@@ -810,20 +810,21 @@ struct KhyloThemedBottomRow: View {
     @ObservedObject private var player = KhyloAudioPlayer.shared
 
     var body: some View {
-        HStack {
+        HStack(spacing: 0) {
             KhyloRoutePicker(tint: UIColor(color))
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
             Spacer()
             if let current = player.current {
                 KhyloDownloadButton(item: current, style: .icon)
                     .foregroundColor(color)
+                    .frame(width: 44, height: 44)
             }
             Spacer()
             Button(action: actions.toggleFavorite) {
                 Image(systemName: actions.isFavorite ? "heart.fill" : "heart")
                     .font(.system(size: 21))
                     .foregroundColor(actions.isFavorite ? KhyloStyle.accent : color)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(KhyloScaleButtonStyle())
             .accessibilityLabel(actions.isFavorite ? "Remove from favorites" : "Add to favorites")
@@ -832,7 +833,7 @@ struct KhyloThemedBottomRow: View {
                 Image(systemName: "list.bullet")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(color)
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Up Next")
         }
