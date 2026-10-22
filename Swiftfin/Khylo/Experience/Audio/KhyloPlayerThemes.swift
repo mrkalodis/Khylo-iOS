@@ -40,8 +40,8 @@ enum KhyloPlayerTheme: String, CaseIterable, Identifiable {
         case .khylo: "Your album's colours"
         case .aurora: "Slow light from the cover"
         case .mono: "Black, white, nothing else"
-        case .vinyl: "A record that spins"
-        case .retro: "A cassette deck"
+        case .vinyl: "A record out of its sleeve"
+        case .retro: "A 1960s radio"
         case .cyberpunk: "Neon, grids and glitches"
         }
     }
@@ -108,8 +108,9 @@ extension Color {
 
 // MARK: - Vinyl
 
-/// A turntable: the cover is the record's label, the record turns while it
-/// plays and the tonearm swings onto it.
+/// The record in its sleeve: the cover is the sleeve, and when music plays the
+/// record slides out beside it and turns, the cover art printed on its label.
+/// Quiet, editorial type underneath.
 struct KhyloVinylPlayer: View {
 
     let actions: KhyloPlayerActions
@@ -119,45 +120,61 @@ struct KhyloVinylPlayer: View {
     @State private var spinBase: Double = 0
     @State private var spinStart: Date?
 
-    private let cream = Color(hex: "#EFE4CF")
+    private let cream = Color(hex: "#F1E9DA")
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: "#21170F"), Color(hex: "#0B0806")], startPoint: .top, endPoint: .bottom)
-                .overlay((tint ?? .clear).opacity(0.12))
+            Color(hex: "#151311").ignoresSafeArea()
+            RadialGradient(colors: [(tint ?? Color(hex: "#5A4632")).opacity(0.35), .clear], center: .top, startRadius: 20, endRadius: 520)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                KhyloThemedTopBar(actions: actions, foreground: cream, labelFont: .system(size: 12, weight: .semibold, design: .serif))
+                KhyloThemedTopBar(actions: actions, foreground: cream, labelFont: .system(size: 11, weight: .semibold, design: .serif))
                     .padding(.top, 8)
 
-                Spacer(minLength: 6)
+                Spacer(minLength: 8)
 
-                turntable
-                    .padding(.horizontal, 16)
+                sleeve
+                    .padding(.horizontal, 24)
 
-                Spacer(minLength: 14)
+                Spacer(minLength: 18)
 
-                VStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Now Playing")
+                        .font(.system(size: 13, weight: .regular, design: .serif).italic())
+                        .foregroundColor(cream.opacity(0.5))
                     Text(player.current?.name ?? "")
-                        .font(.system(size: 24, weight: .bold, design: .serif))
+                        .font(.system(size: 30, weight: .bold, design: .serif))
                         .foregroundColor(cream)
-                        .lineLimit(1)
-                    KhyloThemedArtistLine(actions: actions, color: cream.opacity(0.65), font: .system(size: 16, design: .serif))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.75)
+                    HStack(spacing: 4) {
+                        Text("By")
+                            .font(.system(size: 15, design: .serif).italic())
+                            .foregroundColor(cream.opacity(0.5))
+                        KhyloThemedArtistLine(actions: actions, color: cream.opacity(0.85), font: .system(size: 15, weight: .semibold, design: .serif))
+                    }
+                    if let meta = albumLine {
+                        Text(meta)
+                            .font(.system(size: 13, design: .serif))
+                            .foregroundColor(cream.opacity(0.45))
+                            .lineLimit(1)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 28)
 
-                KhyloClockScrubber(clock: player.clock, fill: cream, track: cream.opacity(0.2), text: cream.opacity(0.6)) { player.seek(to: $0) }
+                KhyloClockScrubber(clock: player.clock, fill: cream, track: cream.opacity(0.16), text: cream.opacity(0.5)) { player.seek(to: $0) }
                     .padding(.horizontal, 28)
                     .padding(.top, 18)
 
-                KhyloThemedTransport(fill: cream, glyph: Color(hex: "#21170F"), secondary: cream)
+                KhyloThemedTransport(fill: cream, glyph: Color(hex: "#151311"), secondary: cream)
                     .padding(.horizontal, 22)
-                    .padding(.top, 10)
+                    .padding(.top, 8)
 
-                KhyloThemedBottomRow(actions: actions, color: cream.opacity(0.85))
+                KhyloThemedBottomRow(actions: actions, color: cream.opacity(0.8))
                     .padding(.horizontal, 28)
-                    .padding(.top, 20)
+                    .padding(.top, 18)
                     .padding(.bottom, 12)
             }
         }
@@ -172,391 +189,294 @@ struct KhyloVinylPlayer: View {
         }
     }
 
-    private var turntable: some View {
-        GeometryReader { proxy in
-            let side = proxy.size.width
-            let recordSize = side * 0.8
-            ZStack(alignment: .topLeading) {
-                // Walnut plinth.
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(hex: "#5A3A24"), Color(hex: "#3A2416"), Color(hex: "#2A190F")], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .overlay(
-                        Canvas { context, size in
-                            for row in stride(from: 0, to: size.height, by: 5) {
-                                var line = Path()
-                                line.move(to: CGPoint(x: 0, y: row))
-                                line.addCurve(
-                                    to: CGPoint(x: size.width, y: row + 6),
-                                    control1: CGPoint(x: size.width * 0.3, y: row - 4),
-                                    control2: CGPoint(x: size.width * 0.7, y: row + 8)
-                                )
-                                context.stroke(line, with: .color(.black.opacity(0.08)), lineWidth: 1)
-                            }
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    )
-                    .shadow(color: .black.opacity(0.6), radius: 24, y: 14)
+    private var albumLine: String? {
+        let parts = [player.current?.album, player.current?.productionYear.map(String.init)].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 
-                // Platter and record.
+    /// The sleeve, with the record sliding out to the right while it plays.
+    private var sleeve: some View {
+        GeometryReader { proxy in
+            let cover = proxy.size.height
+            let record = cover * 0.94
+            let out = player.isPlaying ? cover * 0.4 : cover * 0.1
+            ZStack(alignment: .leading) {
                 TimelineView(.animation(paused: !player.isPlaying)) { context in
-                    record(size: recordSize)
+                    disc(size: record)
                         .rotationEffect(.degrees(angle(at: context.date)))
                 }
                 .overlay(
-                    // The light on the record stays still while it turns.
+                    // The light on the record stays put while it turns.
                     Circle()
                         .fill(AngularGradient(
-                            colors: [.clear, .white.opacity(0.09), .clear, .clear, .white.opacity(0.06), .clear, .clear],
+                            colors: [.clear, .white.opacity(0.08), .clear, .clear, .white.opacity(0.05), .clear, .clear],
                             center: .center
                         ))
                         .allowsHitTesting(false)
                 )
-                .frame(width: recordSize, height: recordSize)
-                .offset(x: side * 0.05, y: side * 0.1)
+                .frame(width: record, height: record)
+                .offset(x: (cover - record) / 2 + out)
+                .animation(.spring(response: 0.8, dampingFraction: 0.85), value: player.isPlaying)
 
-                tonearm(side: side)
-                    .offset(x: side * 0.74, y: side * 0.04)
+                KhyloImage(url: player.displayArtworkURL(width: 900), placeholderSymbol: "music.note")
+                    .frame(width: cover, height: cover)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .overlay(
+                        // The open edge of the sleeve.
+                        LinearGradient(colors: [.clear, .black.opacity(0.25)], startPoint: .init(x: 0.9, y: 0.5), endPoint: .trailing)
+                            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    )
+                    .shadow(color: .black.opacity(0.55), radius: 22, x: 8, y: 14)
             }
-            .frame(width: side, height: side)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .aspectRatio(1, contentMode: .fit)
+        .aspectRatio(1 / 0.68, contentMode: .fit)
     }
 
     private func angle(at date: Date) -> Double {
         spinBase + (spinStart.map { date.timeIntervalSince($0) * 200 } ?? 0)
     }
 
-    private func record(size: CGFloat) -> some View {
+    private func disc(size: CGFloat) -> some View {
         ZStack {
-            Circle().fill(Color(hex: "#0C0C0E"))
+            Circle().fill(Color(hex: "#0B0B0C"))
             Canvas { context, canvasSize in
                 let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
                 let outer = canvasSize.width / 2
-                for radius in stride(from: outer * 0.38, to: outer * 0.97, by: 2.5) {
+                for radius in stride(from: outer * 0.4, to: outer * 0.97, by: 2.4) {
                     let ring = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-                    context.stroke(ring, with: .color(.white.opacity(0.035)), lineWidth: 0.6)
+                    context.stroke(ring, with: .color(.white.opacity(0.03)), lineWidth: 0.6)
                 }
             }
-            KhyloImage(url: player.displayArtworkURL(width: 400), placeholderSymbol: "music.note")
+            KhyloImage(url: player.displayArtworkURL(width: 300), placeholderSymbol: "music.note")
                 .frame(width: size * 0.36, height: size * 0.36)
                 .clipShape(Circle())
             Circle()
-                .fill(Color(hex: "#D9D4CB"))
-                .frame(width: size * 0.03, height: size * 0.03)
+                .fill(Color(hex: "#151311"))
+                .frame(width: size * 0.035, height: size * 0.035)
         }
         .frame(width: size, height: size)
-    }
-
-    private func tonearm(side: CGFloat) -> some View {
-        let width = side * 0.2
-        let height = side * 0.72
-        return ZStack(alignment: .top) {
-            Path { path in
-                path.move(to: CGPoint(x: width / 2, y: width / 2))
-                path.addLine(to: CGPoint(x: width / 2, y: height * 0.78))
-                path.addLine(to: CGPoint(x: width * 0.3, y: height * 0.92))
-            }
-            .stroke(LinearGradient(colors: [Color(hex: "#E6E1D6"), Color(hex: "#9C978C")], startPoint: .leading, endPoint: .trailing),
-                    style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
-            // Headshell.
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color(hex: "#C9C3B7"))
-                .frame(width: width * 0.32, height: height * 0.09)
-                .rotationEffect(.degrees(30))
-                .offset(x: -width * 0.2, y: height * 0.9)
-            // Pivot.
-            Circle()
-                .fill(RadialGradient(colors: [Color(hex: "#F1EDE4"), Color(hex: "#7E796F")], center: .topLeading, startRadius: 1, endRadius: width * 0.6))
-                .frame(width: width * 0.7, height: width * 0.7)
-                .offset(y: width * 0.15)
-        }
-        .frame(width: width, height: height, alignment: .top)
-        .rotationEffect(.degrees(player.isPlaying ? 24 : 2), anchor: UnitPoint(x: 0.5, y: (width / 2) / height))
-        .animation(.spring(response: 0.9, dampingFraction: 0.8), value: player.isPlaying)
-        .shadow(color: .black.opacity(0.5), radius: 6, x: 4, y: 6)
     }
 }
 
 // MARK: - Retro
 
-/// A cassette deck: the song's title is written on the tape's label, the reels
-/// turn as it plays, and the keys are big and chunky.
+/// A 1960s radio in the spirit of Braun: an off-white face with round speaker
+/// grilles either side of the cover, a tuning scale whose needle shows where
+/// you are in the song, slide switches and a row of small piano keys.
 struct KhyloRetroPlayer: View {
 
     let actions: KhyloPlayerActions
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
 
-    private let paper = Color(hex: "#F1E7D2")
-    private let ink = Color(hex: "#3A2A1F")
-    private let orange = Color(hex: "#E36F2C")
-    private let amber = Color(hex: "#F2A93B")
-    private let brown = Color(hex: "#8C4A27")
+    private let ink = Color(hex: "#3B3832")
+    private let orange = Color(hex: "#E2552C")
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Color(hex: "#F6EEDC"), Color(hex: "#E2D3B5")], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+            Color(hex: "#DEDAD1").ignoresSafeArea()
 
             VStack(spacing: 0) {
-                KhyloThemedTopBar(actions: actions, foreground: ink, labelFont: .system(size: 12, weight: .bold, design: .rounded))
+                KhyloThemedTopBar(actions: actions, foreground: ink, labelFont: .system(size: 10, weight: .semibold))
                     .padding(.top, 8)
 
-                cassette
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
+                face
+                    .padding(.horizontal, 14)
+                    .padding(.top, 6)
 
-                counter
-                    .padding(.horizontal, 20)
-                    .padding(.top, 18)
-
-                KhyloClockScrubber(clock: player.clock, fill: orange, track: ink.opacity(0.15), text: ink.opacity(0.6)) { player.seek(to: $0) }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
-
-                // The meters take whatever room is left, so the deck fills the screen.
-                HStack(spacing: 10) {
-                    KhyloVUMeter(channel: "L", phase: 0, isPlaying: player.isPlaying)
-                    KhyloVUMeter(channel: "R", phase: 1.7, isPlaying: player.isPlaying)
-                }
-                .frame(maxHeight: 150)
-                .frame(maxHeight: .infinity)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-
-                switches
-                    .padding(.horizontal, 20)
-
-                keys
-                    .padding(.horizontal, 16)
-                    .padding(.top, 14)
-
-                KhyloThemedBottomRow(actions: actions, color: ink.opacity(0.85))
+                KhyloThemedBottomRow(actions: actions, color: ink.opacity(0.8))
                     .padding(.horizontal, 28)
-                    .padding(.top, 10)
-                    .padding(.bottom, 14)
+                    .padding(.top, 14)
+                    .padding(.bottom, 12)
             }
         }
         .preferredColorScheme(.light)
     }
 
-    private var cassette: some View {
-        GeometryReader { proxy in
-            let w = proxy.size.width
-            let h = w * 0.64
-            ZStack {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(hex: "#34302B"), Color(hex: "#1F1C19")], startPoint: .top, endPoint: .bottom))
-                    .shadow(color: .black.opacity(0.35), radius: 16, y: 10)
+    /// The radio's front panel; it takes the whole height, spacing its parts evenly.
+    private var face: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 14)
 
-                // Screws.
-                ForEach(0 ..< 4, id: \.self) { corner in
-                    Circle()
-                        .fill(Color(hex: "#8E877C"))
-                        .overlay(Rectangle().fill(Color(hex: "#3D3833")).frame(width: 7, height: 1.5).rotationEffect(.degrees(35)))
-                        .frame(width: 9, height: 9)
-                        .position(x: corner % 2 == 0 ? 14 : w - 14, y: corner < 2 ? 14 : h - 14)
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let cover = min(width * 0.52, proxy.size.height)
+                HStack(spacing: 0) {
+                    KhyloSpeakerGrille(color: ink)
+                        .frame(maxWidth: .infinity)
+                    KhyloImage(url: player.displayArtworkURL(width: 700), placeholderSymbol: "music.note")
+                        .frame(width: cover, height: cover)
+                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                        .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
+                    KhyloSpeakerGrille(color: ink)
+                        .frame(maxWidth: .infinity)
                 }
-
-                // Label.
-                VStack(spacing: 0) {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(player.current?.name ?? "")
-                                .font(.custom("MarkerFelt-Wide", size: 19))
-                                .foregroundColor(ink)
-                                .lineLimit(1)
-                            Text(player.current?.khyloArtistLine ?? "")
-                                .font(.custom("Noteworthy-Bold", size: 13))
-                                .foregroundColor(ink.opacity(0.75))
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 6)
-                        Text("A")
-                            .font(.system(size: 18, weight: .black, design: .rounded))
-                            .foregroundColor(paper)
-                            .frame(width: 28, height: 28)
-                            .background(Circle().fill(ink))
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.top, 10)
-
-                    ZStack {
-                        VStack(spacing: 3) {
-                            Rectangle().fill(orange).frame(height: 6)
-                            Rectangle().fill(amber).frame(height: 6)
-                            Rectangle().fill(brown).frame(height: 6)
-                        }
-                        // The window with the reels.
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color(hex: "#1A1613"))
-                            .frame(width: w * 0.56, height: h * 0.27)
-                            .overlay(reels(windowWidth: w * 0.56, windowHeight: h * 0.27))
-                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.black.opacity(0.4), lineWidth: 1))
-                    }
-                    .padding(.vertical, 8)
-                }
-                .frame(width: w * 0.88, height: h * 0.62)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(paper))
-                .position(x: w / 2, y: h * 0.38)
-
-                // The bottom ridge with its two holes.
-                Path { path in
-                    path.move(to: CGPoint(x: w * 0.2, y: h))
-                    path.addLine(to: CGPoint(x: w * 0.26, y: h * 0.8))
-                    path.addLine(to: CGPoint(x: w * 0.74, y: h * 0.8))
-                    path.addLine(to: CGPoint(x: w * 0.8, y: h))
-                    path.closeSubpath()
-                }
-                .fill(Color(hex: "#2A2622"))
-                ForEach([0.36, 0.64], id: \.self) { x in
-                    Circle().fill(Color(hex: "#0E0C0B")).frame(width: 10, height: 10).position(x: w * x, y: h * 0.9)
-                }
+                .frame(maxHeight: .infinity)
             }
-            .frame(width: w, height: h)
-        }
-        .aspectRatio(1 / 0.64, contentMode: .fit)
-    }
-
-    /// Two reels; tape moves from the left one to the right one as the song plays.
-    private func reels(windowWidth: CGFloat, windowHeight: CGFloat) -> some View {
-        let progress = player.clock.duration > 0 ? player.clock.currentTime / player.clock.duration : 0
-        let hub = windowHeight * 0.36
-        let full = windowHeight * 0.92
-        return TimelineView(.animation(paused: !player.isPlaying)) { context in
-            let angle = context.date.timeIntervalSinceReferenceDate * 140
-            HStack(spacing: 0) {
-                reel(tape: hub + (full - hub) * (1 - progress), hub: hub, angle: angle)
-                Spacer(minLength: 0)
-                reel(tape: hub + (full - hub) * progress, hub: hub, angle: angle)
-            }
-            .padding(.horizontal, windowWidth * 0.08)
-        }
-    }
-
-    private func reel(tape: CGFloat, hub: CGFloat, angle: Double) -> some View {
-        ZStack {
-            Circle().fill(Color(hex: "#3B2518")).frame(width: tape, height: tape)
-            Circle().fill(paper).frame(width: hub, height: hub)
-            ForEach(0 ..< 6, id: \.self) { tooth in
-                Rectangle()
-                    .fill(Color(hex: "#1A1613"))
-                    .frame(width: 2.5, height: hub * 0.3)
-                    .offset(y: -hub * 0.32)
-                    .rotationEffect(.degrees(Double(tooth) * 60 + angle))
-            }
-        }
-        .frame(width: hub * 2.6, height: hub * 2.6)
-    }
-
-    /// Track number and an LCD time counter.
-    private var counter: some View {
-        HStack(spacing: 10) {
-            lcd("TRK \(String(format: "%02d", player.index + 1))")
-            KhyloRetroTime(clock: player.clock)
-                .frame(maxWidth: .infinity)
-                .frame(height: 44)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(hex: "#1D261B")))
-        }
-    }
-
-    private func lcd(_ text: String) -> some View {
-        Text(text)
-            .font(.system(size: 17, weight: .semibold, design: .monospaced))
-            .foregroundColor(Color(hex: "#B8F28C"))
-            .shadow(color: Color(hex: "#B8F28C").opacity(0.6), radius: 4)
+            .aspectRatio(1 / 0.52, contentMode: .fit)
             .padding(.horizontal, 12)
-            .frame(height: 44)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(hex: "#1D261B")))
-    }
 
-    /// Piano keys: back, play (stays down while playing), pause and forward.
-    private var keys: some View {
-        HStack(spacing: 8) {
-            KhyloPianoKey(symbol: "backward.end.fill", label: "Previous", isDown: false, color: ink) { player.previous() }
-            KhyloPianoKey(symbol: "play.fill", label: "Play", isDown: player.isPlaying, color: ink) {
-                if !player.isPlaying { player.togglePlayPause() }
+            VStack(spacing: 3) {
+                Text(player.current?.name ?? "")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(ink)
+                    .lineLimit(1)
+                Text(player.current?.khyloArtistLine ?? "")
+                    .font(.system(size: 12))
+                    .foregroundColor(ink.opacity(0.6))
+                    .lineLimit(1)
             }
-            KhyloPianoKey(symbol: "pause.fill", label: "Pause", isDown: !player.isPlaying, color: ink) {
-                if player.isPlaying { player.togglePlayPause() }
-            }
-            KhyloPianoKey(symbol: "forward.end.fill", label: "Next", isDown: false, color: ink) { player.next() }
-        }
-    }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
 
-    /// Shuffle and repeat as deck switches with a light beside each.
-    private var switches: some View {
-        HStack(spacing: 10) {
-            KhyloDeckSwitch(title: "SHUFFLE", isOn: player.isShuffled, ink: ink, light: orange) {
-                player.toggleShuffle()
+            Spacer(minLength: 14)
+
+            KhyloTuningScale(clock: player.clock, ink: ink, needle: orange) { player.seek(to: $0) }
+                .padding(.horizontal, 22)
+
+            Spacer(minLength: 14)
+
+            HStack(spacing: 10) {
+                KhyloDeckSwitch(title: "SHUFFLE", isOn: player.isShuffled, ink: ink, light: orange) {
+                    player.toggleShuffle()
+                }
+                KhyloDeckSwitch(
+                    title: player.repeatMode == .one ? "REPEAT 1" : "REPEAT",
+                    isOn: player.repeatMode != .off,
+                    ink: ink,
+                    light: orange
+                ) {
+                    player.repeatMode = player.repeatMode.next
+                }
             }
-            KhyloDeckSwitch(
-                title: player.repeatMode == .one ? "REPEAT 1" : "REPEAT",
-                isOn: player.repeatMode != .off,
-                ink: ink,
-                light: orange
-            ) {
-                player.repeatMode = player.repeatMode.next
+            .padding(.horizontal, 22)
+
+            Spacer(minLength: 14)
+
+            HStack(alignment: .top, spacing: 10) {
+                KhyloPianoKey(symbol: "backward.end.fill", label: "BACK", isDown: false, color: ink) { player.previous() }
+                KhyloPianoKey(symbol: "play.fill", label: "PLAY", isDown: player.isPlaying, color: ink) {
+                    if !player.isPlaying { player.togglePlayPause() }
+                }
+                KhyloPianoKey(symbol: "pause.fill", label: "PAUSE", isDown: !player.isPlaying, color: ink) {
+                    if player.isPlaying { player.togglePlayPause() }
+                }
+                KhyloPianoKey(symbol: "forward.end.fill", label: "NEXT", isDown: false, color: ink) { player.next() }
             }
+            .padding(.horizontal, 22)
+
+            Spacer(minLength: 16)
         }
+        .frame(maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(LinearGradient(colors: [Color(hex: "#F6F3EC"), Color(hex: "#ECE7DC")], startPoint: .top, endPoint: .bottom))
+                .shadow(color: .black.opacity(0.14), radius: 18, y: 10)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(Color.white.opacity(0.8), lineWidth: 1))
     }
 }
 
-/// A minimal analog level meter: a pale face, a thin scale with five marks and
-/// a small red end, and a needle that drifts gently while music plays (a light
-/// show, not a measurement).
-private struct KhyloVUMeter: View {
-    let channel: String
-    let phase: Double
-    let isPlaying: Bool
-
-    private let ink = Color(hex: "#3A2A1F")
+/// A round speaker grille: dots set in rings.
+private struct KhyloSpeakerGrille: View {
+    let color: Color
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !isPlaying)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            // Slow, small swings around the middle of the scale.
-            let level = isPlaying ? 0.5 + 0.16 * sin(t * 1.6 + phase) + 0.06 * sin(t * 3.7 + phase * 2) : 0.05
-            GeometryReader { proxy in
-                let size = proxy.size
-                let pivot = CGPoint(x: size.width / 2, y: size.height * 0.9)
-                let radius = min(size.width * 0.42, size.height * 0.72)
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color(hex: "#F7EFDC"))
-                    Canvas { canvas, _ in
-                        let start = -140.0, end = -40.0
-                        var arc = Path()
-                        arc.addArc(center: pivot, radius: radius, startAngle: .degrees(start), endAngle: .degrees(end - 22), clockwise: false)
-                        canvas.stroke(arc, with: .color(ink.opacity(0.55)), lineWidth: 1)
-                        var red = Path()
-                        red.addArc(center: pivot, radius: radius, startAngle: .degrees(end - 22), endAngle: .degrees(end), clockwise: false)
-                        canvas.stroke(red, with: .color(Color(hex: "#C8503A")), lineWidth: 2)
-                        for step in 0 ... 4 {
-                            let angle = (start + (end - start) * Double(step) / 4) * .pi / 180
-                            var tick = Path()
-                            tick.move(to: CGPoint(x: pivot.x + cos(angle) * radius, y: pivot.y + sin(angle) * radius))
-                            tick.addLine(to: CGPoint(x: pivot.x + cos(angle) * radius * 0.9, y: pivot.y + sin(angle) * radius * 0.9))
-                            canvas.stroke(tick, with: .color(ink.opacity(0.55)), lineWidth: 1)
-                        }
-                        let needle = (start + (end - start) * level) * .pi / 180
-                        var line = Path()
-                        line.move(to: pivot)
-                        line.addLine(to: CGPoint(x: pivot.x + cos(needle) * radius * 1.04, y: pivot.y + sin(needle) * radius * 1.04))
-                        canvas.stroke(line, with: .color(ink), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-                        canvas.fill(Path(ellipseIn: CGRect(x: pivot.x - 3, y: pivot.y - 3, width: 6, height: 6)), with: .color(ink))
-                    }
-                    Text(channel)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .tracking(1)
-                        .foregroundColor(ink.opacity(0.45))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                        .padding(8)
+        Canvas { context, size in
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = min(size.width, size.height) / 2 * 0.86
+            let spacing = max(radius / 6.5, 4)
+            let dot = spacing * 0.34
+            var ring: CGFloat = 0
+            while ring <= radius {
+                let count = ring == 0 ? 1 : Int((2 * .pi * ring) / spacing)
+                for i in 0 ..< count {
+                    let angle = 2 * .pi * CGFloat(i) / CGFloat(count)
+                    let point = CGPoint(x: center.x + cos(angle) * ring, y: center.y + sin(angle) * ring)
+                    context.fill(Path(ellipseIn: CGRect(x: point.x - dot, y: point.y - dot, width: dot * 2, height: dot * 2)), with: .color(color.opacity(0.55)))
                 }
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(ink.opacity(0.18), lineWidth: 1))
+                ring += spacing
             }
         }
+        .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)
+    }
+}
+
+/// A radio tuning scale: minute marks along a window, and an orange needle at
+/// the point in the song. Drag along it to move through the song.
+private struct KhyloTuningScale: View {
+    @ObservedObject var clock: KhyloPlaybackClock
+    let ink: Color
+    let needle: Color
+    let onSeek: (Double) -> Void
+
+    @State private var dragValue: Double?
+
+    var body: some View {
+        let value = dragValue ?? clock.currentTime
+        let duration = max(clock.duration, 1)
+        let fraction = min(1, max(0, value / duration))
+        VStack(spacing: 6) {
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                let inset: CGFloat = 14
+                let usable = width - inset * 2
+                let minutes = max(Int(ceil(duration / 60)), 1)
+                ZStack(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(Color(hex: "#FBF8F1"))
+                        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(ink.opacity(0.25), lineWidth: 1))
+                    Canvas { context, size in
+                        // Fine ticks every quarter minute, longer ones each minute.
+                        let quarters = minutes * 4
+                        for q in 0 ... quarters {
+                            let x = inset + usable * CGFloat(Double(q) * 15 / duration)
+                            guard x <= width - inset + 0.5 else { break }
+                            let isMinute = q % 4 == 0
+                            var tick = Path()
+                            tick.move(to: CGPoint(x: x, y: size.height - 6))
+                            tick.addLine(to: CGPoint(x: x, y: size.height - (isMinute ? 18 : 11)))
+                            context.stroke(tick, with: .color(ink.opacity(isMinute ? 0.7 : 0.35)), lineWidth: 1)
+                        }
+                    }
+                    ForEach(0 ... minutes, id: \.self) { minute in
+                        let x = inset + usable * CGFloat(Double(minute) * 60 / duration)
+                        if x <= width - inset + 0.5 {
+                            Text("\(minute)")
+                                .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                                .foregroundColor(ink.opacity(0.6))
+                                .position(x: x, y: 11)
+                        }
+                    }
+                    Rectangle()
+                        .fill(needle)
+                        .frame(width: 2)
+                        .padding(.vertical, 4)
+                        .offset(x: inset + usable * fraction - 1)
+                        .animation(dragValue == nil ? .linear(duration: 0.5) : nil, value: fraction)
+                }
+                .contentShape(Rectangle())
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { dragValue = Double(min(1, max(0, ($0.location.x - inset) / usable))) * duration }
+                        .onEnded { gesture in
+                            onSeek(Double(min(1, max(0, (gesture.location.x - inset) / usable))) * duration)
+                            dragValue = nil
+                        }
+                )
+            }
+            .frame(height: 46)
+
+            HStack {
+                Text(KhyloNowPlayingScreen.format(value))
+                Spacer()
+                Text("-" + KhyloNowPlayingScreen.format(max(0, clock.duration - value)))
+            }
+            .font(.system(size: 11, weight: .medium).monospacedDigit())
+            .foregroundColor(ink.opacity(0.55))
+        }
     }
 }
 
@@ -605,65 +525,58 @@ private struct KhyloDeckSwitch: View {
     }
 }
 
-/// The deck's time readout, redrawn on its own as time passes.
-private struct KhyloRetroTime: View {
-    @ObservedObject var clock: KhyloPlaybackClock
-
-    var body: some View {
-        Text("\(KhyloNowPlayingScreen.format(clock.currentTime)) ▸ \(KhyloNowPlayingScreen.format(clock.duration))")
-            .font(.system(size: 19, weight: .semibold, design: .monospaced))
-            .foregroundColor(Color(hex: "#B8F28C"))
-            .shadow(color: Color(hex: "#B8F28C").opacity(0.6), radius: 4)
-            .lineLimit(1)
-            .minimumScaleFactor(0.7)
-    }
-}
-
-/// A chunky deck key that sinks when pressed (and stays down when latched).
-/// Its depth is a solid base under the key, so the symbol never gets a shadow.
+/// A small white radio key that sinks when pressed (and stays down when
+/// latched), with its name printed underneath. Its depth is a solid base under
+/// the key, so the symbol never gets a shadow.
 private struct KhyloPianoKey: View {
     let symbol: String
     let label: String
     let isDown: Bool
     let color: Color
-    var height: CGFloat = 76
     let action: () -> Void
 
     @State private var isPressed = false
 
-    private let depth: CGFloat = 6
+    private let height: CGFloat = 58
+    private let depth: CGFloat = 5
 
     var body: some View {
         let down = isDown || isPressed
-        ZStack(alignment: .top) {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color(hex: "#8F8676"))
-                .frame(height: height)
-                .offset(y: depth)
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(LinearGradient(
-                    colors: down ? [Color(hex: "#DDD6C8"), Color(hex: "#CFC7B6")] : [Color(hex: "#FBF8F1"), Color(hex: "#DED7C9")],
-                    startPoint: .top, endPoint: .bottom
-                ))
-                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.black.opacity(0.22), lineWidth: 1))
-                .overlay(
-                    Image(systemName: symbol)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundColor(color)
-                )
-                .frame(height: height)
-                .offset(y: down ? depth - 1 : 0)
+        VStack(spacing: 7) {
+            ZStack(alignment: .top) {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(hex: "#B5AFA3"))
+                    .frame(height: height)
+                    .offset(y: depth)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: down ? [Color(hex: "#E6E1D6"), Color(hex: "#DAD4C7")] : [Color.white, Color(hex: "#EDE8DE")],
+                        startPoint: .top, endPoint: .bottom
+                    ))
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color.black.opacity(0.14), lineWidth: 1))
+                    .overlay(
+                        Image(systemName: symbol)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(color.opacity(0.85))
+                    )
+                    .frame(height: height)
+                    .offset(y: down ? depth - 1 : 0)
+            }
+            .frame(height: height + depth, alignment: .top)
+            Text(label)
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(color.opacity(0.55))
         }
         .frame(maxWidth: .infinity)
-        .frame(height: height + depth, alignment: .top)
-            .contentShape(Rectangle())
-            .animation(.spring(response: 0.18, dampingFraction: 0.7), value: down)
-            .onLongPressGesture(minimumDuration: 0, pressing: { isPressed = $0 }) {
-                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-                action()
-            }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(label)
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.18, dampingFraction: 0.7), value: down)
+        .onLongPressGesture(minimumDuration: 0, pressing: { isPressed = $0 }) {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            action()
+        }
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(label.capitalized)
     }
 }
 
@@ -1154,24 +1067,22 @@ struct KhyloThemePreview: View {
                 Color.black
                 miniStandard(art: .white, line: .white, corner: 1)
             case .vinyl:
-                Color(hex: "#2A1A10")
-                Circle().fill(Color(hex: "#0C0C0E")).frame(width: 46, height: 46)
-                    .overlay(Circle().fill(KhyloStyle.accent).frame(width: 15, height: 15))
-                    .offset(x: -6, y: -6)
-                Capsule().fill(Color(hex: "#D8D2C5")).frame(width: 3, height: 30).rotationEffect(.degrees(22)).offset(x: 22, y: -10)
+                Color(hex: "#151311")
+                Circle().fill(Color(hex: "#0B0B0C")).frame(width: 42, height: 42)
+                    .overlay(Circle().fill(KhyloStyle.accent).frame(width: 14, height: 14))
+                    .offset(x: 10)
+                RoundedRectangle(cornerRadius: 2).fill(Color(hex: "#E8DCC6")).frame(width: 44, height: 44)
+                    .shadow(color: .black.opacity(0.5), radius: 4, x: 2, y: 2)
+                    .offset(x: -12)
             case .retro:
-                Color(hex: "#F1E7D2")
-                RoundedRectangle(cornerRadius: 5).fill(Color(hex: "#2A2622")).frame(width: 64, height: 42)
+                Color(hex: "#DEDAD1")
+                RoundedRectangle(cornerRadius: 6).fill(Color(hex: "#F6F3EC")).frame(width: 96, height: 62)
                     .overlay(
-                        VStack(spacing: 2) {
-                            Rectangle().fill(Color(hex: "#E36F2C")).frame(height: 3)
-                            Rectangle().fill(Color(hex: "#F2A93B")).frame(height: 3)
-                            HStack(spacing: 14) {
-                                Circle().fill(Color(hex: "#F1E7D2")).frame(width: 9, height: 9)
-                                Circle().fill(Color(hex: "#F1E7D2")).frame(width: 9, height: 9)
-                            }
+                        HStack(spacing: 6) {
+                            KhyloSpeakerGrillePreview()
+                            RoundedRectangle(cornerRadius: 1).fill(Color(hex: "#8C7A66")).frame(width: 26, height: 26)
+                            KhyloSpeakerGrillePreview()
                         }
-                        .padding(6)
                     )
             case .cyberpunk:
                 Color(hex: "#06050A")
@@ -1199,6 +1110,20 @@ struct KhyloThemePreview: View {
             Capsule().fill(line.opacity(0.8)).frame(width: 40, height: 3)
             Capsule().fill(line.opacity(0.4)).frame(width: 28, height: 3)
         }
+    }
+}
+
+/// A tiny dotted grille for the Retro preview.
+private struct KhyloSpeakerGrillePreview: View {
+    var body: some View {
+        Canvas { context, size in
+            for x in stride(from: 1.5, to: size.width, by: 4) {
+                for y in stride(from: 1.5, to: size.height, by: 4) where hypot(x - size.width / 2, y - size.height / 2) < size.width / 2 {
+                    context.fill(Path(ellipseIn: CGRect(x: x - 1, y: y - 1, width: 2, height: 2)), with: .color(Color(hex: "#3B3832").opacity(0.5)))
+                }
+            }
+        }
+        .frame(width: 20, height: 20)
     }
 }
 
