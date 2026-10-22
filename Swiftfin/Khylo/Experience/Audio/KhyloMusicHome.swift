@@ -19,6 +19,7 @@ struct KhyloMusicForYou: View {
 
     @State private var jumpBackIn: [BaseItemDto] = []
     @State private var mixArtists: [BaseItemDto] = []
+    @State private var stations: [BaseItemDto] = []
     @State private var onRepeat: [BaseItemDto] = []
     @State private var recentlyAdded: [BaseItemDto] = []
     @State private var favorites: [BaseItemDto] = []
@@ -37,6 +38,14 @@ struct KhyloMusicForYou: View {
                     KhyloRow(title: "Your Mixes", subtitle: "Built around the artists you play") {
                         ForEach(mixArtists, id: \.id) { artist in
                             KhyloMixCard(artist: artist)
+                        }
+                    }
+                }
+
+                if !stations.isEmpty {
+                    KhyloRow(title: "Artist Stations", subtitle: "Artists like the ones you play") {
+                        ForEach(stations, id: \.id) { artist in
+                            KhyloStationCard(artist: artist)
                         }
                     }
                 }
@@ -176,6 +185,31 @@ struct KhyloMusicForYou: View {
         mixArtists = Array(artists.prefix(8))
 
         withAnimation(.easeOut(duration: 0.25)) { isLoading = false }
+        await loadStations(from: mixArtists)
+    }
+
+    /// Recommended stations: artists similar to the ones you play most, that
+    /// aren't already in your mixes.
+    private func loadStations(from artists: [BaseItemDto]) async {
+        let seeds = artists.prefix(4).compactMap(\.id)
+        guard !seeds.isEmpty else { return }
+        var known = Set(artists.compactMap(\.id))
+        var found: [BaseItemDto] = []
+        await withTaskGroup(of: [BaseItemDto].self) { group in
+            for seed in seeds {
+                group.addTask { (try? await KhyloAPI.similarArtists(to: seed, limit: 8)) ?? [] }
+            }
+            for await similar in group {
+                found.append(contentsOf: similar)
+            }
+        }
+        var picked: [BaseItemDto] = []
+        for artist in found.shuffled() {
+            guard let id = artist.id, known.insert(id).inserted else { continue }
+            picked.append(artist)
+            if picked.count == 10 { break }
+        }
+        withAnimation(.easeOut(duration: 0.25)) { stations = picked }
     }
 
     /// The albums of a list of tracks, most recent first, as lightweight album items.
@@ -291,6 +325,86 @@ struct KhyloMixCard: View {
             isStarting = false
             guard !songs.isEmpty else { return }
             KhyloAudioPlayer.shared.play(songs, kind: .music, collectionTitle: "\(artist.name ?? "Artist") Mix", startTicks: 0)
+        }
+    }
+}
+
+// MARK: - Station card
+
+/// A round artist portrait that starts that artist's radio: songs by them and
+/// artists like them.
+struct KhyloStationCard: View {
+
+    let artist: BaseItemDto
+    var size: CGFloat = 128
+
+    @State private var art: URL?
+    @State private var isStarting = false
+
+    var body: some View {
+        Button {
+            start()
+        } label: {
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle().fill(Color.white.opacity(0.08))
+                    if let art {
+                        KhyloImage(url: art, showsPlaceholder: false)
+                            .clipShape(Circle())
+                    } else {
+                        Image(systemName: "music.mic")
+                            .font(.system(size: 30, weight: .light))
+                            .foregroundColor(.white.opacity(0.3))
+                    }
+                    if isStarting {
+                        Circle().fill(Color.black.opacity(0.45))
+                        ProgressView().tint(.white)
+                    }
+                }
+                .frame(width: size, height: size)
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.black)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(KhyloStyle.accent))
+                        .overlay(Circle().strokeBorder(KhyloStyle.canvas, lineWidth: 2.5))
+                        .offset(x: -4, y: -4)
+                }
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
+
+                VStack(spacing: 1) {
+                    Text(artist.name ?? "")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                    Text("Station")
+                        .font(.system(size: 12))
+                        .foregroundColor(KhyloStyle.tertiaryText)
+                }
+                .frame(width: size)
+            }
+        }
+        .buttonStyle(KhyloScaleButtonStyle())
+        .accessibilityLabel("\(artist.name ?? "Artist") station")
+        .task(id: artist.id) {
+            let url = await KhyloArtistArt.shared.image(for: artist, width: size * 2)
+            withAnimation(.easeOut(duration: 0.25)) { art = url }
+        }
+    }
+
+    private func start() {
+        guard let id = artist.id, !isStarting else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        isStarting = true
+        Task {
+            var songs = (try? await KhyloAPI.instantMix(from: id)) ?? []
+            if songs.isEmpty {
+                songs = (try? await KhyloAPI.items(types: [.audio], sortBy: [.random], artistIDs: [id], limit: 100).items) ?? []
+            }
+            isStarting = false
+            guard !songs.isEmpty else { return }
+            KhyloAudioPlayer.shared.play(songs, kind: .music, collectionTitle: "\(artist.name ?? "Artist") Station", startTicks: 0)
         }
     }
 }

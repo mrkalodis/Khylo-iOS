@@ -23,7 +23,7 @@ final class KhyloAudioPlayer: ObservableObject {
 
     static let shared = KhyloAudioPlayer()
 
-    enum Kind {
+    enum Kind: String, Codable {
         case music
         case audiobook
     }
@@ -130,6 +130,17 @@ final class KhyloAudioPlayer: ObservableObject {
     /// Which load is current, so a slow lookup can't start an old song.
     private var loadGeneration: UUID?
     private let logger = Logger.swiftfin()
+    /// Signal was lost: the song waits here and picks up at the same spot.
+    private var waitingForNetwork = false
+    private var waitPosition: Double = 0
+    private var networkWaitTask: Task<Void, Never>?
+    /// When waiting for a connection began (gives up after a few minutes).
+    private var networkWaitStarted: Date?
+    private var networkCancellable: AnyCancellable?
+    /// Keeps the app running while the next song loads, even in the background.
+    private var transitionTask: UIBackgroundTaskIdentifier = .invalid
+    private var lastSessionSave = Date.distantPast
+    private var resignObserver: NSObjectProtocol?
     private var lastReport = Date.distantPast
     private var sleepTask: Task<Void, Never>?
     private var artworkTask: Task<Void, Never>?
@@ -152,7 +163,10 @@ final class KhyloAudioPlayer: ObservableObject {
             .sink { [weak self] status in
                 let buffering = status == .waitingToPlayAtSpecifiedRate
                 if self?.isBuffering != buffering { self?.isBuffering = buffering }
-                if status == .playing { self?.playingItem = self?.player.currentItem }
+                if status == .playing {
+                    self?.playingItem = self?.player.currentItem
+                    self?.releaseAppAwake()
+                }
             }
         itemCancellable = player.publisher(for: \.currentItem)
             .receive(on: DispatchQueue.main)
@@ -223,6 +237,21 @@ final class KhyloAudioPlayer: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.resumeIfInterrupted() }
+        }
+        // Signal's back: carry on from where the song stopped.
+        networkCancellable = KhyloNetwork.shared.$isOnline
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] online in
+                if online { self?.resumeAfterNetwork() }
+            }
+        // Remember what's playing so it's there after the app is closed.
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.willResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.saveSession(force: true) }
         }
         claimRemoteCommands()
     }
@@ -298,9 +327,10 @@ final class KhyloAudioPlayer: ObservableObject {
 
     func resume() {
         guard isActive else { return }
-        // The queue ran out: start the current track again.
-        guard player.currentItem != nil else {
-            load(index: index, startTicks: 0)
+        // Nothing loaded (the queue ran out, the app was reopened, or the stream
+        // broke): start the current track again from where it was.
+        guard let item = player.currentItem, item === activeItem, item.status != .failed else {
+            load(index: index, startTicks: Int(currentTime * 10_000_000))
             return
         }
         activateSession()
@@ -313,10 +343,14 @@ final class KhyloAudioPlayer: ObservableObject {
 
     func pause() {
         resumeAfterInterruption = false
+        stopWaitingForNetwork()
         player.pause()
         isPlaying = false
+        isBuffering = false
         report(force: true)
         updateNowPlaying()
+        saveSession(force: true)
+        releaseAppAwake()
     }
 
     func next() {
@@ -347,6 +381,7 @@ final class KhyloAudioPlayer: ObservableObject {
             isShuffled = true
         }
         discardPreload()
+        prepareCache()
         updateNowPlaying()
     }
 
@@ -361,6 +396,7 @@ final class KhyloAudioPlayer: ObservableObject {
         index = queue.firstIndex { $0.id == currentID } ?? index
         queue.insert(item, at: min(index + 1, queue.count))
         discardPreload()
+        prepareCache()
     }
 
     func addToQueue(_ item: BaseItemDto) {
@@ -370,6 +406,7 @@ final class KhyloAudioPlayer: ObservableObject {
         }
         queue.append(item)
         discardPreload()
+        prepareCache()
     }
 
     func previous() {
@@ -402,6 +439,10 @@ final class KhyloAudioPlayer: ObservableObject {
     func stop() {
         tokenWaitTask?.cancel()
         startWatchdog?.cancel()
+        stopWaitingForNetwork()
+        KhyloSongCache.shared.cancel()
+        try? FileManager.default.removeItem(at: Self.sessionFile)
+        releaseAppAwake()
         loadGeneration = nil
         reportStopped()
         preloaded = nil
@@ -442,7 +483,9 @@ final class KhyloAudioPlayer: ObservableObject {
         }
         index = newIndex
         tokenWaitTask?.cancel()
+        stopWaitingForNetwork()
         guard let item = current else { return }
+        holdAppAwake()
         // Never open a stream without the sign-in token: the server refuses it.
         guard let url = streamURL(for: item) else {
             waitForToken(index: newIndex, startTicks: startTicks)
@@ -478,6 +521,8 @@ final class KhyloAudioPlayer: ObservableObject {
             }
         }
         trackDidStart()
+        prepareCache()
+        saveSession(force: true)
     }
 
     /// Puts a song's stream into the player and starts it.
@@ -486,8 +531,10 @@ final class KhyloAudioPlayer: ObservableObject {
         player.removeAllItems()
         player.insert(playerItem, after: nil)
         activeItem = playerItem
+        handledItem = nil
         if start > 1 {
-            player.seek(to: CMTime(seconds: start, preferredTimescale: 600))
+            // Exactly where it was, not the nearest earlier point.
+            player.seek(to: CMTime(seconds: start, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
         }
         // Paused while the stream was being looked up: stay paused.
         if isPlaying {
@@ -609,9 +656,23 @@ final class KhyloAudioPlayer: ObservableObject {
         guard isActive, let item, item === activeItem, item !== handledItem else { return }
         handledItem = item
         startWatchdog?.cancel()
-        let position = currentTime
+        holdAppAwake()
+        // Where it actually got to (the clock can lag a moment behind).
+        let playhead = item.currentTime().seconds
+        let position = max(currentTime, playhead.isFinite ? playhead : 0)
         let rejected = Self.wasRejected(item)
         logger.warning("Music: stream failed", metadata: ["details": "\(Self.describe(item))"])
+
+        // The song's already on the phone: carry on from that copy at the same second.
+        if switchToCachedCopy(at: position, from: item) { return }
+
+        // No signal: wait for it and pick up at the same spot. Losing signal
+        // never skips a song.
+        if !KhyloNetwork.shared.isOnline || (Self.isNetworkFailure(item) && retries >= 3) {
+            waitForNetwork(at: position)
+            return
+        }
+
         // Anything but a refused link: try the plain stream next time.
         if !rejected { usePlainStream = true }
         if retries < 3 {
@@ -619,14 +680,16 @@ final class KhyloAudioPlayer: ObservableObject {
             // A refused link is rebuilt with the current token right away; a dropped
             // connection gets a moment to come back.
             let wait: Double = rejected && retries == 1 ? 0.5 : [2, 5, 10][min(retries - 1, 2)]
+            isBuffering = true
             Task { @MainActor [weak self] in
-                // Give the connection (or the server) time to come back.
                 try? await Task.sleep(for: .seconds(wait))
-                guard let self, self.isActive else { return }
+                guard let self, self.isActive, self.activeItem === item else { return }
                 self.reload(at: position)
             }
             return
         }
+
+        // Online, several fresh tries, and the file itself still won't play: move on.
         retries = 0
         failedInARow += 1
         if failedInARow < 3, let next = nextIndex {
@@ -638,8 +701,98 @@ final class KhyloAudioPlayer: ObservableObject {
             failedInARow = 0
             player.pause()
             isPlaying = false
+            isBuffering = false
             updateNowPlaying()
+            releaseAppAwake()
         }
+    }
+
+    /// Swaps a broken stream for the copy kept on the phone, at the same second.
+    private func switchToCachedCopy(at position: Double, from item: AVPlayerItem) -> Bool {
+        guard kind == .music,
+              let cached = KhyloSongCache.shared.file(for: current?.id),
+              (item.asset as? AVURLAsset)?.url != cached
+        else { return false }
+        logger.info("Music: carrying on from the copy on the phone")
+        retries = 0
+        attach(cached, start: position, name: current?.name ?? "", note: "copy on the phone")
+        return true
+    }
+
+    /// Holds the song until there's a connection again, then carries on from the same spot.
+    private func waitForNetwork(at position: Double) {
+        if networkWaitStarted == nil { networkWaitStarted = Date() }
+        // After a few minutes without a connection, pause rather than spin forever.
+        if let started = networkWaitStarted, Date().timeIntervalSince(started) > 5 * 60 {
+            networkWaitStarted = nil
+            stopWaitingForNetwork()
+            player.pause()
+            isPlaying = false
+            isBuffering = false
+            updateNowPlaying()
+            releaseAppAwake()
+            return
+        }
+        logger.info("Music: waiting for a connection")
+        waitingForNetwork = true
+        waitPosition = position
+        isBuffering = true
+        networkWaitTask?.cancel()
+        networkWaitTask = Task { @MainActor [weak self] in
+            for _ in 0 ..< 30 {
+                try? await Task.sleep(for: .seconds(10))
+                guard let self, !Task.isCancelled, self.waitingForNetwork else { return }
+                // The copy on the phone may have finished meanwhile.
+                if let item = self.activeItem, self.switchToCachedCopy(at: self.waitPosition, from: item) {
+                    self.stopWaitingForNetwork()
+                    return
+                }
+                if KhyloNetwork.shared.isOnline {
+                    self.resumeAfterNetwork()
+                    return
+                }
+            }
+        }
+    }
+
+    private func resumeAfterNetwork() {
+        guard waitingForNetwork, isActive else { return }
+        stopWaitingForNetwork()
+        retries = 0
+        reload(at: waitPosition)
+    }
+
+    private func stopWaitingForNetwork() {
+        waitingForNetwork = false
+        networkWaitTask?.cancel()
+        networkWaitTask = nil
+    }
+
+    /// The connection dropped, as opposed to the file or the server refusing.
+    private static func isNetworkFailure(_ item: AVPlayerItem) -> Bool {
+        let error = item.error as NSError?
+        guard let error else { return true }
+        let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
+        if [error, underlying].contains(where: { $0?.domain == NSURLErrorDomain }) { return true }
+        return item.errorLog()?.events.contains { $0.errorDomain == NSURLErrorDomain } == true
+    }
+
+    // MARK: - Staying awake between songs
+
+    /// iOS only keeps a music app running in the background while sound is
+    /// playing. Between songs (or while a stream reconnects) nothing plays for
+    /// a moment, so ask for a little time to get the next one going.
+    private func holdAppAwake() {
+        guard transitionTask == .invalid else { return }
+        transitionTask = UIApplication.shared.beginBackgroundTask(withName: "org.khylo.music.next") { [weak self] in
+            MainActor.assumeIsolated { self?.releaseAppAwake() }
+        }
+    }
+
+    private func releaseAppAwake() {
+        guard transitionTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(transitionTask)
+        transitionTask = .invalid
     }
 
     /// The server turned the stream down (signed-out or missing token), as opposed
@@ -659,7 +812,9 @@ final class KhyloAudioPlayer: ObservableObject {
     private func makePlayerItem(_ url: URL) -> AVPlayerItem {
         let item = AVPlayerItem(asset: AVURLAsset(url: url, options: [AVURLAssetAllowsCellularAccessKey: true]))
         item.audioTimePitchAlgorithm = kind == .audiobook ? .timeDomain : .spectral
-        item.preferredForwardBufferDuration = 30
+        // A long buffer rides out short dead spots.
+        item.preferredForwardBufferDuration = 60
+        if kind == .music { KhyloEqualizer.attach(to: item) }
         return item
     }
 
@@ -735,6 +890,14 @@ final class KhyloAudioPlayer: ObservableObject {
         // Carry on from the same spot instead of moving to the next song.
         let expected = Double(current?.runTimeTicks ?? 0) / 10_000_000
         let reached = currentTime
+        if expected > 30, reached < expected - 10 {
+            holdAppAwake()
+            if switchToCachedCopy(at: reached, from: ended) { return }
+            if !KhyloNetwork.shared.isOnline {
+                waitForNetwork(at: reached)
+                return
+            }
+        }
         if expected > 30, reached < expected - 10, retries < 3 {
             retries += 1
             let wait: Double = [2, 5, 10][min(retries - 1, 2)]
@@ -748,6 +911,7 @@ final class KhyloAudioPlayer: ObservableObject {
         }
 
         failedInARow = 0
+        holdAppAwake()
         report(force: true)
         reportStopped()
 
@@ -801,6 +965,7 @@ final class KhyloAudioPlayer: ObservableObject {
                 return
             }
             self.queue.append(contentsOf: fresh)
+            self.prepareCache()
             if self.waitingForAutoplay {
                 self.waitingForAutoplay = false
                 self.load(index: self.index + 1, startTicks: 0)
@@ -814,6 +979,10 @@ final class KhyloAudioPlayer: ObservableObject {
         // A downloaded copy plays first; streaming only when it isn't downloaded.
         if let id = item.id, let file = KhyloDownloads.shared.fileURL(for: id) {
             return file
+        }
+        // Then the copy kept ahead while listening.
+        if kind == .music, let cached = KhyloSongCache.shared.file(for: item.id) {
+            return cached
         }
         guard let session = KhyloAPI.session, let id = item.id,
               let token = KhyloAPI.accessToken
@@ -858,8 +1027,10 @@ final class KhyloAudioPlayer: ObservableObject {
         if player.timeControlStatus == .playing, seconds > 3 {
             retries = 0
             failedInARow = 0
+            networkWaitStarted = nil
         }
         report(force: false)
+        saveSession(force: false)
     }
 
     // MARK: - Server reporting
@@ -911,6 +1082,89 @@ final class KhyloAudioPlayer: ObservableObject {
         info.playSessionID = playSessionID
         info.positionTicks = Int(currentTime * 10_000_000)
         Task { _ = try? await client.send(Paths.reportPlaybackStopped(info)) }
+    }
+
+    // MARK: - Cache ahead
+
+    /// The song that's streaming and the next two, kept on the phone as you listen.
+    private func prepareCache() {
+        guard kind == .music, let current else {
+            KhyloSongCache.shared.cancel()
+            return
+        }
+        var items: [BaseItemDto] = []
+        if !KhyloDownloads.shared.isDownloaded(current.id), KhyloSongCache.shared.file(for: current.id) == nil {
+            items.append(current)
+        }
+        var position = index
+        for _ in 0 ..< 2 {
+            position += 1
+            if position >= queue.count {
+                guard repeatMode == .all, !queue.isEmpty else { break }
+                position = 0
+            }
+            items.append(queue[position])
+        }
+        KhyloSongCache.shared.prepare(items)
+    }
+
+    // MARK: - Remembering what was playing
+
+    private struct SavedSession: Codable {
+        var queue: [BaseItemDto]
+        var index: Int
+        var position: Double
+        var kind: Kind
+        var collectionTitle: String?
+        var artworkURL: URL?
+    }
+
+    private static var sessionFile: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("khylo-now-playing.json")
+    }
+
+    /// Saves the queue and position so the app opens on the same song.
+    private func saveSession(force: Bool) {
+        guard current != nil, force || Date().timeIntervalSince(lastSessionSave) > 5 else { return }
+        lastSessionSave = Date()
+        let first = max(0, index - 50)
+        let last = min(queue.count, index + 150)
+        let saved = SavedSession(
+            queue: Array(queue[first ..< last]),
+            index: index - first,
+            position: currentTime,
+            kind: kind,
+            collectionTitle: collectionTitle,
+            artworkURL: artworkURL
+        )
+        guard let data = try? JSONEncoder().encode(saved) else { return }
+        try? FileManager.default.createDirectory(
+            at: Self.sessionFile.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try? data.write(to: Self.sessionFile, options: .atomic)
+    }
+
+    /// Puts back what was playing when the app was last closed, paused, so
+    /// Play carries on from the same spot.
+    func restoreSession() {
+        guard !isActive,
+              let data = try? Data(contentsOf: Self.sessionFile),
+              let saved = try? JSONDecoder().decode(SavedSession.self, from: data),
+              saved.queue.indices.contains(saved.index)
+        else { return }
+        queue = saved.queue
+        index = saved.index
+        kind = saved.kind
+        collectionTitle = saved.collectionTitle
+        artworkURL = saved.artworkURL
+        duration = Double(saved.queue[saved.index].runTimeTicks ?? 0) / 10_000_000
+        currentTime = saved.position
+        isPlaying = false
+        isBuffering = false
+        loadArtwork()
+        loadQuality()
+        updateNowPlaying()
     }
 
     // MARK: - Lock screen

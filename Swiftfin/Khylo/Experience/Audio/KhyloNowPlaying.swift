@@ -132,6 +132,8 @@ struct KhyloNowPlayingScreen: View {
     @ObservedObject private var player = KhyloAudioPlayer.shared
     @Environment(\.dismiss) private var dismiss
     @State private var isShowingQueue = false
+    @State private var isShowingSettings = false
+    @AppStorage(KhyloPlayerTheme.storageKey) private var theme: KhyloPlayerTheme = .khylo
     @State private var tint: Color?
     @State private var isFavorite = false
     @State private var dragOffset: CGFloat = 0
@@ -140,53 +142,45 @@ struct KhyloNowPlayingScreen: View {
 
     private var artwork: URL? { player.displayArtworkURL(width: 900) }
 
-    var body: some View {
-        ZStack {
-            background
+    /// Audiobooks always use the standard player.
+    private var activeTheme: KhyloPlayerTheme {
+        player.kind == .audiobook ? .khylo : theme
+    }
 
-            VStack(spacing: 0) {
-                topBar
-                    .padding(.top, 8)
-
-                Spacer(minLength: 20)
-
-                KhyloImage(url: artwork, placeholderSymbol: player.kind == .audiobook ? "headphones" : "music.note")
-                    .aspectRatio(1, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .shadow(color: .black.opacity(0.5), radius: 30, y: 18)
-                    .scaleEffect(player.isPlaying ? 1 : 0.86)
-                    .animation(.spring(response: 0.45, dampingFraction: 0.75), value: player.isPlaying)
-                    .padding(.horizontal, 28)
-                    .id(player.current?.id)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
-
-                Spacer(minLength: 28)
-
-                titleRow
-                    .padding(.horizontal, 28)
-
-                KhyloClockScrubber(clock: player.clock) { player.seek(to: $0) }
-                    .padding(.horizontal, 28)
-                    .padding(.top, 20)
-
-                if let quality = player.quality {
-                    KhyloQualityLabel(quality: quality)
-                        .padding(.top, 2)
-                        .transition(.opacity)
+    private var actions: KhyloPlayerActions {
+        KhyloPlayerActions(
+            close: { dismiss() },
+            showQueue: { isShowingQueue = true },
+            showSettings: { isShowingSettings = true },
+            toggleFavorite: toggleFavorite,
+            isFavorite: isFavorite,
+            openArtist: { artistID in
+                dismiss()
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(350))
+                    KhyloPageRelay.shared.openArtist(id: artistID)
                 }
-
-                transport
-                    .padding(.horizontal, 22)
-                    .padding(.top, 14)
-
-                bottomRow
-                    .padding(.horizontal, 28)
-                    .padding(.top, 22)
-                    .padding(.bottom, 18)
             }
-            .offset(y: dragOffset)
+        )
+    }
+
+    var body: some View {
+        Group {
+            switch activeTheme {
+            case .vinyl:
+                KhyloVinylPlayer(actions: actions, tint: tint)
+            case .retro:
+                KhyloRetroPlayer(actions: actions)
+            case .cyberpunk:
+                KhyloCyberpunkPlayer(actions: actions)
+            case .khylo, .aurora, .mono:
+                standardPlayer
+            }
         }
-        .preferredColorScheme(.dark)
+        .offset(y: dragOffset)
+        .background(Color.black.ignoresSafeArea())
+        .preferredColorScheme(activeTheme == .retro ? .light : .dark)
+        .animation(.easeInOut(duration: 0.35), value: activeTheme)
         .animation(.easeInOut(duration: 0.3), value: player.current?.id)
         .gesture(
             DragGesture()
@@ -200,6 +194,9 @@ struct KhyloNowPlayingScreen: View {
                 }
         )
         .sheet(isPresented: $isShowingQueue) { queueSheet }
+        .sheet(isPresented: $isShowingSettings) {
+            KhyloPlayerSettingsSheet { dismiss() }
+        }
         .onChange(of: player.isActive) { _, isActive in
             if !isActive { dismiss() }
         }
@@ -207,6 +204,60 @@ struct KhyloNowPlayingScreen: View {
             isFavorite = player.current?.khyloIsFavorite ?? false
             let color = await KhyloArtColor.color(for: player.displayArtworkURL(width: 120))
             withAnimation(.easeInOut(duration: 0.6)) { tint = color }
+        }
+    }
+
+    // MARK: Standard player
+
+    /// The standard layout, restyled by the Khylo, Aurora and Mono themes.
+    private var standardPlayer: some View {
+        ZStack {
+            switch activeTheme {
+            case .aurora: KhyloAuroraBackground(tint: tint, isPlaying: player.isPlaying)
+            case .mono: Color.black.ignoresSafeArea()
+            default: background
+            }
+
+            VStack(spacing: 0) {
+                topBar
+                    .padding(.top, 8)
+
+                KhyloImage(url: artwork, placeholderSymbol: player.kind == .audiobook ? "headphones" : "music.note")
+                    .aspectRatio(1, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: activeTheme == .mono ? 2 : 12, style: .continuous))
+                    .shadow(color: activeTheme == .mono ? .clear : (activeTheme == .aurora ? (tint ?? .black) : .black).opacity(0.5), radius: 30, y: 18)
+                    .scaleEffect(player.isPlaying ? 1 : 0.88)
+                    .animation(.spring(response: 0.45, dampingFraction: 0.75), value: player.isPlaying)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 14)
+                    .id(player.current?.id)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+
+                Spacer(minLength: 20)
+
+                titleRow
+                    .padding(.horizontal, 28)
+
+                KhyloClockScrubber(clock: player.clock) { player.seek(to: $0) }
+                    .padding(.horizontal, 28)
+                    .padding(.top, 22)
+
+                if let quality = player.quality {
+                    KhyloQualityLabel(quality: quality)
+                        .padding(.top, 4)
+                        .transition(.opacity)
+                }
+
+                transport
+                    .padding(.horizontal, 22)
+                    .padding(.top, 18)
+
+                Spacer(minLength: 16)
+
+                bottomRow
+                    .padding(.horizontal, 28)
+                    .padding(.bottom, 16)
+            }
         }
     }
 
@@ -256,14 +307,14 @@ struct KhyloNowPlayingScreen: View {
             Spacer()
 
             Button {
-                isShowingQueue = true
+                isShowingSettings = true
             } label: {
-                Image(systemName: "list.bullet")
+                Image(systemName: "gearshape")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(.white)
                     .frame(width: 44, height: 44)
             }
-            .accessibilityLabel(player.kind == .audiobook ? "Parts" : "Up Next")
+            .accessibilityLabel("Player settings")
         }
         .padding(.horizontal, 14)
     }
@@ -271,8 +322,9 @@ struct KhyloNowPlayingScreen: View {
     private var titleRow: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(player.displayTitle)
-                    .font(.system(size: 23, weight: .bold))
+                Text(activeTheme == .mono ? player.displayTitle.uppercased() : player.displayTitle)
+                    .font(.system(size: activeTheme == .mono ? 22 : 24, weight: activeTheme == .mono ? .black : .bold))
+                    .tracking(activeTheme == .mono ? 0.6 : 0)
                     .foregroundColor(.white)
                     .lineLimit(1)
                 if player.kind == .music, let track = player.current, !track.khyloArtistLinks.isEmpty {
@@ -381,9 +433,9 @@ struct KhyloNowPlayingScreen: View {
             VStack(spacing: 4) {
                 Image(systemName: symbol)
                     .font(.system(size: 19, weight: .semibold))
-                    .foregroundColor(isOn ? KhyloStyle.accent : .white.opacity(0.75))
+                    .foregroundColor(isOn ? (activeTheme == .mono ? .white : KhyloStyle.accent) : .white.opacity(0.75))
                 Circle()
-                    .fill(isOn ? KhyloStyle.accent : .clear)
+                    .fill(isOn ? (activeTheme == .mono ? .white : KhyloStyle.accent) : .clear)
                     .frame(width: 4, height: 4)
             }
             .frame(width: 44, height: 50)
@@ -441,12 +493,17 @@ struct KhyloNowPlayingScreen: View {
                 }
             }
 
+            if player.kind == .music, let current = player.current {
+                Spacer()
+                KhyloDownloadButton(item: current, style: .icon)
+            }
+
             Spacer()
 
             Button {
                 isShowingQueue = true
             } label: {
-                Image(systemName: "list.bullet.rectangle")
+                Image(systemName: "list.bullet")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.white.opacity(0.85))
                     .frame(width: 36, height: 36)
@@ -561,8 +618,11 @@ private struct KhyloMiniProgress: View {
 }
 
 /// Scrubber bound to the playback clock, holding its own drag state.
-private struct KhyloClockScrubber: View {
+struct KhyloClockScrubber: View {
     @ObservedObject var clock: KhyloPlaybackClock
+    var fill: Color = .white
+    var track: Color = .white.opacity(0.25)
+    var text: Color = .white.opacity(0.6)
     let onSeek: (Double) -> Void
 
     @State private var scrubValue: Double?
@@ -571,6 +631,9 @@ private struct KhyloClockScrubber: View {
         KhyloScrubber(
             value: scrubValue ?? clock.currentTime,
             duration: clock.duration,
+            fill: fill,
+            track: track,
+            text: text,
             onChanged: { scrubValue = $0 },
             onEnded: { value in
                 onSeek(value)
@@ -611,6 +674,9 @@ struct KhyloQualityLabel: View {
 private struct KhyloScrubber: View {
     let value: Double
     let duration: Double
+    let fill: Color
+    let track: Color
+    let text: Color
     let onChanged: (Double) -> Void
     let onEnded: (Double) -> Void
 
@@ -622,10 +688,10 @@ private struct KhyloScrubber: View {
                 let width = proxy.size.width
                 let fraction = duration > 0 ? min(1, max(0, value / duration)) : 0
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.25))
-                    Capsule().fill(Color.white).frame(width: width * fraction)
+                    Capsule().fill(track)
+                    Capsule().fill(fill).frame(width: width * fraction)
                     Circle()
-                        .fill(Color.white)
+                        .fill(fill)
                         .frame(width: isDragging ? 16 : 10, height: isDragging ? 16 : 10)
                         .offset(x: width * fraction - (isDragging ? 8 : 5))
                 }
@@ -656,7 +722,7 @@ private struct KhyloScrubber: View {
                 Text("-" + KhyloNowPlayingScreen.format(max(0, duration - value)))
             }
             .font(.system(size: 12, weight: .medium).monospacedDigit())
-            .foregroundColor(.white.opacity(isDragging ? 0.95 : 0.6))
+            .foregroundColor(isDragging ? fill : text)
         }
     }
 }
@@ -664,10 +730,12 @@ private struct KhyloScrubber: View {
 // MARK: - AirPlay
 
 /// The system AirPlay / output picker.
-private struct KhyloRoutePicker: UIViewRepresentable {
+struct KhyloRoutePicker: UIViewRepresentable {
+    var tint: UIColor = UIColor.white.withAlphaComponent(0.85)
+
     func makeUIView(context: Context) -> AVRoutePickerView {
         let view = AVRoutePickerView()
-        view.tintColor = UIColor.white.withAlphaComponent(0.85)
+        view.tintColor = tint
         view.activeTintColor = UIColor(KhyloStyle.accent)
         view.prioritizesVideoDevices = false
         return view

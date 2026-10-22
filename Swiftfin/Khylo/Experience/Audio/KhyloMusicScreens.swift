@@ -598,7 +598,7 @@ struct KhyloAlbumScreen: View {
                         .opacity(phase.value < 0 ? 1 + phase.value * 0.5 : 1)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 70)
+                .padding(.top, 12)
 
             VStack(alignment: .center, spacing: 7) {
                 Text(album.name ?? "")

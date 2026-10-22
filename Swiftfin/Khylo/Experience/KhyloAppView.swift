@@ -102,6 +102,8 @@ struct KhyloAppView: View {
             selection = .libraries
         }
         .task {
+            // Back on the song you were listening to when the app was closed.
+            KhyloAudioPlayer.shared.restoreSession()
             KhyloDownloads.shared.reconnect()
             await KhyloDownloads.shared.syncProgress()
         }
