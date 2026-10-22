@@ -502,63 +502,58 @@ struct KhyloRetroPlayer: View {
     }
 }
 
-/// An analog level meter: a cream face, a curved scale with a red end, and a
-/// needle that moves while music plays (a light show, not a measurement).
+/// A minimal analog level meter: a pale face, a thin scale with five marks and
+/// a small red end, and a needle that drifts gently while music plays (a light
+/// show, not a measurement).
 private struct KhyloVUMeter: View {
     let channel: String
     let phase: Double
     let isPlaying: Bool
 
+    private let ink = Color(hex: "#3A2A1F")
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: !isPlaying)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
-            let swing = 0.5 * sin(t * 5.1 + phase) * cos(t * 1.9 + phase * 0.6) + 0.18 * sin(t * 11.3 + phase)
-            let level = isPlaying ? min(1, max(0, 0.55 + swing)) : 0
+            // Slow, small swings around the middle of the scale.
+            let level = isPlaying ? 0.5 + 0.16 * sin(t * 1.6 + phase) + 0.06 * sin(t * 3.7 + phase * 2) : 0.05
             GeometryReader { proxy in
                 let size = proxy.size
-                let pivot = CGPoint(x: size.width / 2, y: size.height * 0.92)
-                let radius = min(size.width * 0.46, size.height * 0.78)
+                let pivot = CGPoint(x: size.width / 2, y: size.height * 0.9)
+                let radius = min(size.width * 0.42, size.height * 0.72)
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(LinearGradient(colors: [Color(hex: "#FBF1D3"), Color(hex: "#EBD9A8")], startPoint: .top, endPoint: .bottom))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(hex: "#F7EFDC"))
                     Canvas { canvas, _ in
-                        // Scale: ticks from −50° to +50°, the last stretch in red.
-                        for step in 0 ... 20 {
-                            let fraction = Double(step) / 20
-                            let angle = (-50 + 100 * fraction - 90) * .pi / 180
-                            let isRed = fraction > 0.72
-                            let inner = radius * (step % 5 == 0 ? 0.8 : 0.86)
-                            var tick = Path()
-                            tick.move(to: CGPoint(x: pivot.x + cos(angle) * inner, y: pivot.y + sin(angle) * inner))
-                            tick.addLine(to: CGPoint(x: pivot.x + cos(angle) * radius * 0.94, y: pivot.y + sin(angle) * radius * 0.94))
-                            canvas.stroke(tick, with: .color(isRed ? Color(hex: "#C8382A") : Color(hex: "#3A2A1F")), lineWidth: step % 5 == 0 ? 1.6 : 1)
-                        }
+                        let start = -140.0, end = -40.0
                         var arc = Path()
-                        arc.addArc(center: pivot, radius: radius * 0.94, startAngle: .degrees(-140), endAngle: .degrees(-40), clockwise: false)
-                        canvas.stroke(arc, with: .color(Color(hex: "#3A2A1F").opacity(0.6)), lineWidth: 1)
-                        // Needle.
-                        let needle = (-50 + 100 * level - 90) * .pi / 180
+                        arc.addArc(center: pivot, radius: radius, startAngle: .degrees(start), endAngle: .degrees(end - 22), clockwise: false)
+                        canvas.stroke(arc, with: .color(ink.opacity(0.55)), lineWidth: 1)
+                        var red = Path()
+                        red.addArc(center: pivot, radius: radius, startAngle: .degrees(end - 22), endAngle: .degrees(end), clockwise: false)
+                        canvas.stroke(red, with: .color(Color(hex: "#C8503A")), lineWidth: 2)
+                        for step in 0 ... 4 {
+                            let angle = (start + (end - start) * Double(step) / 4) * .pi / 180
+                            var tick = Path()
+                            tick.move(to: CGPoint(x: pivot.x + cos(angle) * radius, y: pivot.y + sin(angle) * radius))
+                            tick.addLine(to: CGPoint(x: pivot.x + cos(angle) * radius * 0.9, y: pivot.y + sin(angle) * radius * 0.9))
+                            canvas.stroke(tick, with: .color(ink.opacity(0.55)), lineWidth: 1)
+                        }
+                        let needle = (start + (end - start) * level) * .pi / 180
                         var line = Path()
                         line.move(to: pivot)
-                        line.addLine(to: CGPoint(x: pivot.x + cos(needle) * radius * 0.98, y: pivot.y + sin(needle) * radius * 0.98))
-                        canvas.stroke(line, with: .color(Color(hex: "#1E1612")), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
-                        canvas.fill(Path(ellipseIn: CGRect(x: pivot.x - 5, y: pivot.y - 5, width: 10, height: 10)), with: .color(Color(hex: "#1E1612")))
+                        line.addLine(to: CGPoint(x: pivot.x + cos(needle) * radius * 1.04, y: pivot.y + sin(needle) * radius * 1.04))
+                        canvas.stroke(line, with: .color(ink), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+                        canvas.fill(Path(ellipseIn: CGRect(x: pivot.x - 3, y: pivot.y - 3, width: 6, height: 6)), with: .color(ink))
                     }
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Text("VU")
-                            Spacer()
-                            Text(channel)
-                        }
-                        .font(.system(size: 11, weight: .heavy, design: .rounded))
-                        .foregroundColor(Color(hex: "#3A2A1F").opacity(0.7))
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, 6)
-                    }
+                    Text(channel)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .tracking(1)
+                        .foregroundColor(ink.opacity(0.45))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .padding(8)
                 }
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(hex: "#2A2622"), lineWidth: 3))
-                .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(ink.opacity(0.18), lineWidth: 1))
             }
         }
         .accessibilityHidden(true)

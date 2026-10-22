@@ -842,7 +842,15 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     private func makePlayerItem(_ url: URL) -> AVPlayerItem {
-        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: [AVURLAssetAllowsCellularAccessKey: true]))
+        var options: [String: Any] = [AVURLAssetAllowsCellularAccessKey: true]
+        if url.isFileURL {
+            // MP3s the server converted on the fly have no header giving their
+            // length, so the player can't jump around in them unless it reads
+            // the whole file first. Cheap for a file on the phone; a stream
+            // would have to download completely, so streams don't do this.
+            options[AVURLAssetPreferPreciseDurationAndTimingKey] = true
+        }
+        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: options))
         item.audioTimePitchAlgorithm = kind == .audiobook ? .timeDomain : .spectral
         // A long buffer rides out short dead spots.
         item.preferredForwardBufferDuration = 60
