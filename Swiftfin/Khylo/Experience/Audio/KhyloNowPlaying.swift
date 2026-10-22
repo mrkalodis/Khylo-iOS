@@ -229,11 +229,11 @@ struct KhyloNowPlayingScreen: View {
                     .scaleEffect(player.isPlaying ? 1 : 0.88)
                     .animation(.spring(response: 0.45, dampingFraction: 0.75), value: player.isPlaying)
                     .padding(.horizontal, 24)
-                    .padding(.top, 14)
+                    .padding(.top, 6)
                     .id(player.current?.id)
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
 
-                Spacer(minLength: 20)
+                Spacer(minLength: 18)
 
                 titleRow
                     .padding(.horizontal, 28)
@@ -252,11 +252,10 @@ struct KhyloNowPlayingScreen: View {
                     .padding(.horizontal, 22)
                     .padding(.top, 18)
 
-                Spacer(minLength: 16)
-
                 bottomRow
                     .padding(.horizontal, 28)
-                    .padding(.bottom, 16)
+                    .padding(.top, 22)
+                    .padding(.bottom, 12)
             }
         }
     }
@@ -346,19 +345,6 @@ struct KhyloNowPlayingScreen: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            if player.kind == .music {
-                Button {
-                    toggleFavorite()
-                } label: {
-                    Image(systemName: isFavorite ? "heart.fill" : "heart")
-                        .font(.system(size: 24))
-                        .foregroundColor(isFavorite ? KhyloStyle.accent : .white.opacity(0.85))
-                        .contentTransition(.symbolEffect(.replace))
-                }
-                .buttonStyle(KhyloScaleButtonStyle())
-                .accessibilityLabel(isFavorite ? "Remove from favorites" : "Add to favorites")
-            }
         }
     }
 
@@ -496,6 +482,18 @@ struct KhyloNowPlayingScreen: View {
             if player.kind == .music, let current = player.current {
                 Spacer()
                 KhyloDownloadButton(item: current, style: .icon)
+                Spacer()
+                Button {
+                    toggleFavorite()
+                } label: {
+                    Image(systemName: isFavorite ? "heart.fill" : "heart")
+                        .font(.system(size: 21))
+                        .foregroundColor(isFavorite ? (activeTheme == .mono ? .white : KhyloStyle.accent) : .white.opacity(0.85))
+                        .contentTransition(.symbolEffect(.replace))
+                        .frame(width: 36, height: 36)
+                }
+                .buttonStyle(KhyloScaleButtonStyle())
+                .accessibilityLabel(isFavorite ? "Remove from favorites" : "Add to favorites")
             }
 
             Spacer()
@@ -698,7 +696,8 @@ private struct KhyloScrubber: View {
                 .frame(height: isDragging ? 8 : 4)
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
-                .gesture(
+                // Ahead of the swipe-down-to-close gesture on the whole screen.
+                .highPriorityGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { gesture in
                             if !isDragging {

@@ -129,6 +129,8 @@ final class KhyloAudioPlayer: ObservableObject {
     private var usePlainStream = false
     /// Which load is current, so a slow lookup can't start an old song.
     private var loadGeneration: UUID?
+    /// The latest jump, so an older one finishing late isn't taken as a failure.
+    private var seekGeneration = 0
     private let logger = Logger.swiftfin()
     /// Signal was lost: the song waits here and picks up at the same spot.
     private var waitingForNetwork = false
@@ -431,9 +433,39 @@ final class KhyloAudioPlayer: ObservableObject {
 
     func seek(to seconds: Double) {
         currentTime = seconds
-        player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero)
-        report(force: true)
-        updateNowPlaying()
+        defer {
+            report(force: true)
+            updateNowPlaying()
+        }
+        // Nothing loaded yet (the app was just reopened): Play starts from here.
+        guard let item = player.currentItem, item === activeItem else { return }
+
+        let target = CMTime(seconds: seconds, preferredTimescale: 600)
+        let isLocal = (item.asset as? AVURLAsset)?.url.isFileURL == true
+        let canJump = isLocal || item.seekableTimeRanges.contains { $0.timeRangeValue.containsTime(target) }
+        guard canJump else {
+            // A stream the server converts on the fly can't jump: reopen the song there.
+            reopen(at: seconds, from: item, reason: "stream can't jump")
+            return
+        }
+        seekGeneration += 1
+        let generation = seekGeneration
+        player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
+            Task { @MainActor in
+                // A newer drag replacing this one isn't a failure.
+                guard let self, !finished, generation == self.seekGeneration, self.activeItem === item else { return }
+                self.reopen(at: seconds, from: item, reason: "jump didn't finish")
+            }
+        }
+    }
+
+    /// Opens the song again at a new spot: the copy on the phone if there is
+    /// one, otherwise a fresh stream that can jump.
+    private func reopen(at seconds: Double, from item: AVPlayerItem, reason: String) {
+        logger.info("Music: reopening the song to jump to \(Int(seconds))s (\(reason))")
+        if switchToCachedCopy(at: seconds, from: item) { return }
+        usePlainStream = false
+        reload(at: seconds)
     }
 
     func stop() {

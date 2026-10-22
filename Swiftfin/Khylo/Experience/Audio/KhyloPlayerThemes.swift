@@ -131,9 +131,10 @@ struct KhyloVinylPlayer: View {
                 KhyloThemedTopBar(actions: actions, foreground: cream, labelFont: .system(size: 12, weight: .semibold, design: .serif))
                     .padding(.top, 8)
 
+                Spacer(minLength: 6)
+
                 turntable
                     .padding(.horizontal, 16)
-                    .padding(.top, 10)
 
                 Spacer(minLength: 14)
 
@@ -154,11 +155,10 @@ struct KhyloVinylPlayer: View {
                     .padding(.horizontal, 22)
                     .padding(.top, 10)
 
-                Spacer(minLength: 12)
-
                 KhyloThemedBottomRow(actions: actions, color: cream.opacity(0.85))
                     .padding(.horizontal, 28)
-                    .padding(.bottom, 14)
+                    .padding(.top, 20)
+                    .padding(.bottom, 12)
             }
         }
         .onAppear { if player.isPlaying { spinStart = Date() } }
@@ -303,26 +303,37 @@ struct KhyloRetroPlayer: View {
                     .padding(.top, 8)
 
                 cassette
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
 
                 counter
-                    .padding(.horizontal, 24)
-                    .padding(.top, 22)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
 
                 KhyloClockScrubber(clock: player.clock, fill: orange, track: ink.opacity(0.15), text: ink.opacity(0.6)) { player.seek(to: $0) }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 12)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
 
-                Spacer(minLength: 10)
+                // The meters take whatever room is left, so the deck fills the screen.
+                HStack(spacing: 10) {
+                    KhyloVUMeter(channel: "L", phase: 0, isPlaying: player.isPlaying)
+                    KhyloVUMeter(channel: "R", phase: 1.7, isPlaying: player.isPlaying)
+                }
+                .frame(maxHeight: 150)
+                .frame(maxHeight: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
 
-                keys
+                switches
                     .padding(.horizontal, 20)
 
-                Spacer(minLength: 10)
+                keys
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
 
                 KhyloThemedBottomRow(actions: actions, color: ink.opacity(0.85))
                     .padding(.horizontal, 28)
+                    .padding(.top, 10)
                     .padding(.bottom, 14)
             }
         }
@@ -459,24 +470,143 @@ struct KhyloRetroPlayer: View {
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(hex: "#1D261B")))
     }
 
-    /// Piano keys: back, play (stays down while playing), pause, forward, plus shuffle and repeat.
+    /// Piano keys: back, play (stays down while playing), pause and forward.
     private var keys: some View {
-        HStack(spacing: 6) {
-            KhyloPianoKey(symbol: "backward.end.fill", isDown: false, color: ink) { player.previous() }
-            KhyloPianoKey(symbol: "play.fill", isDown: player.isPlaying, color: ink) { if !player.isPlaying { player.togglePlayPause() } }
-            KhyloPianoKey(symbol: "pause.fill", isDown: !player.isPlaying, color: ink) { if player.isPlaying { player.togglePlayPause() } }
-            KhyloPianoKey(symbol: "forward.end.fill", isDown: false, color: ink) { player.next() }
-            VStack(spacing: 6) {
-                KhyloPianoKey(symbol: "shuffle", isDown: player.isShuffled, color: player.isShuffled ? orange : ink, height: 37) { player.toggleShuffle() }
-                KhyloPianoKey(
-                    symbol: player.repeatMode == .one ? "repeat.1" : "repeat",
-                    isDown: player.repeatMode != .off,
-                    color: player.repeatMode != .off ? orange : ink,
-                    height: 37
-                ) { player.repeatMode = player.repeatMode.next }
+        HStack(spacing: 8) {
+            KhyloPianoKey(symbol: "backward.end.fill", label: "Previous", isDown: false, color: ink) { player.previous() }
+            KhyloPianoKey(symbol: "play.fill", label: "Play", isDown: player.isPlaying, color: ink) {
+                if !player.isPlaying { player.togglePlayPause() }
             }
-            .frame(width: 58)
+            KhyloPianoKey(symbol: "pause.fill", label: "Pause", isDown: !player.isPlaying, color: ink) {
+                if player.isPlaying { player.togglePlayPause() }
+            }
+            KhyloPianoKey(symbol: "forward.end.fill", label: "Next", isDown: false, color: ink) { player.next() }
         }
+    }
+
+    /// Shuffle and repeat as deck switches with a light beside each.
+    private var switches: some View {
+        HStack(spacing: 10) {
+            KhyloDeckSwitch(title: "SHUFFLE", isOn: player.isShuffled, ink: ink, light: orange) {
+                player.toggleShuffle()
+            }
+            KhyloDeckSwitch(
+                title: player.repeatMode == .one ? "REPEAT 1" : "REPEAT",
+                isOn: player.repeatMode != .off,
+                ink: ink,
+                light: orange
+            ) {
+                player.repeatMode = player.repeatMode.next
+            }
+        }
+    }
+}
+
+/// An analog level meter: a cream face, a curved scale with a red end, and a
+/// needle that moves while music plays (a light show, not a measurement).
+private struct KhyloVUMeter: View {
+    let channel: String
+    let phase: Double
+    let isPlaying: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !isPlaying)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let swing = 0.5 * sin(t * 5.1 + phase) * cos(t * 1.9 + phase * 0.6) + 0.18 * sin(t * 11.3 + phase)
+            let level = isPlaying ? min(1, max(0, 0.55 + swing)) : 0
+            GeometryReader { proxy in
+                let size = proxy.size
+                let pivot = CGPoint(x: size.width / 2, y: size.height * 0.92)
+                let radius = min(size.width * 0.46, size.height * 0.78)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(LinearGradient(colors: [Color(hex: "#FBF1D3"), Color(hex: "#EBD9A8")], startPoint: .top, endPoint: .bottom))
+                    Canvas { canvas, _ in
+                        // Scale: ticks from −50° to +50°, the last stretch in red.
+                        for step in 0 ... 20 {
+                            let fraction = Double(step) / 20
+                            let angle = (-50 + 100 * fraction - 90) * .pi / 180
+                            let isRed = fraction > 0.72
+                            let inner = radius * (step % 5 == 0 ? 0.8 : 0.86)
+                            var tick = Path()
+                            tick.move(to: CGPoint(x: pivot.x + cos(angle) * inner, y: pivot.y + sin(angle) * inner))
+                            tick.addLine(to: CGPoint(x: pivot.x + cos(angle) * radius * 0.94, y: pivot.y + sin(angle) * radius * 0.94))
+                            canvas.stroke(tick, with: .color(isRed ? Color(hex: "#C8382A") : Color(hex: "#3A2A1F")), lineWidth: step % 5 == 0 ? 1.6 : 1)
+                        }
+                        var arc = Path()
+                        arc.addArc(center: pivot, radius: radius * 0.94, startAngle: .degrees(-140), endAngle: .degrees(-40), clockwise: false)
+                        canvas.stroke(arc, with: .color(Color(hex: "#3A2A1F").opacity(0.6)), lineWidth: 1)
+                        // Needle.
+                        let needle = (-50 + 100 * level - 90) * .pi / 180
+                        var line = Path()
+                        line.move(to: pivot)
+                        line.addLine(to: CGPoint(x: pivot.x + cos(needle) * radius * 0.98, y: pivot.y + sin(needle) * radius * 0.98))
+                        canvas.stroke(line, with: .color(Color(hex: "#1E1612")), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                        canvas.fill(Path(ellipseIn: CGRect(x: pivot.x - 5, y: pivot.y - 5, width: 10, height: 10)), with: .color(Color(hex: "#1E1612")))
+                    }
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Text("VU")
+                            Spacer()
+                            Text(channel)
+                        }
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .foregroundColor(Color(hex: "#3A2A1F").opacity(0.7))
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 6)
+                    }
+                }
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color(hex: "#2A2622"), lineWidth: 3))
+                .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// A labelled slide switch with a light that glows when it's on.
+private struct KhyloDeckSwitch: View {
+    let title: String
+    let isOn: Bool
+    let ink: Color
+    let light: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+            action()
+        } label: {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(isOn ? light : ink.opacity(0.2))
+                    .frame(width: 9, height: 9)
+                    .shadow(color: isOn ? light.opacity(0.9) : .clear, radius: 5)
+                Text(title)
+                    .font(.system(size: 12, weight: .heavy, design: .rounded))
+                    .tracking(1.2)
+                    .foregroundColor(ink)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                ZStack(alignment: isOn ? .trailing : .leading) {
+                    Capsule().fill(ink.opacity(0.85))
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(LinearGradient(colors: [Color(hex: "#F4F1EA"), Color(hex: "#B9B2A4")], startPoint: .top, endPoint: .bottom))
+                        .frame(width: 18, height: 16)
+                        .padding(3)
+                }
+                .frame(width: 46, height: 22)
+                .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isOn)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.45)))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(ink.opacity(0.18), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title.capitalized)
+        .accessibilityValue(isOn ? "On" : "Off")
     }
 }
 
@@ -495,33 +625,42 @@ private struct KhyloRetroTime: View {
 }
 
 /// A chunky deck key that sinks when pressed (and stays down when latched).
+/// Its depth is a solid base under the key, so the symbol never gets a shadow.
 private struct KhyloPianoKey: View {
     let symbol: String
+    let label: String
     let isDown: Bool
     let color: Color
-    var height: CGFloat = 80
+    var height: CGFloat = 76
     let action: () -> Void
 
     @State private var isPressed = false
 
+    private let depth: CGFloat = 6
+
     var body: some View {
         let down = isDown || isPressed
-        Image(systemName: symbol)
-            .font(.system(size: height > 50 ? 22 : 14, weight: .bold))
-            .foregroundColor(color)
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(LinearGradient(
-                        colors: down ? [Color(hex: "#DDD6C8"), Color(hex: "#CFC7B6")] : [Color(hex: "#FBF8F1"), Color(hex: "#DED7C9")],
-                        startPoint: .top, endPoint: .bottom
-                    ))
-            )
-            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color.black.opacity(0.25), lineWidth: 1))
-            .shadow(color: .black.opacity(0.35), radius: 0, y: down ? 1 : 5)
-            .offset(y: down ? 4 : 0)
-            .padding(.bottom, 5)
+        ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(Color(hex: "#8F8676"))
+                .frame(height: height)
+                .offset(y: depth)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(LinearGradient(
+                    colors: down ? [Color(hex: "#DDD6C8"), Color(hex: "#CFC7B6")] : [Color(hex: "#FBF8F1"), Color(hex: "#DED7C9")],
+                    startPoint: .top, endPoint: .bottom
+                ))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Color.black.opacity(0.22), lineWidth: 1))
+                .overlay(
+                    Image(systemName: symbol)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(color)
+                )
+                .frame(height: height)
+                .offset(y: down ? depth - 1 : 0)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height + depth, alignment: .top)
             .contentShape(Rectangle())
             .animation(.spring(response: 0.18, dampingFraction: 0.7), value: down)
             .onLongPressGesture(minimumDuration: 0, pressing: { isPressed = $0 }) {
@@ -529,7 +668,7 @@ private struct KhyloPianoKey: View {
                 action()
             }
             .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(symbol)
+            .accessibilityLabel(label)
     }
 }
 
@@ -561,9 +700,10 @@ struct KhyloCyberpunkPlayer: View {
                 )
                 .padding(.top, 8)
 
+                Spacer(minLength: 6)
+
                 art
                     .padding(.horizontal, 36)
-                    .padding(.top, 10)
 
                 Spacer(minLength: 12)
 
@@ -598,11 +738,10 @@ struct KhyloCyberpunkPlayer: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 14)
 
-                Spacer(minLength: 10)
-
                 KhyloThemedBottomRow(actions: actions, color: Self.cyan)
                     .padding(.horizontal, 28)
-                    .padding(.bottom, 14)
+                    .padding(.top, 20)
+                    .padding(.bottom, 12)
             }
         }
     }
@@ -802,7 +941,7 @@ private struct KhyloSegmentedScrubber: View {
                     }
                 }
                 .contentShape(Rectangle())
-                .gesture(
+                .highPriorityGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { dragValue = min(1, max(0, $0.location.x / proxy.size.width)) * clock.duration }
                         .onEnded { gesture in
