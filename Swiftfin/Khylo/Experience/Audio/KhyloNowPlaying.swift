@@ -221,6 +221,10 @@ struct KhyloNowPlayingScreen: View {
                 topBar
                     .padding(.top, 8)
 
+                // Equal space above and below: the cover sits centred between
+                // the top bar and the song details.
+                Spacer(minLength: 12)
+
                 KhyloImage(url: artwork, placeholderSymbol: player.kind == .audiobook ? "headphones" : "music.note")
                     .aspectRatio(1, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: activeTheme == .mono ? 2 : 12, style: .continuous))
@@ -228,11 +232,10 @@ struct KhyloNowPlayingScreen: View {
                     .scaleEffect(player.isPlaying ? 1 : 0.88)
                     .animation(.spring(response: 0.45, dampingFraction: 0.75), value: player.isPlaying)
                     .padding(.horizontal, 24)
-                    .padding(.top, 6)
                     .id(player.current?.id)
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
 
-                Spacer(minLength: 18)
+                Spacer(minLength: 12)
 
                 titleRow
                     .padding(.horizontal, 28)

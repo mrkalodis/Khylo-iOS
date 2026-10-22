@@ -34,8 +34,18 @@ final class KhyloLiveTVModel: ObservableObject {
     func loadGuide() async {
         let ids = channels.compactMap(\.id)
         guard !ids.isEmpty, programs.isEmpty else { return }
-        let list = (try? await KhyloAPI.programs(channelIDs: ids)) ?? []
+        // A few channels per request: one request for everything can hit the
+        // server's limit and leave later channels empty.
+        let batches = stride(from: 0, to: ids.count, by: 40).map { Array(ids[$0 ..< min($0 + 40, ids.count)]) }
+        var list: [BaseItemDto] = []
+        await withTaskGroup(of: [BaseItemDto].self) { group in
+            for batch in batches {
+                group.addTask { (try? await KhyloAPI.programs(channelIDs: batch)) ?? [] }
+            }
+            for await result in group { list.append(contentsOf: result) }
+        }
         programs = Dictionary(grouping: list) { $0.channelID ?? "" }
+            .mapValues { $0.sorted { ($0.startDate ?? .distantPast) < ($1.startDate ?? .distantPast) } }
     }
 
     /// Whether the server has program info; without it only channels are shown.
@@ -260,9 +270,12 @@ struct KhyloLiveTVScreen: View {
 
     // MARK: - Guide
 
-    private let hourWidth: CGFloat = 320
-    private let rowHeight: CGFloat = 64
-    private let channelColumn: CGFloat = 76
+    /// Width of half an hour.
+    private let slotWidth: CGFloat = 130
+    private var hourWidth: CGFloat { slotWidth * 2 }
+    private let rowHeight: CGFloat = 68
+    private let channelColumn: CGFloat = 84
+    private let rulerHeight: CGFloat = 32
 
     private var guideStart: Date {
         let calendar = Calendar.current
@@ -275,39 +288,52 @@ struct KhyloLiveTVScreen: View {
     private var guideView: some View {
         let start = guideStart
         let hours = 6.0
+        let gridHeight = rulerHeight + rowHeight * CGFloat(model.channels.count)
 
         return ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 14) {
                 header
 
                 HStack(alignment: .top, spacing: 0) {
-                    // Channel logos stay put while the schedule scrolls sideways.
+                    // Channels stay put while the schedule scrolls sideways.
                     VStack(spacing: 0) {
-                        Color.clear.frame(height: 30)
+                        Color.clear.frame(width: channelColumn, height: rulerHeight)
                         ForEach(model.channels, id: \.id) { channel in
-                            KhyloChannelLogo(channel: channel, size: 44)
+                            Button {
+                                watch(channel)
+                            } label: {
+                                VStack(spacing: 4) {
+                                    KhyloChannelLogo(channel: channel, size: 40)
+                                    if let number = channel.channelNumber, number.count <= 5 {
+                                        Text(number)
+                                            .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                                            .foregroundColor(KhyloStyle.tertiaryText)
+                                    }
+                                }
                                 .frame(width: channelColumn, height: rowHeight)
-                                .onTapGesture { watch(channel) }
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
                     .background(KhyloStyle.canvas)
-                    .zIndex(1)
 
                     ScrollView(.horizontal, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 0) {
-                            timeRuler(start: start, hours: hours)
-                            ForEach(model.channels, id: \.id) { channel in
-                                guideRow(for: channel, start: start, hours: hours)
+                        ZStack(alignment: .topLeading) {
+                            VStack(alignment: .leading, spacing: 0) {
+                                timeRuler(start: start, hours: hours)
+                                ForEach(model.channels, id: \.id) { channel in
+                                    guideRow(for: channel, start: start, hours: hours)
+                                }
                             }
-                        }
-                        .overlay(alignment: .topLeading) {
-                            // "Now" line.
+                            // The "now" line, from the ruler down through every row.
                             Rectangle()
                                 .fill(KhyloStyle.accent)
-                                .frame(width: 2)
-                                .offset(x: CGFloat(Date().timeIntervalSince(start) / 3600) * hourWidth)
-                                .padding(.top, 26)
+                                .frame(width: 2, height: gridHeight - rulerHeight + 6)
+                                .offset(x: CGFloat(Date().timeIntervalSince(start) / 3600) * hourWidth - 1, y: rulerHeight - 6)
+                                .allowsHitTesting(false)
                         }
+                        .frame(width: hourWidth * hours, height: gridHeight, alignment: .topLeading)
+                        .padding(.trailing, KhyloStyle.gutter)
                     }
                 }
             }
@@ -320,58 +346,69 @@ struct KhyloLiveTVScreen: View {
         HStack(spacing: 0) {
             ForEach(0 ..< Int(hours * 2), id: \.self) { slot in
                 Text(start.addingTimeInterval(Double(slot) * 1800), format: .dateTime.hour().minute())
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
                     .foregroundColor(KhyloStyle.tertiaryText)
-                    .frame(width: hourWidth / 2, alignment: .leading)
+                    .padding(.leading, 4)
+                    .frame(width: slotWidth, height: rulerHeight, alignment: .leading)
+                    .overlay(alignment: .bottomLeading) {
+                        Rectangle().fill(KhyloStyle.hairline).frame(width: 1, height: 8)
+                    }
             }
         }
-        .frame(height: 30)
+        .frame(height: rulerHeight)
     }
 
     private func guideRow(for channel: BaseItemDto, start: Date, hours: Double) -> some View {
         let end = start.addingTimeInterval(hours * 3600)
         let shows = (model.programs[channel.id ?? ""] ?? [])
             .filter { ($0.endDate ?? .distantPast) > start && ($0.startDate ?? .distantFuture) < end }
+        let inset: CGFloat = 4
 
-        return ZStack(alignment: .leading) {
-            Color.clear.frame(width: hourWidth * hours, height: rowHeight)
+        return ZStack(alignment: .topLeading) {
+            // A faint track along the row, so stretches without guide info read as empty time.
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.025))
+                .frame(width: hourWidth * hours, height: rowHeight - inset * 2)
+                .offset(y: inset)
+
             ForEach(Array(shows.enumerated()), id: \.offset) { _, show in
                 let showStart = max(show.startDate ?? start, start)
                 let showEnd = min(show.endDate ?? end, end)
                 let x = CGFloat(showStart.timeIntervalSince(start) / 3600) * hourWidth
-                let width = max(CGFloat(showEnd.timeIntervalSince(showStart) / 3600) * hourWidth - 4, 20)
+                let width = max(CGFloat(showEnd.timeIntervalSince(showStart) / 3600) * hourWidth - 3, 24)
                 let isAiring = (show.startDate ?? .distantFuture) <= Date() && (show.endDate ?? .distantPast) > Date()
 
                 Button {
                     if isAiring { watch(channel) }
                 } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(show.name ?? "")
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(show.khyloProgramName)
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.white)
                             .lineLimit(1)
-                        if let startDate = show.startDate {
-                            Text(startDate, format: .dateTime.hour().minute())
-                                .font(.system(size: 11))
+                        if let startDate = show.startDate, let endDate = show.endDate {
+                            Text("\(startDate.formatted(date: .omitted, time: .shortened)) – \(endDate.formatted(date: .omitted, time: .shortened))")
+                                .font(.system(size: 11).monospacedDigit())
                                 .foregroundColor(KhyloStyle.tertiaryText)
+                                .lineLimit(1)
                         }
                     }
                     .padding(.horizontal, 10)
-                    .frame(width: width, height: rowHeight - 6, alignment: .leading)
+                    .frame(width: width, height: rowHeight - inset * 2, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(isAiring ? Color.white.opacity(0.13) : Color.white.opacity(0.05))
+                            .fill(isAiring ? Color.white.opacity(0.13) : Color.white.opacity(0.06))
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(isAiring ? KhyloStyle.accent.opacity(0.45) : .clear, lineWidth: 1)
+                            .strokeBorder(isAiring ? KhyloStyle.accent.opacity(0.5) : .clear, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
-                .offset(x: x)
+                .offset(x: x + 1.5, y: inset)
             }
         }
-        .frame(height: rowHeight)
+        .frame(width: hourWidth * hours, height: rowHeight, alignment: .topLeading)
     }
 
     // MARK: - Playback
@@ -430,7 +467,7 @@ private struct KhyloChannelRow: View {
                         .foregroundColor(KhyloStyle.secondaryText)
                         .lineLimit(1)
                 }
-                if let program = channel.currentProgram?.name {
+                if let program = channel.currentProgram?.khyloProgramName, !program.isEmpty {
                     Text(program)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
@@ -501,7 +538,7 @@ private struct KhyloProgramCard: View {
                     KhyloChannelLogo(channel: channel, size: 40)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(program.name ?? "")
+                    Text(program.khyloProgramName)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)
@@ -527,6 +564,22 @@ private struct KhyloProgramCard: View {
 }
 
 extension BaseItemDto {
+    /// The program's name without the tiny superscript tags some TV guides add
+    /// to the end of it, like "ᴺᵉʷ" or "ᴸᶦᵛᵉ".
+    var khyloProgramName: String {
+        var scalars = Array((name ?? "").unicodeScalars)
+        func isTag(_ scalar: Unicode.Scalar) -> Bool {
+            let value = scalar.value
+            return (0x02B0 ... 0x02FF).contains(value) // spacing modifier letters (ʷ)
+                || (0x1D00 ... 0x1DBF).contains(value) // small and superscript letters (ᴺ ᵉ)
+                || (0x2070 ... 0x209F).contains(value) // superscripts and subscripts
+        }
+        while let last = scalars.last, isTag(last) || last.properties.isWhitespace {
+            scalars.removeLast()
+        }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
     /// 0...1 through a program's air time, nil if not airing.
     var khyloAiringProgress: Double? {
         guard let start = startDate, let end = endDate, end > start else { return nil }
@@ -548,7 +601,7 @@ struct KhyloChannelRedirect: View {
                 Text(channel.name ?? "")
                     .font(.system(size: 26, weight: .bold))
                     .foregroundColor(.white)
-                if let program = channel.currentProgram?.name {
+                if let program = channel.currentProgram?.khyloProgramName, !program.isEmpty {
                     Text("Now: \(program)")
                         .font(.system(size: 15))
                         .foregroundColor(KhyloStyle.secondaryText)
