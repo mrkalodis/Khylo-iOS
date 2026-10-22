@@ -169,8 +169,6 @@ struct KhyloNowPlayingScreen: View {
             switch activeTheme {
             case .vinyl:
                 KhyloVinylPlayer(actions: actions, tint: tint)
-            case .retro:
-                KhyloRetroPlayer(actions: actions)
             case .cyberpunk:
                 KhyloCyberpunkPlayer(actions: actions)
             case .khylo, .aurora, .mono:
@@ -179,7 +177,7 @@ struct KhyloNowPlayingScreen: View {
         }
         .offset(y: dragOffset)
         .background(Color.black.ignoresSafeArea())
-        .preferredColorScheme(activeTheme == .retro ? .light : .dark)
+        .preferredColorScheme(activeTheme == .vinyl ? .light : .dark)
         .animation(.easeInOut(duration: 0.35), value: activeTheme)
         .animation(.easeInOut(duration: 0.3), value: player.current?.id)
         .gesture(
