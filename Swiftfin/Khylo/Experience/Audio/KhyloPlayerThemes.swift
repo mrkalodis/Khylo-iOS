@@ -20,6 +20,8 @@ enum KhyloPlayerTheme: String, CaseIterable, Identifiable {
     case cyberpunk
 
     static let storageKey = "khylo.player.theme"
+    /// Vinyl in dark instead of light.
+    static let vinylDarkKey = "khylo.player.vinylDark"
 
     var id: String { rawValue }
 
@@ -114,20 +116,22 @@ struct KhyloVinylPlayer: View {
     let tint: Color?
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
+    @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var isDark = false
     @State private var spinBase: Double = 0
     @State private var spinStart: Date?
 
-    private let ink = Color(hex: "#1D1F24")
-    private let soft = Color(hex: "#8A8F99")
+    private var ink: Color { isDark ? Color(hex: "#F2F3F5") : Color(hex: "#1D1F24") }
+    private var soft: Color { isDark ? Color(hex: "#8E939C") : Color(hex: "#8A8F99") }
+    private var backdrop: [Color] {
+        isDark ? [Color(hex: "#17181B"), Color(hex: "#0C0D0F")] : [Color(hex: "#F7F7F9"), Color(hex: "#ECEEF3")]
+    }
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(hex: "#F7F7F9"), Color(hex: "#ECEEF3")],
-                startPoint: .top, endPoint: .bottom
-            )
-            .overlay((tint ?? .clear).opacity(0.06))
-            .ignoresSafeArea()
+            LinearGradient(colors: backdrop, startPoint: .top, endPoint: .bottom)
+                .overlay((tint ?? .clear).opacity(isDark ? 0.1 : 0.06))
+                .ignoresSafeArea()
+                .animation(.easeInOut(duration: 0.3), value: isDark)
 
             VStack(spacing: 0) {
                 KhyloThemedTopBar(actions: actions, foreground: ink, labelFont: .system(size: 10, weight: .semibold))
@@ -151,7 +155,7 @@ struct KhyloVinylPlayer: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
-                KhyloWaveScrubber(clock: player.clock, seed: player.current?.id ?? "", played: KhyloStyle.accent, rest: ink.opacity(0.14), text: soft) {
+                KhyloWaveScrubber(clock: player.clock, seed: player.current?.id ?? "", played: KhyloStyle.accent, rest: ink.opacity(isDark ? 0.18 : 0.14), text: soft) {
                     player.seek(to: $0)
                 }
                 .padding(.horizontal, 28)
@@ -204,13 +208,15 @@ struct KhyloVinylPlayer: View {
                         .allowsHitTesting(false)
                 )
                 .frame(width: disc, height: disc)
-                .shadow(color: .black.opacity(0.25), radius: 18, y: 12)
+                // In the dark, a faint rim keeps the record from vanishing into the background.
+                .overlay(Circle().strokeBorder(Color.white.opacity(isDark ? 0.08 : 0), lineWidth: 1))
+                .shadow(color: .black.opacity(isDark ? 0.6 : 0.25), radius: 18, y: 12)
                 .offset(x: slide)
 
                 KhyloImage(url: player.displayArtworkURL(width: 900), placeholderSymbol: "music.note")
                     .frame(width: shown, height: shown)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .shadow(color: .black.opacity(0.22), radius: 24, y: 14)
+                    .shadow(color: .black.opacity(isDark ? 0.55 : 0.22), radius: 24, y: 14)
                     .offset(x: -slide)
             }
             .frame(width: width, height: proxy.size.height)
@@ -238,7 +244,7 @@ struct KhyloVinylPlayer: View {
                 .frame(width: size * 0.34, height: size * 0.34)
                 .clipShape(Circle())
             Circle()
-                .fill(Color(hex: "#ECEEF3"))
+                .fill(isDark ? Color(hex: "#0C0D0F") : Color(hex: "#ECEEF3"))
                 .frame(width: size * 0.03, height: size * 0.03)
         }
         .frame(width: size, height: size)
@@ -897,6 +903,7 @@ struct KhyloPlayerSettingsSheet: View {
     let closePlayer: () -> Void
 
     @AppStorage(KhyloPlayerTheme.storageKey) private var theme: KhyloPlayerTheme = .khylo
+    @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var vinylDark = false
     @AppStorage(KhyloSongCache.enabledKey) private var cacheAhead = true
     @ObservedObject private var equalizer = KhyloEqualizer.shared
     @Environment(\.dismiss) private var dismiss
@@ -938,6 +945,11 @@ struct KhyloPlayerSettingsSheet: View {
                         }
                     }
                     .padding(.vertical, 6)
+
+                    if theme == .vinyl {
+                        Toggle("Dark Vinyl", isOn: $vinylDark.animation(.easeInOut(duration: 0.3)))
+                            .tint(KhyloStyle.accent)
+                    }
                 } header: {
                     Text("Player Theme")
                 } footer: {

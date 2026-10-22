@@ -134,6 +134,7 @@ struct KhyloNowPlayingScreen: View {
     @State private var isShowingQueue = false
     @State private var isShowingSettings = false
     @AppStorage(KhyloPlayerTheme.storageKey) private var theme: KhyloPlayerTheme = .khylo
+    @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var vinylDark = false
     @State private var tint: Color?
     @State private var isFavorite = false
     @State private var dragOffset: CGFloat = 0
@@ -177,7 +178,7 @@ struct KhyloNowPlayingScreen: View {
         }
         .offset(y: dragOffset)
         .background(Color.black.ignoresSafeArea())
-        .preferredColorScheme(activeTheme == .vinyl ? .light : .dark)
+        .preferredColorScheme(activeTheme == .vinyl && !vinylDark ? .light : .dark)
         .animation(.easeInOut(duration: 0.35), value: activeTheme)
         .animation(.easeInOut(duration: 0.3), value: player.current?.id)
         .gesture(
