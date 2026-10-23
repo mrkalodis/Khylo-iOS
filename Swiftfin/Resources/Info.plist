@@ -53,6 +53,8 @@
 	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Khylo uses Face ID to lock and access local profiles.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Khylo uses the camera to scan the QR code on a TV or other device you're signing in.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Khylo uses the local network to connect to your Khylo media server and discover Cast-enabled devices on your Wi-Fi network.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

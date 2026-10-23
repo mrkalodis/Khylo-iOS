@@ -42,6 +42,16 @@ struct KhyloProfileScreen: View {
                     .padding(.vertical, 6)
                 }
 
+                Section {
+                    NavigationLink {
+                        KhyloAddDeviceScreen()
+                    } label: {
+                        Label("Add a Device", systemImage: "qrcode.viewfinder")
+                    }
+                } footer: {
+                    Text("Sign in a TV or another device with the code or QR code it shows.")
+                }
+
                 KhyloDownloadSettingsSection {
                     dismiss()
                     KhyloPageRelay.shared.showDownloads.send()

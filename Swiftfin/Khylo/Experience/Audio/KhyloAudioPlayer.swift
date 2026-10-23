@@ -1060,9 +1060,18 @@ final class KhyloAudioPlayer: ObservableObject {
 
     private func tick(_ seconds: Double) {
         guard seconds.isFinite, isActive else { return }
+        // Time from a song that isn't the one playing (just skipped, or the next one
+        // waiting) would make the bar jump; only the playing song moves it.
+        if let item = player.currentItem, let active = activeItem, item !== active { return }
         currentTime = seconds
-        if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0 {
-            duration = itemDuration
+        // The song's real length comes from the library. A stream the server converts
+        // on the fly only knows how much has arrived so far, which made the length
+        // wrong and kept changing.
+        let known = Double(current?.runTimeTicks ?? 0) / 10_000_000
+        if known > 0 {
+            duration = max(known, seconds)
+        } else if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0 {
+            duration = max(itemDuration, seconds)
         }
         if player.timeControlStatus == .playing, seconds > 3 {
             retries = 0

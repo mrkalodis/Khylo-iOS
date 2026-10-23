@@ -333,6 +333,15 @@ enum KhyloAPI {
 
     // MARK: - User data
 
+    // MARK: - Add a device
+
+    /// Approves a TV or other device waiting to sign in with a Quick Connect code,
+    /// as the person signed in here.
+    static func approveDevice(code: String) async throws {
+        let session = try requireSession()
+        _ = try await session.client.send(Paths.authorizeQuickConnect(code: code, userID: session.user.id))
+    }
+
     @discardableResult
     static func setFavorite(_ isFavorite: Bool, itemID: String) async throws -> UserItemDataDto {
         let session = try requireSession()

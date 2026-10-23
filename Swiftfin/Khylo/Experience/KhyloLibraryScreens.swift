@@ -782,6 +782,8 @@ struct KhyloLibraryHome<Header: View>: View {
     @ViewBuilder let header: () -> Header
 
     @State private var tab: Tab = .forYou
+    @State private var musicQuery = ""
+    @State private var musicTerm = ""
     @State private var sections: [KhyloFeedSection] = []
     @State private var isLoading = true
 
@@ -797,13 +799,28 @@ struct KhyloLibraryHome<Header: View>: View {
 
             switch tab {
             case .forYou where library.collectionType == .music:
-                // Music has its own For You: Jump Back In, mixes, On Repeat and more.
+                // Music has its own For You: Jump Back In, mixes, On Repeat and more,
+                // with a search right at the top for finding something specific.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         top
-                        KhyloMusicForYou(library: library)
+                        KhyloLibrarySearchField(placeholder: "Search artists, albums and songs", text: $musicQuery)
+                        if musicTerm.isEmpty {
+                            KhyloMusicForYou(library: library)
+                        } else {
+                            KhyloMusicSearchResults(libraryID: library.id, term: musicTerm)
+                        }
                     }
                     .padding(.bottom, 40)
+                }
+                .scrollDismissesKeyboard(.immediately)
+                .task(id: musicQuery) {
+                    let trimmed = musicQuery.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty {
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard !Task.isCancelled else { return }
+                    }
+                    musicTerm = trimmed
                 }
 
             case .forYou:

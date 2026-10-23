@@ -463,12 +463,14 @@ struct KhyloCategory: Identifiable, Hashable {
 }
 
 /// A scope's categories as artwork tiles.
-private struct KhyloCategoryGrid: View {
+struct KhyloCategoryGrid: View {
 
     let scope: KhyloSearchScreen.Scope
     /// Show only the first few, with a See All that switches to the scope.
     let limit: Int?
     let onSeeAll: (() -> Void)?
+    /// The music library's Browse shows the tiles without a title above them.
+    var showsTitle = true
 
     @State private var categories: [KhyloCategory] = []
     @Router private var router
@@ -484,6 +486,7 @@ private struct KhyloCategoryGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if !categories.isEmpty {
+                if showsTitle {
                 HStack(alignment: .lastTextBaseline) {
                     Text(limit == nil ? "Browse \(scope.rawValue)" : title)
                         .font(KhyloStyle.title(20))
@@ -494,6 +497,7 @@ private struct KhyloCategoryGrid: View {
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(KhyloStyle.accent)
                     }
+                }
                 }
 
                 LazyVGrid(
