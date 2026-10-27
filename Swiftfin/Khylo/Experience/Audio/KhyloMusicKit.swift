@@ -85,6 +85,12 @@ final class KhyloArtistArt {
     private var cache: [String: URL?] = [:]
     private var inFlight: [String: Task<URL?, Never>] = [:]
 
+    /// Another account signed in.
+    func reset() {
+        cache = [:]
+        inFlight = [:]
+    }
+
     /// Synchronous answer when the artist carries its own image (no request needed).
     static func ownImage(for artist: BaseItemDto, width: CGFloat) -> URL? {
         guard let id = artist.id else { return nil }

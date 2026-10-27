@@ -1166,6 +1166,8 @@ final class KhyloAudioPlayer: ObservableObject {
         var kind: Kind
         var collectionTitle: String?
         var artworkURL: URL?
+        /// The account it was playing on ("server|user").
+        var owner: String?
     }
 
     private static var sessionFile: URL {
@@ -1185,7 +1187,8 @@ final class KhyloAudioPlayer: ObservableObject {
             position: currentTime,
             kind: kind,
             collectionTitle: collectionTitle,
-            artworkURL: artworkURL
+            artworkURL: artworkURL,
+            owner: KhyloAccount.currentKey
         )
         guard let data = try? JSONEncoder().encode(saved) else { return }
         try? FileManager.default.createDirectory(
@@ -1202,6 +1205,16 @@ final class KhyloAudioPlayer: ObservableObject {
               let saved = try? JSONDecoder().decode(SavedSession.self, from: data),
               saved.queue.indices.contains(saved.index)
         else { return }
+        // Only the account (and server) that was listening gets its song back.
+        let belongs = if let owner = saved.owner {
+            owner == KhyloAccount.currentKey
+        } else {
+            saved.queue[saved.index].serverID == KhyloAccount.currentServerID
+        }
+        guard belongs else {
+            try? FileManager.default.removeItem(at: Self.sessionFile)
+            return
+        }
         queue = saved.queue
         index = saved.index
         kind = saved.kind

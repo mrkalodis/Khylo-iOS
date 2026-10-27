@@ -191,13 +191,13 @@ struct KhyloMusicForYou: View {
     /// Recommended stations: artists similar to the ones you play most, that
     /// aren't already in your mixes.
     private func loadStations(from artists: [BaseItemDto]) async {
-        let seeds = artists.prefix(4).compactMap(\.id)
+        let seeds = Array(artists.prefix(4))
         guard !seeds.isEmpty else { return }
         var known = Set(artists.compactMap(\.id))
         var found: [BaseItemDto] = []
         await withTaskGroup(of: [BaseItemDto].self) { group in
             for seed in seeds {
-                group.addTask { (try? await KhyloAPI.similarArtists(to: seed, limit: 8)) ?? [] }
+                group.addTask { await KhyloRadio.similarArtists(to: seed, limit: 8) }
             }
             for await similar in group {
                 found.append(contentsOf: similar)
@@ -318,7 +318,7 @@ struct KhyloMixCard: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         isStarting = true
         Task {
-            var songs = (try? await KhyloAPI.instantMix(from: id)) ?? []
+            var songs = await KhyloRadio.songs(for: artist)
             if songs.isEmpty {
                 songs = (try? await KhyloAPI.items(types: [.audio], sortBy: [.random], artistIDs: [id], limit: 100).items) ?? []
             }
@@ -398,7 +398,7 @@ struct KhyloStationCard: View {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         isStarting = true
         Task {
-            var songs = (try? await KhyloAPI.instantMix(from: id)) ?? []
+            var songs = await KhyloRadio.songs(for: artist)
             if songs.isEmpty {
                 songs = (try? await KhyloAPI.items(types: [.audio], sortBy: [.random], artistIDs: [id], limit: 100).items) ?? []
             }

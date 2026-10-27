@@ -639,7 +639,7 @@ private struct KhyloCategoryTile: View {
 /// with just their genres and artwork. Every genre that appears becomes a
 /// category (most common first), fronted by its most popular title with art.
 @MainActor
-private final class KhyloCategoryCache {
+final class KhyloCategoryCache {
 
     static let shared = KhyloCategoryCache()
 
@@ -653,6 +653,13 @@ private final class KhyloCategoryCache {
         case .books: [.book]
         default: [.movie, .series]
         }
+    }
+
+    /// Another account signed in: its library has other categories.
+    func reset() {
+        results = [:]
+        loads.values.forEach { $0.cancel() }
+        loads = [:]
     }
 
     func categories(for scope: KhyloSearchScreen.Scope) async -> [KhyloCategory] {

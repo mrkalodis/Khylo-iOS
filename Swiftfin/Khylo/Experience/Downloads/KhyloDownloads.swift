@@ -159,6 +159,8 @@ struct KhyloDownload: Codable, Identifiable {
     var message: String?
     var attempts = 0
     let addedAt: Date
+    /// The server and account it was downloaded on ("server|user").
+    var owner: String?
 }
 
 /// A show, album, playlist or audiobook with downloaded members.
@@ -169,6 +171,8 @@ struct KhyloDownloadGroup: Codable, Identifiable {
     /// Members in the order they play.
     var memberIDs: [String]
     let addedAt: Date
+    /// The server and account it was downloaded on ("server|user").
+    var owner: String?
 }
 
 /// Where you got to in a downloaded title, kept on the phone and sent to the
@@ -224,6 +228,9 @@ final class KhyloDownloads: NSObject, ObservableObject {
     @Published private(set) var downloads: [String: KhyloDownload] = [:]
     @Published private(set) var groups: [String: KhyloDownloadGroup] = [:]
     private var positions: [String: KhyloOfflinePosition] = [:]
+    /// Downloads made on other accounts or servers. Kept on the phone for when
+    /// that account signs in again, but never shown to this one.
+    private var elsewhere = Index(downloads: [:], groups: [:])
 
     /// Handed over by the system when it wakes Khylo for finished background downloads.
     var backgroundCompletion: (() -> Void)?
@@ -269,7 +276,8 @@ final class KhyloDownloads: NSObject, ObservableObject {
         configuration.timeoutIntervalForRequest = 120
         session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
 
-        reconnect()
+        // Also picks up downloads that were running when Khylo was closed.
+        showCurrentAccount()
 
         NotificationCenter.default.publisher(for: .khyloOfflineProgress)
             .receive(on: DispatchQueue.main)
@@ -285,6 +293,56 @@ final class KhyloDownloads: NSObject, ObservableObject {
         NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
             .sink { _ in Task { await KhyloDownloads.shared.syncProgress() } }
             .store(in: &cancellables)
+    }
+
+    // MARK: Accounts
+
+    /// Shows only the downloads made on the account that's signed in (none when
+    /// signed out). Called whenever the account changes.
+    func showCurrentAccount() {
+        let key = KhyloAccount.currentKey
+        let serverID = KhyloAccount.currentServerID
+        let all = Index(
+            downloads: elsewhere.downloads.merging(downloads) { _, own in own },
+            groups: elsewhere.groups.merging(groups) { _, own in own }
+        )
+
+        // Downloads from before accounts were recorded belong to the server they came from.
+        func belongs(_ owner: String?, _ item: BaseItemDto) -> Bool {
+            guard let key else { return false }
+            if let owner { return owner == key }
+            return item.serverID != nil && item.serverID == serverID
+        }
+
+        var mine = Index(downloads: [:], groups: [:])
+        var others = Index(downloads: [:], groups: [:])
+        for (id, var download) in all.downloads {
+            if belongs(download.owner, download.item) {
+                download.owner = key
+                mine.downloads[id] = download
+            } else {
+                if download.state == .downloading {
+                    // Started on the other account; picks up again when it's back.
+                    cancelTask(for: id)
+                    download.state = .queued
+                    KhyloDownloadProgress.shared.fractions[id] = nil
+                }
+                others.downloads[id] = download
+            }
+        }
+        for (id, var group) in all.groups {
+            if belongs(group.owner, group.item) {
+                group.owner = key
+                mine.groups[id] = group
+            } else {
+                others.groups[id] = group
+            }
+        }
+        elsewhere = others
+        downloads = mine.downloads
+        groups = mine.groups
+        save()
+        if key != nil { reconnect() }
     }
 
     // MARK: Permission
@@ -471,6 +529,7 @@ final class KhyloDownloads: NSObject, ObservableObject {
         if let group, let groupID = group.id {
             var record = groups[groupID] ?? KhyloDownloadGroup(id: groupID, item: group, kind: kind, memberIDs: [], addedAt: Date())
             record.item = group
+            record.owner = KhyloAccount.currentKey
             for item in items {
                 if let id = item.id, !record.memberIDs.contains(id) { record.memberIDs.append(id) }
             }
@@ -503,7 +562,8 @@ final class KhyloDownloads: NSObject, ObservableObject {
                 state: .queued,
                 expectedBytes: Self.estimatedBytes(for: item, kind: kind, quality: quality),
                 groupIDs: Array(Set((downloads[id]?.groupIDs ?? []) + (group?.id.map { [$0] } ?? []))),
-                addedAt: Date()
+                addedAt: Date(),
+                owner: KhyloAccount.currentKey
             )
             if group == nil || kind == .video {
                 saveArtwork(for: item, into: Self.itemFolder(id), style: kind == .video && item.type == .episode ? .landscape : (kind == .music ? .square : .poster))
@@ -672,6 +732,16 @@ final class KhyloDownloads: NSObject, ObservableObject {
     }
 
     fileprivate func didFinish(_ id: String, fileName: String, size: Int64) {
+        if downloads[id] == nil, var hidden = elsewhere.downloads[id] {
+            // Finished just as its account signed out.
+            hidden.state = .done
+            hidden.fileName = fileName
+            hidden.bytes = size
+            hidden.expectedBytes = size
+            elsewhere.downloads[id] = hidden
+            save()
+            return
+        }
         guard var download = downloads[id] else {
             // Deleted while it finished.
             try? FileManager.default.removeItem(at: Self.itemFolder(id))
@@ -756,13 +826,18 @@ final class KhyloDownloads: NSObject, ObservableObject {
         save()
     }
 
+    /// Removes everything this account downloaded. Other accounts' downloads stay.
     func deleteAll() {
-        session.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
+        for id in downloads.keys {
+            cancelTask(for: id)
+            try? FileManager.default.removeItem(at: Self.itemFolder(id))
+        }
+        for id in groups.keys {
+            try? FileManager.default.removeItem(at: Self.groupFolder(id))
+        }
         downloads = [:]
         groups = [:]
         KhyloDownloadProgress.shared.fractions = [:]
-        try? FileManager.default.removeItem(at: Self.root.appendingPathComponent("items"))
-        try? FileManager.default.removeItem(at: Self.root.appendingPathComponent("groups"))
         save()
     }
 
@@ -822,7 +897,8 @@ final class KhyloDownloads: NSObject, ObservableObject {
     /// Sends progress made offline to the server, as normal playback reports.
     func syncProgress() async {
         guard !isSyncing, KhyloNetwork.shared.isOnline, let client = KhyloAPI.session?.client, KhyloAPI.accessToken != nil else { return }
-        let pending = positions.filter(\.value.needsSync)
+        // Progress on another account's downloads waits for that account.
+        let pending = positions.filter { $0.value.needsSync && elsewhere.downloads[$0.key] == nil }
         guard !pending.isEmpty else { return }
         isSyncing = true
         defer { isSyncing = false }
@@ -904,8 +980,7 @@ final class KhyloDownloads: NSObject, ObservableObject {
     private func loadIndex() {
         if let data = try? Data(contentsOf: Self.indexFile),
            let index = try? JSONDecoder().decode(Index.self, from: data) {
-            downloads = index.downloads
-            groups = index.groups
+            elsewhere = index
         }
         if let data = try? Data(contentsOf: Self.positionsFile),
            let saved = try? JSONDecoder().decode([String: KhyloOfflinePosition].self, from: data) {
@@ -914,7 +989,10 @@ final class KhyloDownloads: NSObject, ObservableObject {
     }
 
     private func save() {
-        let index = Index(downloads: downloads, groups: groups)
+        let index = Index(
+            downloads: elsewhere.downloads.merging(downloads) { _, own in own },
+            groups: elsewhere.groups.merging(groups) { _, own in own }
+        )
         guard let data = try? JSONEncoder().encode(index) else { return }
         try? data.write(to: Self.indexFile, options: .atomic)
     }

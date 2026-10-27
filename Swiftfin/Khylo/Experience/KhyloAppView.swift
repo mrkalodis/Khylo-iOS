@@ -141,11 +141,41 @@ struct KhyloAppView: View {
                 .background { KhyloRouteRelay(isActive: selection == tab) }
         }
         .overlay { KhyloStatusBarScrim() }
-        // Sits just above the tab bar on every screen of the tab.
+        // Sits just above the tab bar, only where you're browsing music (or audiobooks).
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            KhyloMiniPlayer()
+            if tab == .libraries {
+                KhyloMiniPlayerSlot()
+            }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: KhyloAudioPlayer.shared.isActive)
+    }
+}
+
+/// Shows the mini player on the library that matches what's playing: music in
+/// the music library, an audiobook in the books library, either in Downloads.
+private struct KhyloMiniPlayerSlot: View {
+
+    @ObservedObject private var libraryStore = KhyloLibraryStore.shared
+    @ObservedObject private var player = KhyloAudioPlayer.shared
+
+    private var isShown: Bool {
+        guard player.isActive else { return false }
+        if libraryStore.isDownloadsSelected { return true }
+        if libraryStore.isFavoritesSelected { return false }
+        switch libraryStore.selected?.collectionType {
+        case .music: return player.kind == .music
+        case .books: return player.kind == .audiobook
+        default: return false
+        }
+    }
+
+    var body: some View {
+        Group {
+            if isShown {
+                KhyloMiniPlayer()
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isShown)
     }
 }
 

@@ -83,6 +83,9 @@ public struct KhyloRootView: View {
         .environmentObject(ambientState)
         .khyloAmbient(ambientState)
         .onChange(of: userSessionManager.state) { newState in
+            if newState == .signedOut {
+                KhyloAccount.didChange(to: nil)
+            }
             if newState == .signedOut && appState == .ready {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     appState = .unauthenticated
@@ -130,6 +133,7 @@ public struct KhyloRootView: View {
 
     private func configureActiveSession() {
         if let session = userSessionManager.currentSession {
+            KhyloAccount.didChange(to: KhyloAccount.key(serverID: session.server.id, userID: session.user.id))
             KhyloRepository.shared.configure(
                 serverUrl: session.server.effectiveServerURL,
                 userId: session.user.id,

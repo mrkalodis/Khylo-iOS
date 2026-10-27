@@ -1056,14 +1056,14 @@ struct KhyloArtistScreen: View {
                 .flatMap { KhyloArtwork.url(for: $0, style: .square, width: 1000) }
         }
         tint = await KhyloArtColor.color(for: heroURL)
-        similar = (try? await KhyloAPI.similarArtists(to: id)) ?? []
+        similar = await KhyloRadio.similarArtists(to: artist)
     }
 
     private func playMix() {
-        guard let id = artist.id else { return }
+        guard artist.id != nil else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         Task {
-            let songs = (try? await KhyloAPI.instantMix(from: id)) ?? []
+            let songs = await KhyloRadio.songs(for: artist)
             if !songs.isEmpty {
                 player.play(songs, kind: .music, collectionTitle: "\(artist.name ?? "Artist") Mix", startTicks: 0)
             } else {
