@@ -336,8 +336,9 @@ final class UserSessionManager: ObservableObject {
         }
 
         // Without its token the session can't talk to the server; ask the user to sign in again.
+        // The account stays remembered: a token that can't be read right now (the phone
+        // is still locked) is there again the next time Khylo opens.
         guard !user.accessToken.isEmpty else {
-            Defaults[.lastSignedInUserID] = .signedOut
             return nil
         }
 
