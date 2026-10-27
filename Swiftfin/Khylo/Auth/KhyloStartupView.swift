@@ -32,6 +32,7 @@ public struct KhyloStartupView: View {
     @State private var manualPassword: String = ""
     @FocusState private var focusedLoginField: LoginField?
     @StateObject private var signInModel = KhyloSignInModel()
+    @State private var isScanningToSignIn = false
 
     @Environment(\.localUserAuthenticationAction)
     private var authenticationAction
@@ -61,12 +62,15 @@ public struct KhyloStartupView: View {
 
             switch currentStep {
             case .serverDiscovery:
-                ServerDiscoveryView { selectedServer in
-                    activeServer = selectedServer
-                    withAnimation(.easeInOut(duration: 0.28)) {
-                        currentStep = .manualLogin(selectedServer)
-                    }
-                }
+                ServerDiscoveryView(
+                    onSelectServer: { selectedServer in
+                        activeServer = selectedServer
+                        withAnimation(.easeInOut(duration: 0.28)) {
+                            currentStep = .manualLogin(selectedServer)
+                        }
+                    },
+                    onScanToSignIn: { isScanningToSignIn = true }
+                )
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.98)),
                     removal: .opacity
@@ -143,6 +147,47 @@ public struct KhyloStartupView: View {
             }
         }
         .animation(.easeInOut(duration: 0.28), value: currentStep)
+        .overlay {
+            // Signing in with a scanned code happens on whichever screen it started from.
+            if isAuthenticating, !isScanningToSignIn, !isManualLoginShowing {
+                ZStack {
+                    Color.black.opacity(0.55).ignoresSafeArea()
+                    VStack(spacing: 14) {
+                        ProgressView().tint(.white).controlSize(.large)
+                        Text("Signing in…")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .sheet(isPresented: $isScanningToSignIn) {
+            KhyloCodeScannerSheet(
+                prompt: "Point your camera at the code on a device that's signed in.",
+                deniedHint: "Turn on Camera for Khylo in Settings, or sign in with your password instead."
+            ) { scanned in
+                isScanningToSignIn = false
+                signInModel.signIn(scanned: scanned, authenticationAction: authenticationAction)
+            }
+        }
+        .alert(
+            "Couldn't Sign In",
+            isPresented: Binding(
+                get: { !isManualLoginShowing && authErrorMessage != nil },
+                set: { if !$0 { signInModel.errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(authErrorMessage ?? "")
+        }
+    }
+
+    /// The password screen shows sign-in problems itself.
+    private var isManualLoginShowing: Bool {
+        if case .manualLogin = currentStep { return true }
+        return false
     }
 
     // MARK: - Manual Login View
@@ -208,12 +253,17 @@ public struct KhyloStartupView: View {
                     authenticateManually(server: server)
                 }
 
+                KhyloAuthTextButton(title: "Scan to Sign In", systemImage: "qrcode.viewfinder") {
+                    isScanningToSignIn = true
+                }
+                .padding(.top, 16)
+
                 KhyloAuthTextButton(title: "Use Quick Connect instead", systemImage: "qrcode") {
                     withAnimation(.easeInOut(duration: 0.28)) {
                         currentStep = .qrCode(server)
                     }
                 }
-                .padding(.top, 16)
+                .padding(.top, 4)
 
                 Spacer(minLength: 32)
             }

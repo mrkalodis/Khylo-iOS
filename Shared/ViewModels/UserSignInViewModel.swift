@@ -45,6 +45,8 @@ final class UserSignInViewModel: ObservableObject {
         case getPublicData
         case signIn(username: String, password: String)
         case signInQuickConnect(secret: String)
+        /// A one-time code scanned from a device that's already signed in.
+        case signInWithCode(code: String)
 
         case save(
             user: UserStateDataPair,
@@ -66,7 +68,7 @@ final class UserSignInViewModel: ObservableObject {
                 .none
             case .getPublicData:
                 .background(.gettingPublicData)
-            case .signIn, .signInQuickConnect:
+            case .signIn, .signInQuickConnect, .signInWithCode:
                 .loop(.signingIn)
             }
         }
@@ -156,6 +158,47 @@ final class UserSignInViewModel: ObservableObject {
         _ secret: String
     ) async throws {
         let response = try await server.client.signIn(quickConnectSecret: secret)
+
+        guard let accessToken = response.accessToken,
+              let userData = response.user,
+              let id = userData.id,
+              let username = userData.name
+        else {
+            logger.error("Missing user data from network call")
+            throw ErrorMessage(L10n.unknownError)
+        }
+
+        if let existingUser = existingUser(id: id) {
+            events.send(.existingUser(((existingUser, accessToken), userData)))
+        } else {
+            let newUserState = UserState(
+                id: id,
+                serverID: server.id,
+                username: username
+            )
+
+            events.send(.connected(((newUserState, accessToken), userData)))
+        }
+    }
+
+    @Function(\Action.Cases.signInWithCode)
+    private func _signInWithCode(
+        _ code: String
+    ) async throws {
+        struct Body: Encodable {
+            let code: String
+
+            enum CodingKeys: String, CodingKey {
+                case code = "Code"
+            }
+        }
+
+        let request = Request<AuthenticationResult>(
+            path: "/Khylo/SignInCodes/Redeem",
+            method: "POST",
+            body: Body(code: code)
+        )
+        let response = try await server.client.send(request).value
 
         guard let accessToken = response.accessToken,
               let userData = response.user,

@@ -52,6 +52,16 @@ struct KhyloProfileScreen: View {
                     Text("Sign in a TV or another device with the code or QR code it shows.")
                 }
 
+                Section {
+                    NavigationLink {
+                        KhyloSignInAnotherDeviceScreen()
+                    } label: {
+                        Label("Sign In Another Device", systemImage: "qrcode")
+                    }
+                } footer: {
+                    Text("Show a code that a new phone scans to sign in as you, with no password to type.")
+                }
+
                 KhyloDownloadSettingsSection {
                     dismiss()
                     KhyloPageRelay.shared.showDownloads.send()

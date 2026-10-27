@@ -198,8 +198,10 @@ struct KhyloAddDeviceScreen: View {
 // MARK: - Scanner
 
 /// The camera, looking for a QR code.
-private struct KhyloCodeScannerSheet: View {
+struct KhyloCodeScannerSheet: View {
 
+    var prompt = "Point your camera at the QR code on the TV."
+    var deniedHint = "Turn on Camera for Khylo in Settings, or type the code instead."
     let onFound: (String) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -218,7 +220,7 @@ private struct KhyloCodeScannerSheet: View {
                         .frame(width: 240, height: 240)
                     VStack {
                         Spacer()
-                        Text("Point your camera at the QR code on the TV.")
+                        Text(prompt)
                             .font(.system(size: 15, weight: .medium))
                             .foregroundColor(.white)
                             .padding(.horizontal, 18)
@@ -236,7 +238,7 @@ private struct KhyloCodeScannerSheet: View {
                         Text("Khylo needs your camera to scan the code.")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.white)
-                        Text("Turn on Camera for Khylo in Settings, or type the code instead.")
+                        Text(deniedHint)
                             .font(.system(size: 14))
                             .foregroundColor(KhyloStyle.secondaryText)
                             .multilineTextAlignment(.center)

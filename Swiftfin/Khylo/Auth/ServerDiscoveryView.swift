@@ -20,9 +20,12 @@ public struct ServerDiscoveryView: View {
     @FocusState private var isAddressFocused: Bool
 
     public let onSelectServer: (DiscoveredServer) -> Void
+    /// Opens the camera to sign in with a code from a device that's already signed in.
+    public let onScanToSignIn: (() -> Void)?
 
-    public init(onSelectServer: @escaping (DiscoveredServer) -> Void) {
+    public init(onSelectServer: @escaping (DiscoveredServer) -> Void, onScanToSignIn: (() -> Void)? = nil) {
         self.onSelectServer = onSelectServer
+        self.onScanToSignIn = onScanToSignIn
     }
 
     private var canConnect: Bool {
@@ -75,6 +78,11 @@ public struct ServerDiscoveryView: View {
                 isEnabled: canConnect,
                 action: connectManual
             )
+
+            if let onScanToSignIn {
+                KhyloAuthTextButton(title: "Scan to Sign In", systemImage: "qrcode.viewfinder", action: onScanToSignIn)
+                    .padding(.top, 16)
+            }
 
             nearbyServers
                 .padding(.top, 40)

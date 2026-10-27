@@ -342,6 +342,50 @@ enum KhyloAPI {
         _ = try await session.client.send(Paths.authorizeQuickConnect(code: code, userID: session.user.id))
     }
 
+    // MARK: - Signing in another device
+
+    /// A one-time code another device scans to sign in as you.
+    struct SignInCode: Decodable {
+        let code: String
+        let expiresAt: Date?
+        let expiresInSeconds: Int?
+        let qrURL: String
+
+        enum CodingKeys: String, CodingKey {
+            case code = "Code"
+            case expiresAt = "ExpiresAt"
+            case expiresInSeconds = "ExpiresInSeconds"
+            case qrURL = "QrUrl"
+        }
+    }
+
+    struct SignInCodeStatus: Decodable {
+        let used: Bool
+        let expired: Bool
+        let deviceName: String?
+
+        enum CodingKeys: String, CodingKey {
+            case used = "Used"
+            case expired = "Expired"
+            case deviceName = "DeviceName"
+        }
+    }
+
+    static func makeSignInCode() async throws -> SignInCode {
+        let session = try requireSession()
+        return try await send(session, Request<SignInCode>(path: "/Khylo/SignInCodes", method: "POST"))
+    }
+
+    static func signInCodeStatus(_ code: String) async throws -> SignInCodeStatus {
+        let session = try requireSession()
+        return try await send(session, Request<SignInCodeStatus>(path: "/Khylo/SignInCodes/\(code)"))
+    }
+
+    static func cancelSignInCode(_ code: String) async {
+        guard let session else { return }
+        _ = try? await session.client.send(Request<Void>(path: "/Khylo/SignInCodes/\(code)", method: "DELETE"))
+    }
+
     @discardableResult
     static func setFavorite(_ isFavorite: Bool, itemID: String) async throws -> UserItemDataDto {
         let session = try requireSession()
