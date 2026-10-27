@@ -51,6 +51,8 @@ struct KhyloDestination: View {
         switch item.type {
         case .collectionFolder, .userView:
             KhyloLibraryScreen(library: item)
+        case .folder where KhyloAPI.extendedKind(of: item) == .comicSeries:
+            KhyloComicSeriesScreen(series: item)
         case .folder:
             KhyloFolderScreen(folder: item)
         case .book:

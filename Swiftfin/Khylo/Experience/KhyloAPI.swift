@@ -337,6 +337,11 @@ enum KhyloAPI {
 
     /// Approves a TV or other device waiting to sign in with a Quick Connect code,
     /// as the person signed in here.
+    static func approveDevice(code: String) async throws {
+        let session = try requireSession()
+        _ = try await session.client.send(Paths.authorizeQuickConnect(code: code, userID: session.user.id))
+    }
+
     // MARK: - Signing in another device
 
     /// A one-time code another device scans to sign in as you.
@@ -415,6 +420,36 @@ enum KhyloAPI {
     enum ExtendedCollectionType: String {
         case audiobooks
         case podcasts
+        case comics
+    }
+
+    /// Item kinds the Khylo server has beyond the SDK's list. They're decoded as
+    /// the nearest kind the app knows (a comic as a book, a podcast episode as a
+    /// song) and remembered here by item.
+    enum ExtendedItemKind: String {
+        case comic = "Comic"
+        case comicSeries = "ComicSeries"
+        case podcast = "Podcast"
+        case podcastEpisode = "PodcastEpisode"
+        case game = "Game"
+        case gamePlatform = "GamePlatform"
+
+        /// The kind the app treats it as.
+        var standIn: BaseItemKind {
+            switch self {
+            case .comic: .book
+            case .podcastEpisode: .audio
+            case .comicSeries, .podcast, .game, .gamePlatform: .folder
+            }
+        }
+    }
+
+    private static let extendedKinds = OSAllocatedUnfairLock(initialState: [String: String]())
+
+    /// The server's own kind for an item the SDK has no name for.
+    static func extendedKind(of item: BaseItemDto) -> ExtendedItemKind? {
+        guard let id = item.id else { return nil }
+        return extendedKinds.withLock { $0[id] }.flatMap(ExtendedItemKind.init(rawValue:))
     }
 
     private static let extendedTypes = OSAllocatedUnfairLock(initialState: [String: String]())
@@ -456,6 +491,8 @@ enum KhyloAPI {
     }
 
     private static let knownCollectionTypes = Set(CollectionType.allCases.map(\.rawValue))
+    private static let knownItemKinds = Set(BaseItemKind.allCases.map(\.rawValue))
+    private static let knownMediaTypes = Set(MediaType.allCases.map(\.rawValue))
 
     /// Sends a request and decodes it, replacing enum values the SDK doesn't know
     /// (which would otherwise fail the whole response) and remembering them.
@@ -477,6 +514,19 @@ enum KhyloAPI {
                     extendedTypes.withLock { $0[id] = raw }
                 }
                 object["CollectionType"] = CollectionType.unknown.rawValue
+            }
+            if let raw = object["Type"] as? String, !knownItemKinds.contains(raw) {
+                if let id = object["Id"] as? String {
+                    extendedKinds.withLock { $0[id] = raw }
+                }
+                object["Type"] = (ExtendedItemKind(rawValue: raw)?.standIn ?? .folder).rawValue
+            }
+            if let raw = object["MediaType"] as? String, !knownMediaTypes.contains(raw) {
+                object["MediaType"] = switch raw {
+                case "Comic": MediaType.book.rawValue
+                case "Podcast": MediaType.audio.rawValue
+                default: MediaType.unknown.rawValue
+                }
             }
             for (key, child) in object where child is [Any] || child is [String: Any] {
                 object[key] = sanitize(child)

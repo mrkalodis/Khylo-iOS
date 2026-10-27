@@ -74,6 +74,7 @@ final class KhyloHomeModel: ObservableObject {
                 case (.tvshows, _): 1
                 case (_, .audiobooks?): 2
                 case (.books, _): 3
+                case (_, .comics?): 3
                 case (.music, _): 4
                 default: 5
                 }

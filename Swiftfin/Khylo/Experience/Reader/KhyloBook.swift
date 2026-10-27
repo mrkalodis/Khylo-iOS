@@ -35,7 +35,7 @@ enum KhyloBook {
         var errorDescription: String? {
             switch self {
             case .notSignedIn: "You're not signed in."
-            case .unsupported: "This book's format isn't supported yet. EPUB, PDF and CBZ files can be read."
+            case .unsupported: "This file can't be opened. Khylo reads EPUB, PDF, Kindle (MOBI, AZW, AZW3) and comic (CBZ, CBR, CB7, CBT) files."
             case .empty: "This book has no readable pages."
             }
         }
@@ -70,9 +70,24 @@ enum KhyloBook {
             return .pdf(file)
         }
 
+        let extracted = folder.appendingPathComponent("contents", isDirectory: true)
+
+        if KhyloKindle.isKindle(data) {
+            // Rebuilt on each open; it's quick, and keeps chapter titles in one place.
+            return .epub(try KhyloKindle.convert(data, into: extracted))
+        }
+
+        if KhyloArchive.isArchive(data) {
+            if !fileManager.fileExists(atPath: extracted.path) {
+                try KhyloArchive.extractImages(from: file, to: extracted)
+            }
+            let images = imageFiles(in: extracted)
+            guard !images.isEmpty else { throw LoadError.empty }
+            return .comic(images)
+        }
+
         guard data.starts(with: [0x50, 0x4B]) else { throw LoadError.unsupported }
 
-        let extracted = folder.appendingPathComponent("contents", isDirectory: true)
         if !fileManager.fileExists(atPath: extracted.path) {
             try KhyloZip.extract(data, to: extracted)
         }
@@ -100,7 +115,7 @@ enum KhyloBook {
     }
 
     private static func imageFiles(in folder: URL) -> [URL] {
-        let extensions: Set<String> = ["jpg", "jpeg", "png", "webp", "gif"]
+        let extensions: Set<String> = ["jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "avif"]
         let enumerator = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: nil)
         let files = (enumerator?.allObjects as? [URL] ?? [])
             .filter { extensions.contains($0.pathExtension.lowercased()) && !$0.path.contains("__MACOSX") }

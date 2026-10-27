@@ -73,6 +73,19 @@ enum KhyloFeedBuilder {
             }
             return rows
 
+        case (_, .comics?):
+            async let latest = KhyloAPI.latest(in: id, limit: 20)
+            async let random = KhyloAPI.items(parentID: id, sortBy: [.random], limit: 60)
+            var rows: [KhyloFeedSection] = []
+            if let items = try? await latest, !items.isEmpty {
+                rows.append(.init(id: "\(id)-new", title: "Recently Added Comics", items: items, seeAll: .khyloLibrary(library)))
+            }
+            let issues = ((try? await random.items) ?? []).filter { KhyloAPI.extendedKind(of: $0) == .comic }
+            if !issues.isEmpty {
+                rows.append(.init(id: "\(id)-pick", title: "Something to Read", items: Array(issues.prefix(20))))
+            }
+            return rows
+
         case (.books, _):
             async let latest = KhyloAPI.items(parentID: id, types: [.book], sortBy: [.dateCreated], sortOrder: .descending, limit: 20)
             async let random = KhyloAPI.items(parentID: id, types: [.book], sortBy: [.random], limit: 20)

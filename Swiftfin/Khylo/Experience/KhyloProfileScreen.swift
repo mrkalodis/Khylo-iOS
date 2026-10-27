@@ -44,6 +44,16 @@ struct KhyloProfileScreen: View {
 
                 Section {
                     NavigationLink {
+                        KhyloAddDeviceScreen()
+                    } label: {
+                        Label("Add a Device", systemImage: "qrcode.viewfinder")
+                    }
+                } footer: {
+                    Text("Sign in a TV or another device with the code or QR code it shows.")
+                }
+
+                Section {
+                    NavigationLink {
                         KhyloSignInAnotherDeviceScreen()
                     } label: {
                         Label("Sign In Another Device", systemImage: "qrcode")

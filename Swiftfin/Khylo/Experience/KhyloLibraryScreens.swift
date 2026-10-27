@@ -210,7 +210,11 @@ struct KhyloLibraryPickerSheet: View {
 
     private func subtitle(for library: BaseItemDto) -> String {
         if let extended = KhyloAPI.extendedCollectionType(for: library) {
-            return extended == .audiobooks ? "Audiobooks" : "Podcasts"
+            switch extended {
+            case .audiobooks: return "Audiobooks"
+            case .podcasts: return "Podcasts"
+            case .comics: return "Comics & Manga"
+            }
         }
         switch library.collectionType {
         case .movies: return "Movies"
@@ -465,6 +469,11 @@ struct KhyloLibraryKind {
             return
         case .podcasts:
             self.init(types: nil, shape: .square, symbol: "mic")
+            recursive = false
+            return
+        case .comics:
+            // Series first, then the issues inside each.
+            self.init(types: nil, shape: .poster, symbol: "book.pages")
             recursive = false
             return
         case nil:

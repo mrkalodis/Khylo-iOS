@@ -21,7 +21,7 @@ extension NavigationRoute {
 }
 
 /// Saved reading position: chapter (or page for PDFs and comics) plus fraction within it.
-private struct ReaderPosition: Codable {
+struct ReaderPosition: Codable {
     var section: Int
     var fraction: Double
 
@@ -199,6 +199,8 @@ final class KhyloEPUBPager: NSObject, ObservableObject, WKNavigationDelegate {
         case first
         case last
         case fraction(Double)
+        /// The page holding an element, for links to a spot inside a chapter.
+        case anchor(String)
     }
 
     @Published private(set) var chapterIndex = 0
@@ -373,7 +375,12 @@ final class KhyloEPUBPager: NSObject, ObservableObject, WKNavigationDelegate {
         guard action.navigationType == .linkActivated, let url = action.request.url else { return .allow }
         if url.isFileURL,
            let index = book.chapters.firstIndex(where: { $0.url.standardizedFileURL.path == url.standardizedFileURL.path }) {
-            loadChapter(index, landing: .first)
+            let fragment = url.fragment.flatMap { $0.isEmpty ? nil : $0 }
+            if index == chapterIndex, let fragment {
+                pageOfAnchor(fragment) { [weak self] page in self?.show(page: page, animated: false) }
+            } else {
+                loadChapter(index, landing: fragment.map(Landing.anchor) ?? .first)
+            }
         }
         return .cancel
     }
@@ -405,14 +412,35 @@ final class KhyloEPUBPager: NSObject, ObservableObject, WKNavigationDelegate {
         webView.evaluateJavaScript("Math.max(1, Math.round(document.documentElement.scrollWidth / window.innerWidth))") { [weak self] result, _ in
             guard let self else { return }
             pageCount = max(1, (result as? Int) ?? Int((result as? Double) ?? 1))
-            let target: Int = switch landing {
-            case .first: 0
-            case .last: pageCount - 1
-            case let .fraction(value): min(pageCount - 1, Int((value * Double(pageCount)).rounded(.down)))
+            let finish = { [weak self] (target: Int) in
+                guard let self else { return }
+                show(page: target, animated: false)
+                withAnimation(.easeOut(duration: 0.2)) { self.isReady = true }
+                finishPendingCurl()
             }
-            show(page: target, animated: false)
-            withAnimation(.easeOut(duration: 0.2)) { self.isReady = true }
-            self.finishPendingCurl()
+            switch landing {
+            case .first: finish(0)
+            case .last: finish(pageCount - 1)
+            case let .fraction(value): finish(min(pageCount - 1, Int((value * Double(pageCount)).rounded(.down))))
+            case let .anchor(id): pageOfAnchor(id, completion: finish)
+            }
+        }
+    }
+
+    /// Which page an element (by id or name) is on.
+    private func pageOfAnchor(_ id: String, completion: @escaping (Int) -> Void) {
+        let escaped = id.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "'", with: "\\'")
+        let script = """
+        (function() {
+          var el = document.getElementById('\(escaped)') || document.getElementsByName('\(escaped)')[0];
+          if (!el) { return 0; }
+          return Math.max(0, Math.floor((el.getBoundingClientRect().left + window.scrollX + 1) / window.innerWidth));
+        })();
+        """
+        webView.evaluateJavaScript(script) { [weak self] result, _ in
+            guard let self else { return }
+            let page = (result as? Int) ?? Int((result as? Double) ?? 0)
+            completion(min(max(page, 0), pageCount - 1))
         }
     }
 
@@ -865,62 +893,6 @@ private struct KhyloPDFView: UIViewRepresentable {
         }
 
         @objc func tapped() { parent.onTap() }
-    }
-}
-
-// MARK: - Comics
-
-struct KhyloComicReader: View {
-
-    let itemID: String
-    let pages: [URL]
-    let title: String
-    @Binding var isChromeVisible: Bool
-    let onClose: () -> Void
-    let onFinished: () -> Void
-
-    @State private var index = 0
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            TabView(selection: $index) {
-                ForEach(Array(pages.enumerated()), id: \.offset) { offset, url in
-                    Group {
-                        if let image = UIImage(contentsOfFile: url.path) {
-                            Image(uiImage: image).resizable().scaledToFit()
-                        } else {
-                            Color.black
-                        }
-                    }
-                    .tag(offset)
-                    .onTapGesture { isChromeVisible.toggle() }
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
-
-            if isChromeVisible {
-                KhyloReaderChrome(
-                    theme: .night,
-                    title: title,
-                    subtitle: "",
-                    progress: pages.count > 1 ? Double(index) / Double(pages.count - 1) : 1,
-                    status: "Page \(index + 1) of \(pages.count)",
-                    onClose: onClose
-                ) {
-                    EmptyView()
-                }
-            }
-        }
-        .onAppear {
-            index = min(ReaderPosition.load(itemID)?.section ?? 0, max(pages.count - 1, 0))
-        }
-        .onChange(of: index) { _, newValue in
-            ReaderPosition(section: newValue, fraction: 0).save(itemID)
-            if newValue == pages.count - 1 { onFinished() }
-        }
     }
 }
 
