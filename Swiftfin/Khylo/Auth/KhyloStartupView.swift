@@ -17,7 +17,6 @@ import UIKit
 public enum StartupStep: Equatable {
     case serverDiscovery
     case profiles(DiscoveredServer)
-    case qrCode(DiscoveredServer)
     case manualLogin(DiscoveredServer)
     case kidsSetup(DiscoveredServer)
 }
@@ -62,15 +61,12 @@ public struct KhyloStartupView: View {
 
             switch currentStep {
             case .serverDiscovery:
-                ServerDiscoveryView(
-                    onSelectServer: { selectedServer in
-                        activeServer = selectedServer
-                        withAnimation(.easeInOut(duration: 0.28)) {
-                            currentStep = .manualLogin(selectedServer)
-                        }
-                    },
-                    onScanToSignIn: { isScanningToSignIn = true }
-                )
+                ServerDiscoveryView { selectedServer in
+                    activeServer = selectedServer
+                    withAnimation(.easeInOut(duration: 0.28)) {
+                        currentStep = .manualLogin(selectedServer)
+                    }
+                }
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.98)),
                     removal: .opacity
@@ -91,28 +87,6 @@ public struct KhyloStartupView: View {
                 .overlay(alignment: .bottom) {
                     profileAlternativeAuthBar(server: server)
                 }
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 0.98)),
-                    removal: .opacity
-                ))
-
-            case .qrCode(let server):
-                QRCodeLoginView(
-                    server: server,
-                    onAuthenticated: { _ in
-                        onAuthenticated()
-                    },
-                    onFallbackManual: {
-                        withAnimation(.easeInOut(duration: 0.28)) {
-                            currentStep = .manualLogin(server)
-                        }
-                    },
-                    onCancel: {
-                        withAnimation(.easeInOut(duration: 0.28)) {
-                            currentStep = .manualLogin(server)
-                        }
-                    }
-                )
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.98)),
                     removal: .opacity
@@ -147,49 +121,18 @@ public struct KhyloStartupView: View {
             }
         }
         .animation(.easeInOut(duration: 0.28), value: currentStep)
-        .overlay {
-            // Signing in with a scanned code happens on whichever screen it started from.
-            if isAuthenticating, !isScanningToSignIn, !isManualLoginShowing {
-                ZStack {
-                    Color.black.opacity(0.55).ignoresSafeArea()
-                    VStack(spacing: 14) {
-                        ProgressView().tint(.white).controlSize(.large)
-                        Text("Signing in…")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                    }
-                }
-                .transition(.opacity)
-            }
-        }
         .sheet(isPresented: $isScanningToSignIn) {
             KhyloCodeScannerSheet(
                 prompt: "Point your camera at the code on a device that's signed in.",
                 deniedHint: "Turn on Camera for Khylo in Settings, or sign in with your password instead."
             ) { scanned in
                 isScanningToSignIn = false
-                signInModel.signIn(scanned: scanned, authenticationAction: authenticationAction)
+                // Scan to Sign In is only offered once a server is chosen.
+                guard case let .manualLogin(server) = currentStep else { return }
+                signInModel.signIn(scanned: scanned, server: server, authenticationAction: authenticationAction)
             }
         }
-        .alert(
-            "Couldn't Sign In",
-            isPresented: Binding(
-                get: { !isManualLoginShowing && authErrorMessage != nil },
-                set: { if !$0 { signInModel.errorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(authErrorMessage ?? "")
-        }
     }
-
-    /// The password screen shows sign-in problems itself.
-    private var isManualLoginShowing: Bool {
-        if case .manualLogin = currentStep { return true }
-        return false
-    }
-
     // MARK: - Manual Login View
 
     private enum LoginField: Hashable {
@@ -258,12 +201,6 @@ public struct KhyloStartupView: View {
                 }
                 .padding(.top, 16)
 
-                KhyloAuthTextButton(title: "Use Quick Connect instead", systemImage: "qrcode") {
-                    withAnimation(.easeInOut(duration: 0.28)) {
-                        currentStep = .qrCode(server)
-                    }
-                }
-                .padding(.top, 4)
 
                 Spacer(minLength: 32)
             }
@@ -312,22 +249,6 @@ public struct KhyloStartupView: View {
     @ViewBuilder
     private func profileAlternativeAuthBar(server: DiscoveredServer) -> some View {
         HStack(spacing: KhyloSpacing.lg) {
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.28)) {
-                    currentStep = .qrCode(server)
-                }
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "qrcode")
-                    Text("Quick Connect")
-                }
-                .font(KhyloTypography.subheadlineMedium)
-                .foregroundColor(KhyloColors.textSecondary)
-            }
-
-            Text("•")
-                .foregroundColor(KhyloColors.textTertiary)
-
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.28)) {
                     currentStep = .manualLogin(server)

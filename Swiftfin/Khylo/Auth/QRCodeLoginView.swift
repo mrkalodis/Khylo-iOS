@@ -104,7 +104,7 @@ public struct QRCodeLoginView: View {
                         // Code display
                         if !quickConnectCode.isEmpty {
                             VStack(spacing: 4) {
-                                Text("Or enter this code on a device that's signed in:")
+                                Text("Or enter code at khylo.app/connect:")
                                     .font(KhyloTypography.caption)
                                     .foregroundColor(KhyloColors.textSecondary)
 

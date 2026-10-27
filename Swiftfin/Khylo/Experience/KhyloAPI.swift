@@ -337,11 +337,6 @@ enum KhyloAPI {
 
     /// Approves a TV or other device waiting to sign in with a Quick Connect code,
     /// as the person signed in here.
-    static func approveDevice(code: String) async throws {
-        let session = try requireSession()
-        _ = try await session.client.send(Paths.authorizeQuickConnect(code: code, userID: session.user.id))
-    }
-
     // MARK: - Signing in another device
 
     /// A one-time code another device scans to sign in as you.

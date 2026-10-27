@@ -54,73 +54,60 @@ final class KhyloSignInModel: ObservableObject {
     // MARK: - Scanning a code from a signed-in device
 
     /// What a scanned QR code holds.
-    enum ScannedCode: Equatable {
-        /// "Sign in another device" on a signed-in device: server address and a one-time code.
-        case signIn(server: String, code: String)
-        /// A Quick Connect code, which is for approving a device, not signing in with.
-        case quickConnect
-        case unknown
+    struct ScannedCode: Equatable {
+        let code: String
+        /// The server named in the link, when it's a link and not a bare code.
+        let host: String?
 
-        init(_ text: String) {
+        /// A link from "Sign In Another Device" (`…/#/signin?code=…`) or a bare code.
+        init?(_ text: String) {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
             guard let hash = trimmed.firstIndex(of: "#") else {
-                self = .unknown
+                // A bare code: no address, no spaces.
+                guard !trimmed.contains("://"), !trimmed.contains(" "), !trimmed.contains("/") else { return nil }
+                code = trimmed
+                host = nil
                 return
             }
-            let server = String(trimmed[..<hash]).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             let route = URLComponents(string: String(trimmed[trimmed.index(after: hash)...]))
-            let path = route?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
-            let code = route?.queryItems?.first { $0.name.lowercased() == "code" }?.value
-            if path == "quickconnect" {
-                self = .quickConnect
-            } else if path == "signin", let code, !code.isEmpty, !server.isEmpty {
-                self = .signIn(server: server, code: code)
-            } else {
-                self = .unknown
-            }
+            guard route?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() == "signin",
+                  let value = route?.queryItems?.first(where: { $0.name.lowercased() == "code" })?.value,
+                  !value.isEmpty
+            else { return nil }
+            code = value
+            host = URL(string: String(trimmed[..<hash]))?.host()?.lowercased()
         }
     }
 
-    /// Signs in with a QR code from "Sign in another device": finds the server it
-    /// names, then trades the one-time code for a sign-in.
-    func signIn(scanned text: String, authenticationAction: LocalUserAuthenticationAction?) {
+    /// Signs in on the chosen server with a code scanned from "Sign In Another Device".
+    func signIn(scanned text: String, server discovered: DiscoveredServer, authenticationAction: LocalUserAuthenticationAction?) {
         guard !isSigningIn else { return }
         errorMessage = nil
 
-        switch ScannedCode(text) {
-        case .quickConnect:
-            errorMessage = "That code is for approving a device. On the device that's signed in, open Sign in another device and scan the code it shows."
+        guard let scanned = ScannedCode(text) else {
+            errorMessage = "That isn't a Khylo sign-in code. On the device that's signed in, open Sign In Another Device and scan the code it shows."
             return
-        case .unknown:
-            errorMessage = "That isn't a Khylo sign-in code. On the device that's signed in, open Sign in another device and scan the code it shows."
-            return
-        case let .signIn(address, code):
-            isSigningIn = true
-            isCodeSignIn = true
-            self.authenticationAction = authenticationAction
-            Task {
-                let discovered: DiscoveredServer
-                do {
-                    discovered = try await KhyloServerDiscovery().pingServer(urlString: address)
-                } catch {
-                    isSigningIn = false
-                    isCodeSignIn = false
-                    errorMessage = "Couldn't reach the server in that code. Check your connection and try again."
-                    return
-                }
-                do {
-                    let server = try await storedServer(for: discovered)
-                    let viewModel = makeViewModel(for: server)
-                    await viewModel.signInWithCode(code: code)
-                } catch {
-                    fail(error)
-                }
+        }
+        isSigningIn = true
+        isCodeSignIn = true
+        // A link to another address can still be this server (home and web addresses differ).
+        codeIsFromOtherAddress = scanned.host.map { $0 != discovered.address.host()?.lowercased() } ?? false
+        self.authenticationAction = authenticationAction
+        Task {
+            do {
+                let server = try await storedServer(for: discovered)
+                let viewModel = makeViewModel(for: server)
+                await viewModel.signInWithCode(code: scanned.code)
+            } catch {
+                fail(error)
             }
         }
     }
 
     /// The sign-in under way came from a scanned code, which has its own messages.
     private var isCodeSignIn = false
+    private var codeIsFromOtherAddress = false
 
     // MARK: - Server
 
@@ -212,11 +199,13 @@ final class KhyloSignInModel: ObservableObject {
         isSigningIn = false
         if isCodeSignIn {
             isCodeSignIn = false
-            errorMessage = Self.codeMessage(for: error)
+            errorMessage = codeMessage(for: error)
             return
         }
         let message = error?.localizedDescription ?? ""
-        if message.localizedCaseInsensitiveContains("401") || message.localizedCaseInsensitiveContains("unauthorized") {
+        if Self.status(of: error) == 429 {
+            errorMessage = "Too many sign-in attempts. Try again in a few minutes."
+        } else if message.localizedCaseInsensitiveContains("401") || message.localizedCaseInsensitiveContains("unauthorized") {
             errorMessage = "That username or password isn't right. Try again."
         } else if message.isEmpty {
             errorMessage = "Something went wrong signing in. Try again."
@@ -225,21 +214,25 @@ final class KhyloSignInModel: ObservableObject {
         }
     }
 
-    private static func codeMessage(for error: Error?) -> String {
-        var status: Int? = if case let .unacceptableStatusCode(code) = error as? APIError { code } else { nil }
-        if status == nil, let text = error?.localizedDescription {
-            // The error can arrive wrapped, keeping only its description ("…unacceptable: 404.").
-            status = [404, 403, 429].first { text.contains(": \($0)") }
-        }
-        switch status {
+    private func codeMessage(for error: Error?) -> String {
+        switch Self.status(of: error) {
         case 404:
-            return "That code has run out or was already used. Make a new one on the other device and scan it again."
+            codeIsFromOtherAddress
+                ? "That code is from a different server."
+                : "That code has run out. Make a new one on the other device."
         case 403:
-            return "This account can't sign in right now. Ask the person who runs your server."
+            "This account can't sign in right now."
         case 429:
-            return "Too many tries. Wait a minute, then scan a new code."
+            "Too many tries. Wait a minute and try again."
         default:
-            return "Couldn't sign in with that code. Make a new one on the other device and try again."
+            "Couldn't reach your server. Try again."
         }
+    }
+
+    /// The server's answer, also when the error arrives wrapped with only its description.
+    private static func status(of error: Error?) -> Int? {
+        if case let .unacceptableStatusCode(code) = error as? APIError { return code }
+        guard let text = error?.localizedDescription else { return nil }
+        return [404, 403, 429].first { text.contains(": \($0)") }
     }
 }
