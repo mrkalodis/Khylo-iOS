@@ -198,7 +198,9 @@ private struct KhyloComicPager: UIViewControllerRepresentable {
             coordinator.show(index, animated: false, direction: .forward)
         } else if coordinator.currentIndex != index {
             let forward = rightToLeft ? index < coordinator.currentIndex : index > coordinator.currentIndex
-            coordinator.show(index, animated: true, direction: forward ? .forward : .reverse)
+            // Only a single page turn slides; a longer jump (the scrubber) just lands.
+            let isNextDoor = abs(index - coordinator.currentIndex) == 1
+            coordinator.show(index, animated: isNextDoor, direction: forward ? .forward : .reverse)
         }
     }
 
