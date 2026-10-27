@@ -276,8 +276,10 @@ final class KhyloDownloads: NSObject, ObservableObject {
         configuration.timeoutIntervalForRequest = 120
         session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
 
-        // Also picks up downloads that were running when Khylo was closed.
-        showCurrentAccount()
+        // Nothing here may ask who's signed in: this runs at launch, before the
+        // local database is open, and asking then signs the account out. The
+        // signed-in account's downloads are shown (and picked up again) once it
+        // has signed in, by KhyloAccount.
 
         NotificationCenter.default.publisher(for: .khyloOfflineProgress)
             .receive(on: DispatchQueue.main)

@@ -192,6 +192,9 @@ final class UserSessionManager: ObservableObject {
 
     @MainActor
     func appWillEnterForeground() async {
+        // Coming to the front at launch, before the stored session has been read:
+        // the local database isn't open yet, so the account can't be found.
+        guard state != .initial else { return }
         await refreshCurrentSession()
 
         Task {
