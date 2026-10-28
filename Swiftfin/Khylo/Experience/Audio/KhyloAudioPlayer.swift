@@ -593,14 +593,20 @@ final class KhyloAudioPlayer: ObservableObject {
         var head = URLRequest(url: url)
         head.httpMethod = "HEAD"
         head.timeoutInterval = 8
-        guard let (_, response) = try? await URLSession.shared.data(for: head),
-              let http = response as? HTTPURLResponse, http.statusCode == 200
-        else { return (url, "stream (unchecked)") }
+        for (name, value) in Self.streamHeaders() { head.setValue(value, forHTTPHeaderField: name) }
+        let answer = try? await URLSession.shared.data(for: head)
+        guard let http = answer?.1 as? HTTPURLResponse, http.statusCode == 200 else {
+            // Say what the server answered, so a refused stream can be traced.
+            let status = (answer?.1 as? HTTPURLResponse)?.statusCode
+            Logger.swiftfin().warning("Music: stream check answered \(status.map(String.init) ?? "nothing")", metadata: ["path": "\(url.path)"])
+            return (url, "stream (unchecked)")
+        }
         let type = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
         guard type.contains("mpegurl") else { return (url, "direct stream") }
 
         var get = URLRequest(url: url)
         get.timeoutInterval = 8
+        for (name, value) in Self.streamHeaders() { get.setValue(value, forHTTPHeaderField: name) }
         guard let (data, _) = try? await URLSession.shared.data(for: get),
               let text = String(data: data, encoding: .utf8)
         else { return (url, "hls master (unread)") }
@@ -847,8 +853,18 @@ final class KhyloAudioPlayer: ObservableObject {
         }
     }
 
+    /// The sign-in token as a header too, besides the one in the link, so the
+    /// server accepts the stream whichever way it reads it.
+    private static func streamHeaders() -> [String: String] {
+        guard let token = KhyloAPI.accessToken else { return [:] }
+        return ["Authorization": "MediaBrowser Token=\"\(token)\"", "X-Emby-Token": token]
+    }
+
     private func makePlayerItem(_ url: URL) -> AVPlayerItem {
         var options: [String: Any] = [AVURLAssetAllowsCellularAccessKey: true]
+        if !url.isFileURL {
+            options["AVURLAssetHTTPHeaderFieldsKey"] = Self.streamHeaders()
+        }
         if url.isFileURL {
             // MP3s the server converted on the fly have no header giving their
             // length, so the player can't jump around in them unless it reads
