@@ -65,6 +65,10 @@ struct KhyloDestination: View {
             KhyloArtistScreen(artist: item)
         case .audio:
             KhyloTrackRedirect(track: item)
+        case .photo:
+            KhyloPhotoViewerScreen(photos: [item], start: 0)
+        case .photoAlbum:
+            KhyloPhotoAlbumScreen(album: item)
         case .tvChannel:
             KhyloChannelRedirect(channel: item)
         default:

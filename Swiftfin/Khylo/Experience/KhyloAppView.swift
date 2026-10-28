@@ -87,6 +87,7 @@ struct KhyloAppView: View {
         .tint(KhyloStyle.accent)
         .preferredColorScheme(.dark)
         .background(KhyloStyle.canvas.ignoresSafeArea())
+        .modifier(KhyloNowPlayingPresenter())
         .sheet(isPresented: $libraryStore.isPickerPresented) {
             KhyloLibraryPickerSheet()
         }
@@ -161,6 +162,9 @@ private struct KhyloMiniPlayerSlot: View {
         guard player.isActive else { return false }
         if libraryStore.isDownloadsSelected { return true }
         if libraryStore.isFavoritesSelected { return false }
+        if let selected = libraryStore.selected, KhyloAPI.extendedCollectionType(for: selected) == .audiobooks {
+            return player.kind == .audiobook
+        }
         switch libraryStore.selected?.collectionType {
         case .music: return player.kind == .music
         case .books: return player.kind == .audiobook

@@ -54,6 +54,7 @@ struct KhyloReaderScreen: View {
     @AppStorage("khylo.reader.margins") private var margins: KhyloReaderMargins = .normal
     @AppStorage("khylo.reader.justified") private var justified = true
     @AppStorage("khylo.reader.pageCurl") private var pageCurl = true
+    @AppStorage("khylo.comic.background") private var comicBackground: KhyloComicBackground = .black
 
     @State private var book: KhyloBook?
     @State private var errorMessage: String?
@@ -103,6 +104,16 @@ struct KhyloReaderScreen: View {
             case nil:
                 loadingView
             }
+
+            // The controls fade away while you read; a quiet way out stays.
+            if !isChromeVisible, book != nil {
+                KhyloReaderCloseButton(theme: closeTheme) { dismiss() }
+                    .opacity(0.55)
+                    .padding(.leading, 16)
+                    .padding(.top, 6)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .transition(.opacity)
+            }
         }
         .preferredColorScheme(theme.isDark ? .dark : .light)
         .statusBarHidden(!isChromeVisible)
@@ -124,6 +135,12 @@ struct KhyloReaderScreen: View {
             .preferredColorScheme(theme.isDark ? .dark : .light)
         }
         .task { await load() }
+    }
+
+    /// Comics sit on their own background, not the paper.
+    private var closeTheme: KhyloReaderTheme {
+        if case .comic = book { return comicBackground == .white ? .original : .night }
+        return theme
     }
 
     private var isEPUB: Bool {

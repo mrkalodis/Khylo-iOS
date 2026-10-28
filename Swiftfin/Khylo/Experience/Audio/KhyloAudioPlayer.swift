@@ -85,6 +85,10 @@ final class KhyloAudioPlayer: ObservableObject {
     var current: BaseItemDto? { queue.indices.contains(index) ? queue[index] : nil }
     var isActive: Bool { current != nil }
 
+    /// Set to open the full Now Playing screen. It lives above the tabs, so it
+    /// opens from anywhere: tapping the mini player, or starting an audiobook.
+    @Published var isNowPlayingRequested = false
+
     /// A queue player so the next track is already buffering when this one ends.
     private let player = AVQueuePlayer()
     /// The next track, loaded into the player ahead of time.
@@ -321,6 +325,8 @@ final class KhyloAudioPlayer: ObservableObject {
         self.artworkURL = artworkURL
         rate = kind == .audiobook ? rate : 1
         load(index: startIndex, startTicks: startTicks)
+        // An audiobook opens its player as soon as you press play.
+        if kind == .audiobook { isNowPlayingRequested = true }
     }
 
     func togglePlayPause() {

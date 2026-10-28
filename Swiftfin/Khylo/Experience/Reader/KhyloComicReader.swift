@@ -7,6 +7,7 @@
 //
 
 import ImageIO
+import Nuke
 import SwiftUI
 import UIKit
 
@@ -272,12 +273,16 @@ private struct KhyloComicPager: UIViewControllerRepresentable {
 // MARK: - One page
 
 /// A page you can pinch and double-tap to zoom.
-final class KhyloComicPageController: UIViewController, UIScrollViewDelegate {
+final class KhyloComicPageController: UIViewController, UIScrollViewDelegate, UIGestureRecognizerDelegate {
 
     let index: Int
     private let url: URL
     private let fillWidth: Bool
+    /// A web address (photos from the server) instead of a file on the phone.
+    private let isRemote: Bool
     var onTap: ((CGFloat) -> Void)?
+    /// Swiping down on an unzoomed page (photos): translation, state and speed.
+    var onDismissDrag: ((CGFloat, UIGestureRecognizer.State, CGFloat) -> Void)?
 
     private let scrollView = UIScrollView()
     private let imageView = UIImageView()
@@ -285,10 +290,11 @@ final class KhyloComicPageController: UIViewController, UIScrollViewDelegate {
     private var image: UIImage?
     private var laidOutFor: CGSize = .zero
 
-    init(index: Int, url: URL, fillWidth: Bool) {
+    init(index: Int, url: URL, fillWidth: Bool, isRemote: Bool = false) {
         self.index = index
         self.url = url
         self.fillWidth = fillWidth
+        self.isRemote = isRemote
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -324,9 +330,21 @@ final class KhyloComicPageController: UIViewController, UIScrollViewDelegate {
         singleTap.require(toFail: doubleTap)
         scrollView.addGestureRecognizer(singleTap)
 
+        if onDismissDrag != nil {
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(dismissPanned(_:)))
+            pan.delegate = self
+            scrollView.addGestureRecognizer(pan)
+        }
+
         let url = url
+        let isRemote = isRemote
         Task.detached(priority: .userInitiated) { [weak self] in
-            let loaded = Self.downsampledImage(at: url, maxDimension: 3200)
+            let loaded: UIImage?
+            if isRemote {
+                loaded = try? await ImagePipeline.shared.image(for: url)
+            } else {
+                loaded = Self.downsampledImage(at: url, maxDimension: 3200)
+            }
             await MainActor.run {
                 self?.spinner.stopAnimating()
                 self?.image = loaded
@@ -335,6 +353,23 @@ final class KhyloComicPageController: UIViewController, UIScrollViewDelegate {
                 self?.view.setNeedsLayout()
             }
         }
+    }
+
+    // MARK: Swipe down to close
+
+    @objc private func dismissPanned(_ gesture: UIPanGestureRecognizer) {
+        onDismissDrag?(gesture.translation(in: view).y, gesture.state, gesture.velocity(in: view).y)
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer else { return true }
+        let velocity = pan.velocity(in: view)
+        // Only a downward, mostly vertical swipe on a page that isn't zoomed in.
+        return velocity.y > 0 && abs(velocity.y) > abs(velocity.x) * 1.4 && scrollView.zoomScale <= scrollView.minimumZoomScale * 1.02
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
     }
 
     override func viewDidLayoutSubviews() {

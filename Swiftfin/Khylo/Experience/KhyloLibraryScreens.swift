@@ -493,8 +493,10 @@ struct KhyloLibraryKind {
             self.init(types: [.boxSet], shape: .poster, symbol: "square.stack")
         case .musicvideos:
             self.init(types: [.musicVideo], shape: .landscape, symbol: "music.note.tv")
-        case .homevideos, .photos:
-            self.init(types: [.video], shape: .landscape, symbol: "video")
+        case .homevideos:
+            self.init(types: [.video, .photo], shape: .landscape, symbol: "video")
+        case .photos:
+            self.init(types: [.photo, .photoAlbum], shape: .square, symbol: "photo.on.rectangle")
         case .playlists:
             self.init(types: [.playlist], shape: .square, symbol: "music.note.list")
         case .livetv:
@@ -807,6 +809,10 @@ struct KhyloLibraryHome<Header: View>: View {
             KhyloStyle.canvas.ignoresSafeArea()
 
             switch tab {
+            case _ where library.collectionType == .photos:
+                // Photos have no For You or Browse: they're a gallery.
+                KhyloPhotoLibrary(library: library, header: AnyView(header()))
+
             case .forYou where library.collectionType == .music:
                 // Music has its own For You: Jump Back In, mixes, On Repeat and more,
                 // with a search right at the top for finding something specific.
@@ -836,24 +842,20 @@ struct KhyloLibraryHome<Header: View>: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         top
-                        if isLoading {
-                            ProgressView().tint(.white.opacity(0.6)).frame(maxWidth: .infinity).padding(.top, 80)
-                        } else if sections.isEmpty {
-                            KhyloEmptyState(systemImage: "sparkles", title: "Nothing to show yet", message: "Browse the full library instead.", actionTitle: "Browse") {
-                                tab = .browse
-                            }
-                            .padding(.top, 30)
-                        } else {
-                            KhyloFeedView(sections: sections)
+                        KhyloLibraryForYou(library: library, sections: sections, isLoading: isLoading) {
+                            tab = .browse
                         }
                     }
                     .padding(.bottom, 40)
                 }
+                .scrollDismissesKeyboard(.immediately)
                 .refreshable { await load() }
 
             case .browse:
                 if library.collectionType == .music {
                     KhyloMusicLibraryScreen(library: library, header: AnyView(top))
+                } else if let scope = KhyloLibraryKind.categoryScope(for: library) {
+                    KhyloLibraryBrowse(library: library, scope: scope, header: AnyView(top))
                 } else {
                     KhyloLibraryBrowser(library: library) { _ in top }
                 }

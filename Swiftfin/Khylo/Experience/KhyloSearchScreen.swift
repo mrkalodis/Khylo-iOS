@@ -471,6 +471,10 @@ struct KhyloCategoryGrid: View {
     let onSeeAll: (() -> Void)?
     /// The music library's Browse shows the tiles without a title above them.
     var showsTitle = true
+    /// Categories of just this library, instead of every library of the scope.
+    var library: BaseItemDto? = nil
+    /// Told how many categories were found, so a page can fall back to titles when there are none.
+    var onLoaded: ((Int) -> Void)? = nil
 
     @State private var categories: [KhyloCategory] = []
     @Router private var router
@@ -488,7 +492,7 @@ struct KhyloCategoryGrid: View {
             if !categories.isEmpty {
                 if showsTitle {
                 HStack(alignment: .lastTextBaseline) {
-                    Text(limit == nil ? "Browse \(scope.rawValue)" : title)
+                    Text(limit == nil ? "Browse \(scope.rawValue)" : (library == nil ? title : "Categories"))
                         .font(KhyloStyle.title(20))
                         .foregroundColor(.white)
                     Spacer()
@@ -516,21 +520,24 @@ struct KhyloCategoryGrid: View {
             }
         }
         .padding(.horizontal, KhyloStyle.gutter)
-        .task(id: scope) {
+        .task(id: "\(scope.rawValue)-\(library?.id ?? "")") {
             if categories.isEmpty {
-                let found = await KhyloCategoryCache.shared.categories(for: scope)
+                let found = await KhyloCategoryCache.shared.categories(for: scope, library: library)
                 withAnimation(.easeOut(duration: 0.25)) { categories = found }
+                onLoaded?(found.count)
             }
         }
     }
 
     private func open(_ category: KhyloCategory) {
         let name = category.name
-        let types = KhyloCategoryCache.itemTypes(for: scope)
+        let types = library.map { KhyloLibraryKind($0).types } ?? KhyloCategoryCache.itemTypes(for: scope)
         let isMusic = scope == .music
-        router.route(to: NavigationRoute(id: "khylo-genre-\(scope.rawValue)-\(name)") {
+        let parentID = library?.id
+        router.route(to: NavigationRoute(id: "khylo-genre-\(scope.rawValue)-\(parentID ?? "")-\(name)") {
             KhyloGridScreen(title: name, shape: isMusic ? .square : .poster) { start, limit in
                 try await KhyloAPI.items(
+                    parentID: parentID,
                     types: types,
                     sortBy: isMusic ? [.playCount, .communityRating, .sortName] : [.communityRating, .sortName],
                     sortOrder: .descending,
@@ -662,19 +669,20 @@ final class KhyloCategoryCache {
         loads = [:]
     }
 
-    func categories(for scope: KhyloSearchScreen.Scope) async -> [KhyloCategory] {
-        let key = scope.rawValue
+    func categories(for scope: KhyloSearchScreen.Scope, library: BaseItemDto? = nil) async -> [KhyloCategory] {
+        let key = "\(scope.rawValue)-\(library?.id ?? "")"
         if let cached = results[key] { return cached }
         if let load = loads[key] { return await load.value }
 
         let load = Task<[KhyloCategory], Never> {
-            let types = Self.itemTypes(for: scope)
+            // A single library is sampled on its own, with its own kinds of title.
+            let types = library.map { KhyloLibraryKind($0).types } ?? Self.itemTypes(for: scope)
             let popularity: [ItemSortBy] = switch scope {
             case .music: [.playCount, .communityRating, .dateCreated]
             case .books: [.communityRating, .dateCreated]
             default: [.communityRating, .criticRating, .dateCreated]
             }
-            guard let sample = try? await KhyloAPI.genreSample(types: types, sortBy: popularity) else { return [] }
+            guard let sample = try? await KhyloAPI.genreSample(types: types, sortBy: popularity, parentID: library?.id) else { return [] }
             return Self.build(from: sample, scope: scope)
         }
         loads[key] = load

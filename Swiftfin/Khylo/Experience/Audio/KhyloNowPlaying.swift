@@ -48,14 +48,13 @@ private extension KhyloAudioPlayer {
 struct KhyloMiniPlayer: View {
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
-    @State private var isShowingNowPlaying = false
     @State private var tint: Color?
 
     var body: some View {
         if player.isActive {
             let artwork = player.displayArtworkURL(width: 120)
             Button {
-                isShowingNowPlaying = true
+                player.isNowPlayingRequested = true
             } label: {
                 HStack(spacing: 12) {
                     KhyloImage(url: artwork, placeholderSymbol: player.kind == .audiobook ? "headphones" : "music.note")
@@ -118,9 +117,18 @@ struct KhyloMiniPlayer: View {
                 let color = await KhyloArtColor.color(for: player.displayArtworkURL(width: 120))
                 withAnimation(.easeInOut(duration: 0.4)) { tint = color }
             }
-            .fullScreenCover(isPresented: $isShowingNowPlaying) {
-                KhyloNowPlayingScreen()
-            }
+        }
+    }
+}
+
+/// Presents Now Playing over whatever is on screen when it's asked for.
+struct KhyloNowPlayingPresenter: ViewModifier {
+
+    @ObservedObject private var player = KhyloAudioPlayer.shared
+
+    func body(content: Content) -> some View {
+        content.fullScreenCover(isPresented: $player.isNowPlayingRequested) {
+            KhyloNowPlayingScreen()
         }
     }
 }

@@ -213,10 +213,11 @@ enum KhyloAPI {
 
     /// A large, lightweight sample of titles (genres and artwork only), most
     /// popular first, used to build search categories from real genre metadata.
-    static func genreSample(types: [BaseItemKind], sortBy: [ItemSortBy], limit: Int = 1500) async throws -> [BaseItemDto] {
+    static func genreSample(types: [BaseItemKind]?, sortBy: [ItemSortBy], parentID: String? = nil, limit: Int = 1500) async throws -> [BaseItemDto] {
         let session = try requireSession()
         var parameters = Paths.GetItemsParameters()
         parameters.userID = session.user.id
+        parameters.parentID = parentID
         parameters.includeItemTypes = types
         parameters.isRecursive = true
         parameters.sortBy = sortBy
