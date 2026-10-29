@@ -331,6 +331,13 @@ struct KhyloDetailScreen: View {
                 ) {
                     Task { await model.toggleFavorite() }
                 }
+                if KhyloDisc.isDisc(item) {
+                    KhyloIconAction(title: "Disc Menu", systemImage: "opticaldisc") {
+                        router.route(to: NavigationRoute(id: "khylo-disc-\(item.id ?? "")") {
+                            KhyloDiscMenuScreen(item: item)
+                        })
+                    }
+                }
                 KhyloDownloadButton(item: item)
             }
             .frame(maxWidth: .infinity)
