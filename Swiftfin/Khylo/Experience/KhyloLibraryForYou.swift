@@ -43,13 +43,16 @@ struct KhyloLibraryForYou: View {
     @State private var query = ""
     @State private var term = ""
 
-    private var featured: (item: BaseItemDto, label: String)? {
-        guard library.collectionType == .movies || library.collectionType == .tvshows else { return nil }
-        if let resume = sections.first(where: { $0.id.hasSuffix("-resume") })?.items.first {
-            return (resume, "Continue Watching")
+    private var isVideo: Bool {
+        library.collectionType == .movies || library.collectionType == .tvshows
+    }
+
+    private var featured: (item: BaseItemDto, label: String, resumes: Bool)? {
+        if let resume = sections.first(where: { $0.id.hasSuffix("-resume") || $0.id.hasSuffix("-listening") })?.items.first {
+            return (resume, isVideo ? "Continue Watching" : "Continue Listening", !isVideo)
         }
         if let latest = sections.first(where: { $0.id.hasSuffix("-new") })?.items.first {
-            return (latest, "New in \(library.name ?? "your library")")
+            return (latest, "New in \(library.name ?? "your library")", false)
         }
         return nil
     }
@@ -66,7 +69,17 @@ struct KhyloLibraryForYou: View {
                         .padding(.top, 20)
                 } else {
                     if let featured {
-                        KhyloLibraryHero(item: featured.item, label: featured.label)
+                        if isVideo {
+                            KhyloLibraryHero(item: featured.item, label: featured.label)
+                        } else {
+                            KhyloCoverHero(
+                                item: featured.item,
+                                label: featured.label,
+                                shape: KhyloLibraryKind(library).shape,
+                                symbol: KhyloLibraryKind(library).symbol,
+                                resumes: featured.resumes
+                            )
+                        }
                     }
                     KhyloFeedView(sections: sections)
                     if KhyloLibraryKind.categoryScope(for: library) != nil {
@@ -142,6 +155,104 @@ private struct KhyloLibraryHero: View {
                             .foregroundColor(.white.opacity(0.75))
                             .lineLimit(1)
                     }
+                }
+                .padding(18)
+
+                if let progress = item.khyloProgress, progress > 0 {
+                    KhyloProgressLine(progress: progress)
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 8)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 230)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
+        }
+        .buttonStyle(KhyloScaleButtonStyle())
+        .padding(.horizontal, KhyloStyle.gutter)
+    }
+}
+
+/// The title to feature at the top of a books, audiobooks, podcasts or comics
+/// library: its cover, large, over a soft blur of the same artwork.
+private struct KhyloCoverHero: View {
+
+    let item: BaseItemDto
+    let label: String
+    let shape: KhyloLibraryKind.Shape
+    let symbol: String
+    /// Tapping goes straight back to listening instead of opening the page.
+    let resumes: Bool
+
+    @Router private var router
+
+    private var coverStyle: KhyloArtwork.Style { shape == .poster ? .poster : .square }
+
+    private var coverSize: CGSize {
+        shape == .poster ? CGSize(width: 108, height: 162) : CGSize(width: 140, height: 140)
+    }
+
+    private var title: String {
+        if item.type == .audio || item.type == .audioBook { return item.album ?? item.seriesName ?? item.name ?? "" }
+        return item.seriesName ?? item.name ?? ""
+    }
+
+    private var byline: String {
+        var parts: [String] = []
+        if let author = item.albumArtist ?? item.artists?.first ?? item.people?.first(where: { $0.type == .author })?.name {
+            parts.append(author)
+        }
+        if let year = item.productionYear { parts.append(String(year)) }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        Button {
+            if resumes {
+                KhyloFeedActions.resumeListening(item)
+            } else {
+                router.route(to: .khyloItem(item))
+            }
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                Rectangle().fill(Color.white.opacity(0.06))
+                KhyloImage(url: KhyloArtwork.url(for: item, style: .square, width: 300), showsPlaceholder: false)
+                    .blur(radius: 40)
+                    .scaleEffect(1.4)
+                LinearGradient(
+                    colors: [.black.opacity(0.25), .black.opacity(0.75)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                HStack(alignment: .bottom, spacing: 16) {
+                    KhyloImage(url: KhyloArtwork.url(for: item, style: coverStyle, width: coverSize.width * 2), placeholderSymbol: symbol)
+                        .frame(width: coverSize.width, height: coverSize.height)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .shadow(color: .black.opacity(0.5), radius: 12, y: 6)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(label.uppercased())
+                            .font(.system(size: 11, weight: .heavy))
+                            .tracking(1.4)
+                            .foregroundColor(KhyloStyle.accent)
+                        Text(title)
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(3)
+                        if !byline.isEmpty {
+                            Text(byline)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.white.opacity(0.75))
+                                .lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
                 .padding(18)
 

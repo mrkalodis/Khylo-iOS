@@ -46,14 +46,35 @@ enum KhyloFeedBuilder {
         case (_, .audiobooks?):
             async let listening = KhyloAPI.resume(limit: 20, mediaTypes: [.audio])
             async let latest = KhyloAPI.latest(in: id, limit: 24)
+            async let random = KhyloAPI.items(parentID: id, sortBy: [.random], recursive: false, limit: 20)
             var rows: [KhyloFeedSection] = []
             let resumeParts = uniqueBooks((try? await listening) ?? [])
             if includeResume, !resumeParts.isEmpty {
-                rows.append(.init(id: "\(id)-listening", title: "Continue Listening", shape: .square, action: .resumeListening, items: resumeParts))
+                rows.append(.init(id: "\(id)-listening", title: "Continue Listening", subtitle: "Pick up where you left off", shape: .square, action: .resumeListening, items: resumeParts))
             }
             let newBooks = uniqueBooks((try? await latest) ?? [])
             if !newBooks.isEmpty {
-                rows.append(.init(id: "\(id)-new", title: "Recently Added Audiobooks", shape: .square, items: newBooks, seeAll: .khyloLibrary(library)))
+                rows.append(.init(id: "\(id)-new", title: "Recently Added", subtitle: "New to your audiobooks", shape: .square, items: newBooks, seeAll: .khyloLibrary(library)))
+            }
+            if let items = try? await random.items, !items.isEmpty {
+                rows.append(.init(id: "\(id)-pick", title: "Something to Listen To", subtitle: "A few picks from your library", shape: .square, items: items))
+            }
+            return rows
+
+        case (_, .podcasts?):
+            async let listening = KhyloAPI.resume(limit: 20, mediaTypes: [.audio])
+            async let latest = KhyloAPI.latest(in: id, limit: 24)
+            async let shows = KhyloAPI.items(parentID: id, sortBy: [.sortName], recursive: false, limit: 40)
+            var rows: [KhyloFeedSection] = []
+            let started = (try? await listening) ?? []
+            if includeResume, !started.isEmpty {
+                rows.append(.init(id: "\(id)-listening", title: "Continue Listening", subtitle: "Episodes you started", shape: .square, action: .resumeListening, items: started))
+            }
+            if let items = try? await latest, !items.isEmpty {
+                rows.append(.init(id: "\(id)-new", title: "New Episodes", subtitle: "Latest from your shows", shape: .square, items: items, seeAll: .khyloLibrary(library)))
+            }
+            if let items = try? await shows.items, !items.isEmpty {
+                rows.append(.init(id: "\(id)-shows", title: "Your Shows", subtitle: "Everything you follow", shape: .square, items: items))
             }
             return rows
 
@@ -78,23 +99,35 @@ enum KhyloFeedBuilder {
             async let random = KhyloAPI.items(parentID: id, sortBy: [.random], limit: 60)
             var rows: [KhyloFeedSection] = []
             if let items = try? await latest, !items.isEmpty {
-                rows.append(.init(id: "\(id)-new", title: "Recently Added Comics", items: items, seeAll: .khyloLibrary(library)))
+                rows.append(.init(id: "\(id)-new", title: "Recently Added", subtitle: "New issues and series", items: items, seeAll: .khyloLibrary(library)))
             }
             let issues = ((try? await random.items) ?? []).filter { KhyloAPI.extendedKind(of: $0) == .comic }
             if !issues.isEmpty {
-                rows.append(.init(id: "\(id)-pick", title: "Something to Read", items: Array(issues.prefix(20))))
+                rows.append(.init(id: "\(id)-pick", title: "Something to Read", subtitle: "A few picks from your library", items: Array(issues.prefix(20))))
             }
             return rows
 
         case (.books, _):
             async let latest = KhyloAPI.items(parentID: id, types: [.book], sortBy: [.dateCreated], sortOrder: .descending, limit: 20)
             async let random = KhyloAPI.items(parentID: id, types: [.book], sortBy: [.random], limit: 20)
+            async let genreList = KhyloAPI.genres(parentID: id, types: [.book])
             var rows: [KhyloFeedSection] = []
             if let items = try? await latest.items, !items.isEmpty {
-                rows.append(.init(id: "\(id)-new", title: "Recently Added Books", items: items, seeAll: .khyloLibrary(library)))
+                rows.append(.init(id: "\(id)-new", title: "Recently Added", subtitle: "New on your shelf", items: items, seeAll: .khyloLibrary(library)))
             }
             if let items = try? await random.items, !items.isEmpty {
-                rows.append(.init(id: "\(id)-pick", title: "Something to Read", items: items))
+                rows.append(.init(id: "\(id)-pick", title: "Something to Read", subtitle: "A few picks from your library", items: items))
+            }
+            // Two genres, rotating daily, as in the video libraries.
+            let genres = ((try? await genreList) ?? []).compactMap(\.name)
+            if !genres.isEmpty {
+                let day = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
+                for genre in Set([genres[day % genres.count], genres[(day * 7 + 3) % genres.count]]).sorted() {
+                    if let items = try? await KhyloAPI.items(parentID: id, types: [.book], sortBy: [.random], genres: [genre], limit: 20).items,
+                       items.count >= 4 {
+                        rows.append(.init(id: "\(id)-genre-\(genre)", title: genre, subtitle: "From your \(genre.lowercased()) shelf", items: items))
+                    }
+                }
             }
             return rows
 
