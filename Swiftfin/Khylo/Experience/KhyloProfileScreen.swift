@@ -44,6 +44,19 @@ struct KhyloProfileScreen: View {
 
                 Section {
                     NavigationLink {
+                        KhyloHandoffList()
+                            .background(KhyloStyle.canvas.ignoresSafeArea())
+                            .navigationTitle("Handoff")
+                            .navigationBarTitleDisplayMode(.inline)
+                    } label: {
+                        Label("Handoff", systemImage: "iphone.and.arrow.forward")
+                    }
+                } footer: {
+                    Text("Carry on watching or listening on another of your devices, or bring it here.")
+                }
+
+                Section {
+                    NavigationLink {
                         KhyloAddDeviceScreen()
                     } label: {
                         Label("Add a Device", systemImage: "qrcode.viewfinder")

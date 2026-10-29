@@ -160,6 +160,8 @@ enum KhyloPlayback {
             // Channels play straight through: no chapter list or markers.
             item.chapters = nil
             item.trickplay = nil
+            // Scheduled programs follow the broadcast, so they can't be handed to another device.
+            item.tags = (item.tags ?? []) + [KhyloHandoff.scheduledMarker]
         }
         router.route(to: .videoPlayer(provider: live, queue: nil))
     }

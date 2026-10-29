@@ -813,6 +813,7 @@ struct KhyloThemedBottomRow: View {
         HStack(spacing: 0) {
             KhyloRoutePicker(tint: UIColor(color))
                 .frame(width: 44, height: 44)
+            KhyloHandoffButton(color: color)
             Spacer()
             if let current = player.current {
                 KhyloDownloadButton(item: current, style: .icon)

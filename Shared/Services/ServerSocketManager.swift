@@ -126,7 +126,7 @@ final class ServerSocketManager {
                     .setMaxStreamingBitrate,
                     .setSubtitleStreamIndex,
                 ],
-                playableMediaTypes: [.video]
+                playableMediaTypes: [.video, .audio]
             )
             .connect(responseTimeout: .seconds(10))
 

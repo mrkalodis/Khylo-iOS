@@ -127,6 +127,7 @@ struct KhyloHomeScreen: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         header
+                        KhyloHandoffCard()
                         KhyloFeedView(sections: model.sections)
                             .padding(.top, 4)
                     }

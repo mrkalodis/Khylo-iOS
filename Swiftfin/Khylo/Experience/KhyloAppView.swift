@@ -88,6 +88,7 @@ struct KhyloAppView: View {
         .preferredColorScheme(.dark)
         .background(KhyloStyle.canvas.ignoresSafeArea())
         .modifier(KhyloNowPlayingPresenter())
+        .overlay { KhyloHandoffNotice() }
         .sheet(isPresented: $libraryStore.isPickerPresented) {
             KhyloLibraryPickerSheet()
         }
@@ -101,6 +102,11 @@ struct KhyloAppView: View {
         .onReceive(KhyloPageRelay.shared.showDownloads) { _ in
             libraryStore.selectedID = KhyloLibraryStore.downloadsID
             selection = .libraries
+        }
+        .task {
+            // Ready to hand playback to another device and to take it from one.
+            _ = KhyloHandoff.shared
+            await KhyloHandoff.shared.refresh()
         }
         .task {
             // Back on the song you were listening to when the app was closed.

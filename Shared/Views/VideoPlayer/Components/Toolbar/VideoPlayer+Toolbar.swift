@@ -71,6 +71,14 @@ extension VideoPlayer.PlaybackControls {
                 TitleView(item: manager.item)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                #if os(iOS)
+                if KhyloHandoff.shared.canSend {
+                    KhyloHandoffButton()
+                        .frame(width: Self.buttonSize, height: Self.buttonSize)
+                        .modifier(OverlayBarButtonStyleModifier())
+                }
+                #endif
+
                 ActionButtons()
                     .frame(height: Self.buttonSize)
                     .padding(.horizontal)

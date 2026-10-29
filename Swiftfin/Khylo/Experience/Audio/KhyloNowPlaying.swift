@@ -447,6 +447,8 @@ struct KhyloNowPlayingScreen: View {
             KhyloRoutePicker()
                 .frame(width: 44, height: 44)
 
+            KhyloHandoffButton(color: .white.opacity(0.85))
+
             Spacer()
 
             if player.kind == .audiobook {

@@ -58,15 +58,8 @@ extension UserSessionManager {
 
         switch playCommand.playCommand {
         case .playNow, .none:
-            let itemIDs = playCommand.itemIDs ?? []
-            guard let itemID = itemIDs[safe: playCommand.startIndex ?? 0] ?? itemIDs.first else { return }
-
-            playItem(
-                id: itemID,
-                mediaSourceID: playCommand.mediaSourceID,
-                startPositionTicks: playCommand.startPositionTicks,
-                userSession: currentSession
-            )
+            // Another of the person's devices handed this over: movies, shows, music, audiobooks.
+            KhyloHandoff.shared.receive(playCommand, session: currentSession)
         case .playNext:
             onReceive(playstateCommand: .init(command: .nextTrack, controllingUserID: playCommand.controllingUserID))
         case .playLast:
@@ -82,6 +75,8 @@ extension UserSessionManager {
 
     @MainActor
     private func onReceive(playstateCommand: PlaystateRequest) {
+        // Music or an audiobook playing here lets go too.
+        if playstateCommand.command == .stop, KhyloHandoff.shared.stopAudioIfPlaying() { return }
         guard let mediaPlayerManager else { return }
 
         switch playstateCommand.command {
