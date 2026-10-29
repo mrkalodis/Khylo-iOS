@@ -57,7 +57,7 @@ struct AppSettingsView: View {
     }
 
     var body: some View {
-        Form(image: .jellyfinBlobBlue) {
+        Form(image: .khyloLogo) {
 
             Section(L10n.swiftfin) {
                 ChevronButton(L10n.aboutApp) {

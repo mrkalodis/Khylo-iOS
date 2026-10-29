@@ -435,7 +435,7 @@ extension Defaults.Keys {
 
 extension UserDefaults {
 
-    static let debugSuite = UserDefaults(suiteName: "swiftfinstore-debug-defaults")!
+    static let debugSuite = UserDefaults(suiteName: "khylo-debug-defaults")!
 }
 
 extension Defaults.Keys {

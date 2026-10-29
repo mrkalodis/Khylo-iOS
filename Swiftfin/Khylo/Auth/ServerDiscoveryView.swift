@@ -61,7 +61,7 @@ public struct ServerDiscoveryView: View {
                 if let errorMessage {
                     KhyloAuthError(message: errorMessage)
                 } else {
-                    Text("For example khylo.example.com or 192.168.1.20:8096")
+                    Text("For example khylo.example.com or 192.168.1.20:8098")
                         .font(.system(size: 13))
                         .foregroundColor(KhyloColors.textTertiary)
                         .padding(.horizontal, 4)

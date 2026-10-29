@@ -52,6 +52,13 @@ final class KhyloAppDelegate: NSObject, UIApplicationDelegate {
         // Reconnects to downloads that carried on while Khylo was closed.
         _ = KhyloNetwork.shared
         _ = KhyloDownloads.shared
+        // Image caches kept under their old names are only a copy of what the server has.
+        Task.detached(priority: .background) {
+            let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            for name in ["org.jellyfin.swiftfin", "org.jellyfin.swiftfin.local"] {
+                try? FileManager.default.removeItem(at: caches.appendingPathComponent(name))
+            }
+        }
         return true
     }
 

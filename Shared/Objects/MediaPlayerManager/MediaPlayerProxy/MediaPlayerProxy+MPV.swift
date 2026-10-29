@@ -177,7 +177,7 @@ extension MPVMediaPlayerProxy {
                 else { continue }
 
                 // Tag sidecars so a failed load cannot shift the remaining stream mappings.
-                player.command("sub-add", arguments: [url.absoluteString, "auto", "swiftfin-subtitle-\(index)"])
+                player.command("sub-add", arguments: [url.absoluteString, "auto", "khylo-subtitle-\(index)"])
             }
         }
 
@@ -278,7 +278,7 @@ extension MediaTrackIndexMap {
 
         for stream in mediaStreams.sidecarSubtitles {
             if let index = stream.index,
-               let track = tracks.first(where: { $0.type == .subtitle && $0.isExternal && $0.title == "swiftfin-subtitle-\(index)" })
+               let track = tracks.first(where: { $0.type == .subtitle && $0.isExternal && $0.title == "khylo-subtitle-\(index)" })
             {
                 map.setPlayerIndex(track.mpvID, for: index)
             }

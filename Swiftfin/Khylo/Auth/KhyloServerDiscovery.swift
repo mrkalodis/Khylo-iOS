@@ -23,7 +23,7 @@ public struct DiscoveredServer: Identifiable, Hashable, Sendable {
     public init(
         id: String = "local-server",
         name: String = "Home Media Server",
-        address: URL = URL(string: "http://localhost:8096")!,
+        address: URL = URL(string: "http://localhost:8098")!,
         version: String = "10.9.0",
         isKhyloServer: Bool = true,
         isOnline: Bool = true
@@ -39,7 +39,7 @@ public struct DiscoveredServer: Identifiable, Hashable, Sendable {
     public init(name: String, address: String) {
         self.id = "local-server"
         self.name = name
-        self.address = URL(string: address) ?? URL(string: "http://localhost:8096")!
+        self.address = URL(string: address) ?? URL(string: "http://localhost:8098")!
         self.version = "10.9.0"
         self.isKhyloServer = true
         self.isOnline = true
@@ -174,14 +174,10 @@ public final class KhyloServerDiscovery: ObservableObject {
     }
 
     private func performDiscoveryScan() async {
-        // 1. Ask the network: servers answer the standard UDP discovery broadcast.
-        do {
-            for try await response in JellyfinClient.discover(duration: .seconds(3)) {
-                guard isScanning else { break }
-                await add(urlString: response.url.absoluteString)
-            }
-        } catch {
-            // Broadcast can be unavailable (no Wi-Fi, blocked by the network); fall through.
+        // 1. Ask the network: Khylo servers answer a short broadcast.
+        for reply in await KhyloBroadcast.discover() {
+            guard isScanning else { break }
+            await add(urlString: reply.address)
         }
 
         // 2. Some routers drop broadcasts: check each address on this Wi-Fi network directly.
@@ -199,7 +195,8 @@ public final class KhyloServerDiscovery: ObservableObject {
         }
     }
 
-    /// Probes every host on the device's IPv4 subnet (up to a /24) on port 8096.
+    /// Probes every host on the device's IPv4 subnet (up to a /24) on Khylo's port, 8098,
+    /// and on the server's default port, 8096.
     private func scanSubnet() async {
         let hosts = Self.localSubnetHosts()
         guard !hosts.isEmpty else { return }
@@ -211,11 +208,11 @@ public final class KhyloServerDiscovery: ObservableObject {
         defer { session.invalidateAndCancel() }
 
         await withTaskGroup(of: String?.self) { group in
-            var iterator = hosts.makeIterator()
+            var iterator = hosts.flatMap { host in [8098, 8096].map { (host, $0) } }.makeIterator()
             func next() -> Bool {
-                guard let host = iterator.next() else { return false }
+                guard let (host, port) = iterator.next() else { return false }
                 group.addTask {
-                    let base = "http://\(host):8096"
+                    let base = "http://\(host):\(port)"
                     guard let url = URL(string: base + "/System/Info/Public"),
                           let (_, response) = try? await session.data(from: url),
                           (response as? HTTPURLResponse)?.statusCode == 200
@@ -225,7 +222,7 @@ public final class KhyloServerDiscovery: ObservableObject {
                 return true
             }
             // Keep ~32 probes in flight.
-            for _ in 0 ..< 32 where next() {}
+            for _ in 0 ..< 48 where next() {}
             for await found in group {
                 if let found { await add(urlString: found) }
                 guard isScanning else { group.cancelAll(); break }

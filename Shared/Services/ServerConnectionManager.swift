@@ -57,7 +57,7 @@ final class ServerConnectionManager: ObservableObject {
 
     private static let logger = Logger.swiftfin()
 
-    private let queue = DispatchQueue(label: "Swiftfin.ServerConnectionMonitor")
+    private let queue = DispatchQueue(label: "org.khylo.server-connection")
 
     private weak var userSession: UserSession?
     private var monitor: NWPathMonitor?
