@@ -310,7 +310,10 @@ struct KhyloDiscMenuScreen: View {
                 }
                 if !subtitles.isEmpty {
                     trackGroup("Subtitles") {
-                        trackRow("Off", isSelected: subtitleChoice == nil || subtitleChoice == -1) {
+                        trackRow("Disc default", isSelected: subtitleChoice == nil) {
+                            subtitleChoice = nil
+                        }
+                        trackRow("Off", isSelected: subtitleChoice == -1) {
                             subtitleChoice = -1
                         }
                         ForEach(subtitles) { track in
