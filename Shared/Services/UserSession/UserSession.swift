@@ -43,6 +43,11 @@ final class UserSession {
     private var _client: JellyfinClient?
     private let clientLock = NSLock()
 
+    /// The server answers on another address now; the next request builds its client there.
+    func resetClient() {
+        clientLock.withLock { _client = nil }
+    }
+
     @MainActor
     lazy var serverConnectionManager = ServerConnectionManager()
 

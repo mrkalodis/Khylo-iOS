@@ -66,14 +66,17 @@ final class ServerConnectionManager: ObservableObject {
     private var evaluationTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
+    /// Fast checks use short timeouts: a home server answers in milliseconds, and
+    /// waiting long only happens when it isn't there.
     static func test(
         connection: ServerConnection,
         accessToken: String? = nil,
-        matchingServerID serverID: String
+        matchingServerID serverID: String,
+        fast: Bool = false
     ) async throws -> PublicSystemInfo {
         let sessionConfiguration = URLSessionConfiguration.swiftfin.copy() as! URLSessionConfiguration
-        sessionConfiguration.timeoutIntervalForRequest = 8
-        sessionConfiguration.timeoutIntervalForResource = 12
+        sessionConfiguration.timeoutIntervalForRequest = fast ? 1.5 : 8
+        sessionConfiguration.timeoutIntervalForResource = fast ? 2 : 12
         sessionConfiguration.waitsForConnectivity = false
 
         let client = JellyfinClient(
@@ -119,33 +122,47 @@ final class ServerConnectionManager: ObservableObject {
         return .connected(reachableConnection)
     }
 
+    /// Tries every address at once and picks the best one that answers (the
+    /// order of the list is the order of preference), so a home address that
+    /// isn't there never makes the web address wait.
     private static func firstReachableConnection(
         in connections: [ServerConnection],
         accessToken: String?,
         serverID: String
     ) async -> ServerConnection? {
-        for connection in connections {
-            guard !Task.isCancelled else { return nil }
-
-            do {
-                _ = try await test(
-                    connection: connection,
-                    accessToken: accessToken,
-                    matchingServerID: serverID
-                )
-                return connection
-            } catch {
-                logger.info(
-                    "Server connection probe failed",
-                    metadata: [
-                        "url": .string(connection.url.absoluteString),
-                        "error": .string(error.localizedDescription),
-                    ]
-                )
+        let reachable = await withTaskGroup(of: Int?.self) { group in
+            for (index, connection) in connections.enumerated() {
+                group.addTask {
+                    guard !Task.isCancelled else { return nil }
+                    do {
+                        _ = try await test(
+                            connection: connection,
+                            accessToken: accessToken,
+                            matchingServerID: serverID,
+                            fast: true
+                        )
+                        return index
+                    } catch {
+                        logger.info(
+                            "Server connection probe failed",
+                            metadata: [
+                                "url": .string(connection.url.absoluteString),
+                                "error": .string(error.localizedDescription),
+                            ]
+                        )
+                        return nil
+                    }
+                }
             }
+
+            var best: Int?
+            for await index in group {
+                if let index, best.map({ index < $0 }) ?? true { best = index }
+            }
+            return best
         }
 
-        return nil
+        return reachable.map { connections[$0] }
     }
 
     @Function(\Action.Cases.start)
@@ -164,16 +181,52 @@ final class ServerConnectionManager: ObservableObject {
         }
         monitor.start(queue: queue)
 
-        // TODO: determine if should be part of connection resolution
-        //       - probably a bit too greedy
-//        Notifications[.applicationWillEnterForeground]
-//            .publisher
-//            .sink { [weak self] in
-//                Task { @MainActor in
-//                    self?.scheduleConnectionResolution()
-//                }
-//            }
-//            .store(in: &cancellables)
+        // Coming back to the app is the main time the network has changed: at home
+        // after being out, or out after being at home.
+        Notifications[.applicationWillEnterForeground]
+            .publisher
+            .sink { [weak self] in
+                Task { @MainActor in
+                    self?.foregroundDidHappen()
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private var lastForegroundCheck = Date.distantPast
+    private var lastAddressRefresh = Date.distantPast
+
+    private func foregroundDidHappen() {
+        guard Date().timeIntervalSince(lastForegroundCheck) > 60 else { return }
+        lastForegroundCheck = Date()
+        scheduleConnectionResolution()
+        Task { await refreshServerAddresses() }
+    }
+
+    /// Learns the server's home and web addresses (about every 10 minutes at most).
+    func refreshServerAddresses(force: Bool = false) async {
+        guard let userSession else { return }
+        guard force || Date().timeIntervalSince(lastAddressRefresh) > 600 else { return }
+        lastAddressRefresh = Date()
+
+        guard await KhyloConnectionSync.refresh(for: userSession.server) else { return }
+        // New addresses: pick the best one now.
+        await resolveActiveConnection()
+    }
+
+    /// A request failed to connect: check once whether another address works, and
+    /// say whether the caller should try again.
+    private var lastFailureCheck = Date.distantPast
+
+    func connectionDidFail() async -> Bool {
+        guard isAutoSwitchEnabled, let userSession,
+              Date().timeIntervalSince(lastFailureCheck) > 8
+        else { return false }
+        lastFailureCheck = Date()
+
+        let before = userSession.server.activeServerConnection?.id
+        await resolveActiveConnection()
+        return userSession.server.activeServerConnection?.id != before
     }
 
     @Function(\Action.Cases.stop)
@@ -220,6 +273,8 @@ final class ServerConnectionManager: ObservableObject {
         if case let .connected(reachableConnection) = resolution,
            currentConnection?.id != reachableConnection.id
         {
+            // New requests and links are built on the new address.
+            userSession.resetClient()
             Notifications[.didChangeServerConnection].post(reachableConnection)
         }
 
@@ -258,6 +313,7 @@ extension ServerConnectionManager: UserSessionService {
 
     func didStart(userSession: UserSession) {
         start()
+        Task { await refreshServerAddresses(force: true) }
     }
 
     func willStop(userSession: UserSession) {

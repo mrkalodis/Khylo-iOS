@@ -56,7 +56,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Khylo uses the camera to scan sign-in codes: the code on a TV you're signing in, or the code on a device that's already signed in.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Khylo uses the local network to connect to your Khylo media server and discover Cast-enabled devices on your Wi-Fi network.</string>
+	<string>Khylo connects directly to your server when you're at home, for faster, higher-quality playback, and looks for it on your Wi-Fi network.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Khylo uses your location to identify the current Wi-Fi network.</string>
 	<key>NSMicrophoneUsageDescription</key>

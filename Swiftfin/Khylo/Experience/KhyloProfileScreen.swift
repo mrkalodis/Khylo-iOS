@@ -70,6 +70,9 @@ struct KhyloProfileScreen: View {
                 Section("Server") {
                     LabeledContent("Name", value: session?.server.name ?? "–")
                     LabeledContent("Address", value: session?.server.effectiveServerURL.host() ?? "–")
+                    if let connection = session?.server.activeServerConnection, KhyloConnectionSync.isProvided(connection) {
+                        LabeledContent("Connection", value: KhyloConnectionSync.isHome(connection) ? "At home" : "Over the internet")
+                    }
                 }
 
                 Section {

@@ -498,7 +498,15 @@ enum KhyloAPI {
     /// Sends a request and decodes it, replacing enum values the SDK doesn't know
     /// (which would otherwise fail the whole response) and remembering them.
     private static func send<T: Decodable>(_ session: UserSession, _ request: Request<T>) async throws -> T {
-        let data = try await session.client.data(for: request).value
+        let data: Data
+        do {
+            data = try await session.client.data(for: request).value
+        } catch {
+            // The server can't be reached on this address (you've just left home, or
+            // come back): see whether another address works, and try once more there.
+            guard isConnectionFailure(error), await session.serverConnectionManager.connectionDidFail() else { throw error }
+            data = try await session.client.data(for: request).value
+        }
         do {
             return try decoder.decode(T.self, from: data)
         } catch is DecodingError {
@@ -506,6 +514,13 @@ enum KhyloAPI {
             let cleaned = try JSONSerialization.data(withJSONObject: sanitize(json), options: [.fragmentsAllowed])
             return try decoder.decode(T.self, from: cleaned)
         }
+    }
+
+    /// A request that never reached the server (not one the server turned down).
+    private static func isConnectionFailure(_ error: Error) -> Bool {
+        guard let code = (error as? URLError)?.code else { return false }
+        return [.cannotConnectToHost, .cannotFindHost, .timedOut, .networkConnectionLost, .notConnectedToInternet, .dnsLookupFailed]
+            .contains(code)
     }
 
     private static func sanitize(_ value: Any) -> Any {

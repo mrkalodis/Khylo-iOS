@@ -84,7 +84,7 @@ extension StoredValues.Keys {
             ServerKey(
                 ownerID: id,
                 field: "isAutoSwitchEnabled",
-                default: false
+                default: true
             )
         }
     }

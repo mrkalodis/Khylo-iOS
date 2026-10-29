@@ -414,7 +414,7 @@ extension Defaults.Keys {
         }
 
         static var serverConnectionAutoSwitch: Key<Bool> {
-            UserKey("experimentalServerConnectionAutoSwitch", default: false)
+            UserKey("experimentalServerConnectionAutoSwitch", default: true)
         }
 
         static var videoPlayerEPG: Key<Bool> {
