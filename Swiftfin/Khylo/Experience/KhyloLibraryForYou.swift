@@ -221,15 +221,21 @@ private struct KhyloCoverHero: View {
             }
         } label: {
             ZStack(alignment: .bottomLeading) {
-                Rectangle().fill(Color.white.opacity(0.06))
-                KhyloImage(url: KhyloArtwork.url(for: item, style: .square, width: 300), showsPlaceholder: false)
-                    .blur(radius: 40)
-                    .scaleEffect(1.4)
-                LinearGradient(
-                    colors: [.black.opacity(0.25), .black.opacity(0.75)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+                // The blurred backdrop is only to look at: it never takes a tap, and it
+                // is cut to the card so nothing spills over the page around it.
+                ZStack {
+                    Rectangle().fill(Color.white.opacity(0.06))
+                    KhyloImage(url: KhyloArtwork.url(for: item, style: .square, width: 300), showsPlaceholder: false)
+                        .blur(radius: 40)
+                        .scaleEffect(1.4)
+                    LinearGradient(
+                        colors: [.black.opacity(0.25), .black.opacity(0.75)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .clipped()
+                .allowsHitTesting(false)
                 HStack(alignment: .bottom, spacing: 16) {
                     KhyloImage(url: KhyloArtwork.url(for: item, style: coverStyle, width: coverSize.width * 2), placeholderSymbol: symbol)
                         .frame(width: coverSize.width, height: coverSize.height)

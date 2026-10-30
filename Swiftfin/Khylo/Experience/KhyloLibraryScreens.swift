@@ -841,7 +841,8 @@ struct KhyloLibraryHome<Header: View>: View {
             case .forYou:
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
-                        top
+                        // Above the page's content, so the library name always takes its tap.
+                        top.zIndex(1)
                         KhyloLibraryForYou(library: library, sections: sections, isLoading: isLoading) {
                             tab = .browse
                         }
