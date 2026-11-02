@@ -15,7 +15,7 @@ func abs(_ d: Duration) -> Duration {
 
 extension Duration {
 
-    /// Represent Jellyfin ticks as a Duration
+    /// Represent Khylo ticks as a Duration
     static func ticks(_ ticks: Int) -> Duration {
         Duration.microseconds(Int64(ticks) / 10)
     }

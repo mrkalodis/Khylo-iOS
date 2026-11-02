@@ -249,7 +249,7 @@ extension MPVMediaPlayerProxy {
 
 extension MediaTrackIndexMap {
 
-    /// mpv numbers tracks separately by type; Jellyfin uses global stream indexes.
+    /// mpv numbers tracks separately by type; Khylo uses global stream indexes.
     static func mpv(
         mediaStreams: [MediaStream],
         tracks: [MPVMediaTrack],

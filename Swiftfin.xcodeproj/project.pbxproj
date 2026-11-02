@@ -508,7 +508,7 @@
 				E144DBFB30464F3A009B85B5 /* SwiftVLC */,
 				E16C08F8305A386900895062 /* CollectionHStack */,
 			);
-			productName = "JellyfinPlayer tvOS";
+			productName = "Khylo tvOS";
 			productReference = 535870602669D21600D05A09 /* Khylo.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -590,7 +590,7 @@
 				E16C08F3305A350C00895062 /* CollectionHStack */,
 				E16C08F6305A385900895062 /* CollectionHStack */,
 			);
-			productName = JellyfinPlayer;
+			productName = Khylo;
 			productReference = 5377CBF1263B596A003A4E83 /* Khylo.app */;
 			productType = "com.apple.product-type.application";
 		};

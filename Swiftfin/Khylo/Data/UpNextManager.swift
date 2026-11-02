@@ -97,7 +97,7 @@ public final class UpNextManager: ObservableObject {
         UserDefaults.standard.set(Array(hiddenSeriesIds), forKey: Self.localCacheKey)
     }
 
-    // MARK: - Server Sync (Jellyfin DisplayPreferences API)
+    // MARK: - Server Sync (display preferences API)
 
     public func fetchServerHiddenList() async {
         guard let serverUrl = activeServerUrl, let userId = activeUserId else { return }

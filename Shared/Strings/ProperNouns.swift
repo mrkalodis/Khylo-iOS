@@ -130,7 +130,7 @@ extension L10n {
     // MARK: - Brands
 
     static let swiftfin = "Khylo"
-    static let jellyfin = "Khylo"
+    static let khylo = "Khylo"
 
     // MARK: - Platforms
 

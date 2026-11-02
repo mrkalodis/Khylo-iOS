@@ -201,12 +201,12 @@ class MediaPlayerItem: ViewModel, MediaPlayerObserver {
 
     /// Refreshes sidecar mappings and reapplies the selected subtitle.
     func updateSubtitleTrackMapping(subtitleTracks: [(playerIndex: Int, id: String)]) {
-        let sidecars: [(jellyfinIndex: Int, url: URL)] = subtitleStreams.sidecarSubtitles.compactMap { subtitle in
-            guard let jellyfinIndex = subtitle.index,
+        let sidecars: [(serverIndex: Int, url: URL)] = subtitleStreams.sidecarSubtitles.compactMap { subtitle in
+            guard let serverIndex = subtitle.index,
                   let client = manager?.userSession?.client,
                   let url = subtitle.url(with: client)
             else { return nil }
-            return (jellyfinIndex, url)
+            return (serverIndex, url)
         }
 
         indexMap = indexMap.resolvingSidecarSubtitles(sidecars, subtitleTracks: subtitleTracks)

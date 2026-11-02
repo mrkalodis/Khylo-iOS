@@ -103,8 +103,8 @@ enum DeviceType: String, Displayable, Codable, CaseIterable {
         case let str where str.range(of: #"home.assistant|homeassistant"#, options: .regularExpression) != nil:
             self = .homeAssistant
 
-        /* Jellyfin Web or JellyfinWeb (Vue versions included) */
-        case let str where str.range(of: #"jellyfin.web|jellyfinweb"#, options: .regularExpression) != nil:
+        /* Khylo Web */
+        case let str where str.range(of: #"khylo.web|khyloweb"#, options: .regularExpression) != nil:
             self = DeviceType(webBrowser: deviceName)
 
         /* Kodi or JellyCon */
@@ -137,7 +137,7 @@ enum DeviceType: String, Displayable, Codable, CaseIterable {
         }
     }
 
-    // MARK: - Initialize the Browser if Jellyfin-Web
+    // MARK: - Initialize the Browser if Khylo Web
 
     private init(webBrowser: String?) {
         guard let webBrowser = webBrowser?.lowercased() else {

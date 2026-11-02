@@ -20,7 +20,7 @@ import JellyfinAPI
 //    case HTTPURLError(response: ErrorResponse, displayMessage: String?)
 //
 //    /// For the case that the ErrorResponse object has a positive code
-//    case JellyfinError(response: ErrorResponse, displayMessage: String?)
+//    case ServerError(response: ErrorResponse, displayMessage: String?)
 //
 //    var errorMessage: ErrorMessage {
 //        switch self {
@@ -28,8 +28,8 @@ import JellyfinAPI
 //            return NetworkError.parseURLError(from: response, displayMessage: displayMessage)
 //        case let .HTTPURLError(response, displayMessage):
 //            return NetworkError.parseHTTPURLError(from: response, displayMessage: displayMessage)
-//        case let .JellyfinError(response, displayMessage):
-//            return NetworkError.parseJellyfinError(from: response, displayMessage: displayMessage)
+//        case let .ServerError(response, displayMessage):
+//            return NetworkError.parseServerError(from: response, displayMessage: displayMessage)
 //        }
 //    }
 //
@@ -88,7 +88,7 @@ import JellyfinAPI
 //        return errorMessage
 //    }
 //
-//    private static func parseJellyfinError(from response: ErrorResponse, displayMessage: String?) -> ErrorMessage {
+//    private static func parseServerError(from response: ErrorResponse, displayMessage: String?) -> ErrorMessage {
 //        let errorMessage: ErrorMessage
 //
 //        switch response {

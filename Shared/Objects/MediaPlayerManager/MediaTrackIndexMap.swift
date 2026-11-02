@@ -12,22 +12,22 @@ import JellyfinAPI
 
 struct MediaTrackIndexMap {
 
-    private var playerIndexesByJellyfinIndex: [Int: Int]
+    private var playerIndexesByServerIndex: [Int: Int]
 
-    init(_ playerIndexesByJellyfinIndex: [Int: Int] = [:]) {
-        self.playerIndexesByJellyfinIndex = playerIndexesByJellyfinIndex
+    init(_ playerIndexesByServerIndex: [Int: Int] = [:]) {
+        self.playerIndexesByServerIndex = playerIndexesByServerIndex
     }
 
-    func playerIndex(for jellyfinIndex: Int?) -> Int? {
-        guard let jellyfinIndex, jellyfinIndex != -1 else { return -1 }
-        return playerIndexesByJellyfinIndex[jellyfinIndex]
+    func playerIndex(for serverIndex: Int?) -> Int? {
+        guard let serverIndex, serverIndex != -1 else { return -1 }
+        return playerIndexesByServerIndex[serverIndex]
     }
 
-    mutating func setPlayerIndex(_ playerIndex: Int, for jellyfinIndex: Int) {
-        playerIndexesByJellyfinIndex[jellyfinIndex] = playerIndex
+    mutating func setPlayerIndex(_ playerIndex: Int, for serverIndex: Int) {
+        playerIndexesByServerIndex[serverIndex] = playerIndex
     }
 
-    /// Maps Jellyfin stream indexes to positions in each player track array.
+    /// Maps Khylo stream indexes to positions in each player track array.
     /// Embedded tracks keep their order; transcoding exposes only the selected audio track.
     /// Sidecar subtitles are resolved after loading.
     static func build(
@@ -40,21 +40,21 @@ struct MediaTrackIndexMap {
         if playMethod == .transcode {
             let audioStreams = mediaStreams.filter { $0.type == .audio && $0.isExternal != true }
 
-            if let jellyfinIndex = audioStreams.first(where: { $0.index == selectedAudioStreamIndex })?.index {
-                indexMap.setPlayerIndex(0, for: jellyfinIndex)
+            if let serverIndex = audioStreams.first(where: { $0.index == selectedAudioStreamIndex })?.index {
+                indexMap.setPlayerIndex(0, for: serverIndex)
             }
         } else {
             let embeddedAudioStreams = mediaStreams.filter { $0.type == .audio && $0.isExternal != true }
             let embeddedSubtitleStreams = mediaStreams.filter { $0.type == .subtitle && $0.isExternal != true }
 
             for (playerIndex, stream) in embeddedAudioStreams.enumerated() {
-                guard let jellyfinIndex = stream.index else { continue }
-                indexMap.setPlayerIndex(playerIndex, for: jellyfinIndex)
+                guard let serverIndex = stream.index else { continue }
+                indexMap.setPlayerIndex(playerIndex, for: serverIndex)
             }
 
             for (playerIndex, stream) in embeddedSubtitleStreams.enumerated() {
-                guard let jellyfinIndex = stream.index else { continue }
-                indexMap.setPlayerIndex(playerIndex, for: jellyfinIndex)
+                guard let serverIndex = stream.index else { continue }
+                indexMap.setPlayerIndex(playerIndex, for: serverIndex)
             }
         }
 
@@ -63,7 +63,7 @@ struct MediaTrackIndexMap {
 
     /// Maps each sidecar to its loaded subtitle track.
     func resolvingSidecarSubtitles(
-        _ sidecars: [(jellyfinIndex: Int, url: URL)],
+        _ sidecars: [(serverIndex: Int, url: URL)],
         subtitleTracks: [(playerIndex: Int, id: String)]
     ) -> MediaTrackIndexMap {
         var resolvedMap = self
@@ -73,7 +73,7 @@ struct MediaTrackIndexMap {
             // https://github.com/videolan/vlc/blob/c833c4be0/src/input/input.c#L2742-L2765
             let urlHash = Insecure.MD5.hash(data: Data(subtitle.url.absoluteString.utf8))
                 .map { String(format: "%02x", $0) }.joined()
-            resolvedMap.playerIndexesByJellyfinIndex[subtitle.jellyfinIndex] = subtitleTracks.first {
+            resolvedMap.playerIndexesByServerIndex[subtitle.serverIndex] = subtitleTracks.first {
                 $0.playerIndex >= 0 && $0.id.hasPrefix("\(urlHash)/spu/")
             }?.playerIndex
         }

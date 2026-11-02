@@ -266,7 +266,7 @@ struct SelectUserView: View {
                 ProgressView()
             case .content:
                 if viewModel.servers.isEmpty {
-                    ConnectToJellyfinView()
+                    ConnectToKhyloServerView()
                 } else {
                     contentView
                 }

@@ -16,7 +16,7 @@ final class SessionViewModel: ViewModel, @preconcurrency Identifiable {
 
     @CasePathable
     enum Action {
-        /// Start playing an item via a Remote Playback Session on another Jellyfin Client
+        /// Start playing an item via a Remote Playback Session on another Khylo client
         case remotePlaybackSession(
             command: PlayCommand,
             itemIDs: [String],

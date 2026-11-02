@@ -11,7 +11,7 @@ import SwiftUI
 
 extension SelectUserView {
 
-    struct ConnectToJellyfinView: View {
+    struct ConnectToKhyloServerView: View {
 
         @Default(.accentColor)
         private var accentColor
@@ -21,7 +21,7 @@ extension SelectUserView {
 
         var body: some View {
             VStack {
-                Text(L10n.connectToJellyfinServerStart)
+                Text(L10n.connectToServerStart)
                     .multilineTextAlignment(.center)
 
                 Button {

@@ -384,10 +384,10 @@ internal enum L10n {
   internal static let connections = L10n.tr("Localizable", "connections", fallback: "Connections")
   /// This connection does not point to the current server.
   internal static let connectionServerMismatch = L10n.tr("Localizable", "connectionServerMismatch", fallback: "This connection does not point to the current server.")
-  /// Connect to a Khylo server to get started
-  internal static let connectToJellyfinServerStart = L10n.tr("Localizable", "connectToJellyfinServerStart", fallback: "Connect to a Khylo server to get started")
   /// Connect to server
   internal static let connectToServer = L10n.tr("Localizable", "connectToServer", fallback: "Connect to server")
+  /// Connect to a Khylo server to get started
+  internal static let connectToServerStart = L10n.tr("Localizable", "connectToServerStart", fallback: "Connect to a Khylo server to get started")
   /// Container
   internal static let container = L10n.tr("Localizable", "container", fallback: "Container")
   /// The container bitrate exceeds the allowed limit

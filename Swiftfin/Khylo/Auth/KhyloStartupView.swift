@@ -280,7 +280,7 @@ public struct KhyloStartupView: View {
         pin: String?
     ) {
         Task {
-            // Attempt to switch profile via Khylo API or Jellyfin user selection
+            // Attempt to switch profile via Khylo API or user selection
             let switchUrl = server.address.appendingPathComponent("Khylo/HomeProfiles/\(profile.id)/Switch")
             var request = URLRequest(url: switchUrl)
             request.httpMethod = "POST"

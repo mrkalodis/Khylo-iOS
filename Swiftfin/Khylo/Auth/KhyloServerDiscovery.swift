@@ -78,7 +78,7 @@ public final class KhyloServerDiscovery: ObservableObject {
     }
 
     /// Manually verifies and pings a server URL.
-    /// Accepts "Khylo Server" as well as standard Jellyfin and custom versions.
+    /// Accepts a Khylo server, including custom versions.
     public func pingServer(urlString: String) async throws -> DiscoveredServer {
         let trimmed = urlString
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -135,7 +135,7 @@ public final class KhyloServerDiscovery: ObservableObject {
         let version = json["Version"] as? String ?? "1.0.0"
         let productName = json["ProductName"] as? String ?? ""
 
-        // Accepts "Khylo Server", non-standard versions, or standard Jellyfin
+        // Accepts a Khylo server, including non-standard versions
         let isKhylo = serverName.localizedCaseInsensitiveContains("Khylo") ||
                       productName.localizedCaseInsensitiveContains("Khylo") ||
                       version.localizedCaseInsensitiveContains("khylo")
