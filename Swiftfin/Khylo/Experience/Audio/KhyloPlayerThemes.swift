@@ -57,12 +57,29 @@ enum KhyloPlayerTheme: String, CaseIterable, Identifiable {
     }
 }
 
+private struct KhyloLandscapeKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// The Now Playing screen is wider than it is tall.
+    var khyloLandscape: Bool {
+        get { self[KhyloLandscapeKey.self] }
+        set { self[KhyloLandscapeKey.self] = newValue }
+    }
+}
+
 /// How the record in the Vinyl player is pressed.
 enum KhyloVinylStyle: String, CaseIterable, Identifiable {
     case marbled
     case classic
     case picture
     case splatter
+    case galaxy
+    case swirl
+    case halves
+    case bullseye
+    case clear
     case solid
 
     static let storageKey = "khylo.player.vinylStyle"
@@ -79,6 +96,11 @@ enum KhyloVinylStyle: String, CaseIterable, Identifiable {
         case .classic: "Classic Black"
         case .picture: "Picture Disc"
         case .splatter: "Splatter"
+        case .galaxy: "Galaxy"
+        case .swirl: "Swirl"
+        case .halves: "Half & Half"
+        case .bullseye: "Bullseye"
+        case .clear: "Clear"
         case .solid: "Colour"
         }
     }
@@ -161,7 +183,7 @@ struct KhyloVinylPlayer: View {
     @AppStorage(KhyloVinylStyle.stillKey) private var keepStill = false
     @AppStorage(KhyloVinylStyle.colorKey) private var chosenColor = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.khyloLandscape) private var isLandscape
     @State private var spinBase: Double = 0
     @State private var spinStart: Date?
     @State private var palette: [Color] = []
@@ -183,7 +205,7 @@ struct KhyloVinylPlayer: View {
                 KhyloThemedTopBar(actions: actions, foreground: ink, labelFont: .system(size: 10, weight: .semibold))
                     .padding(.top, 8)
 
-                if verticalSizeClass == .compact {
+                if isLandscape {
                     // Sideways: the record on the left, the song and controls on the right.
                     HStack(spacing: 12) {
                         record
@@ -362,6 +384,16 @@ struct KhyloVinylPlayer: View {
             .frame(width: size, height: size)
         case .splatter:
             splatter(size: size)
+        case .galaxy:
+            galaxy(size: size)
+        case .swirl:
+            swirl(size: size)
+        case .halves:
+            halves(size: size)
+        case .bullseye:
+            bullseye(size: size)
+        case .clear:
+            clearDisc(size: size)
         case .solid:
             let colors = palette.isEmpty ? [Color(hex: "#3A3B40")] : palette
             let base = chosenColor.isEmpty ? colors[0] : Color(hex: chosenColor)
@@ -370,6 +402,124 @@ struct KhyloVinylPlayer: View {
                 .overlay(Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.4)], center: .center, startRadius: size * 0.3, endRadius: size / 2)))
                 .frame(width: size, height: size)
         }
+    }
+
+    private var coverColors: [Color] {
+        palette.isEmpty ? [Color(hex: "#3A3B40"), Color(hex: "#8A8F99")] : palette
+    }
+
+    /// Deep space in the cover's colours, with a scatter of stars.
+    private func galaxy(size: CGFloat) -> some View {
+        let colors = coverColors
+        var random = KhyloSeededRandom(seed: (player.current?.id ?? "") + "galaxy")
+        let clouds: [(color: Color, x: CGFloat, y: CGFloat, radius: CGFloat)] = (0 ..< 7).map { index in
+            (colors[index % colors.count], CGFloat(random.next() - 0.5) * 0.7, CGFloat(random.next() - 0.5) * 0.7, CGFloat(0.22 + random.next() * 0.25))
+        }
+        let stars: [(x: CGFloat, y: CGFloat, radius: CGFloat, alpha: Double)] = (0 ..< 120).map { _ in
+            let angle = random.next() * .pi * 2
+            let distance = CGFloat(random.next().squareRoot()) * 0.48
+            return (CGFloat(cos(angle)) * distance, CGFloat(sin(angle)) * distance, CGFloat(0.002 + random.next() * 0.004), 0.4 + random.next() * 0.6)
+        }
+        return ZStack {
+            Circle().fill(Color(hex: "#07070C"))
+            ForEach(0 ..< clouds.count, id: \.self) { index in
+                let cloud = clouds[index]
+                Circle()
+                    .fill(cloud.color.opacity(0.55))
+                    .frame(width: size * cloud.radius * 2, height: size * cloud.radius * 2)
+                    .offset(x: size * cloud.x, y: size * cloud.y)
+            }
+            .blur(radius: size * 0.09)
+            ForEach(0 ..< stars.count, id: \.self) { index in
+                let star = stars[index]
+                Circle()
+                    .fill(Color.white.opacity(star.alpha))
+                    .frame(width: size * star.radius * 2, height: size * star.radius * 2)
+                    .offset(x: size * star.x, y: size * star.y)
+            }
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.45)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .drawingGroup()
+        .animation(.easeInOut(duration: 0.6), value: palette)
+    }
+
+    /// Colours wound around the record like a tie-dye spiral.
+    private func swirl(size: CGFloat) -> some View {
+        let colors = coverColors
+        let ring = colors + [colors[0]]
+        return ZStack {
+            Circle().fill(AngularGradient(colors: ring + ring, center: .center))
+                .rotationEffect(.degrees(20))
+            // Twisting the arms: the same wheel again, turned and softened toward the middle.
+            Circle().fill(AngularGradient(colors: ring.reversed() + ring.reversed(), center: .center))
+                .rotationEffect(.degrees(-35))
+                .mask(Circle().fill(RadialGradient(colors: [.white, .clear], center: .center, startRadius: size * 0.05, endRadius: size * 0.5)))
+                .opacity(0.8)
+            Circle().fill(Color.black.opacity(0.22))
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.45)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+        }
+        .frame(width: size, height: size)
+        .blur(radius: size * 0.012)
+        .clipShape(Circle())
+        .drawingGroup()
+        .animation(.easeInOut(duration: 0.6), value: palette)
+    }
+
+    /// Two colours from the cover, split down a slanted line.
+    private func halves(size: CGFloat) -> some View {
+        let colors = coverColors
+        let first = colors[0]
+        let second = colors.count > 1 ? colors[1] : colors[0].khyloShifted(hue: 0.5, brightness: 0.8)
+        var random = KhyloSeededRandom(seed: (player.current?.id ?? "") + "halves")
+        let tilt = random.next() * 60 - 30
+        return ZStack {
+            Circle().fill(first)
+            Rectangle().fill(second)
+                .frame(width: size, height: size * 2)
+                .offset(x: size / 2)
+                .rotationEffect(.degrees(tilt))
+            Circle().fill(Color.black.opacity(0.2))
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.45)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .drawingGroup()
+        .animation(.easeInOut(duration: 0.6), value: palette)
+    }
+
+    /// Rings of the cover's colours, out from the label.
+    private func bullseye(size: CGFloat) -> some View {
+        let colors = coverColors
+        return ZStack {
+            Circle().fill(Color(hex: "#0B0B0C"))
+            ForEach(0 ..< 7, id: \.self) { index in
+                let outer = 0.98 - CGFloat(index) * 0.095
+                Circle()
+                    .fill(colors[index % colors.count].opacity(0.85))
+                    .frame(width: size * outer, height: size * outer)
+            }
+            Circle().fill(Color.black.opacity(0.2))
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.4)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .drawingGroup()
+        .animation(.easeInOut(duration: 0.6), value: palette)
+    }
+
+    /// See-through vinyl: a pale, tinted disc with a bright rim.
+    private func clearDisc(size: CGFloat) -> some View {
+        let tint = coverColors[0]
+        return ZStack {
+            Circle().fill(tint.opacity(0.22))
+            Circle().fill(RadialGradient(colors: [Color.white.opacity(0.10), tint.opacity(0.30)], center: .center, startRadius: size * 0.1, endRadius: size / 2))
+            Circle().strokeBorder(Color.white.opacity(0.35), lineWidth: max(1, size * 0.006))
+            Circle().strokeBorder(tint.opacity(0.5), lineWidth: size * 0.03).padding(size * 0.012)
+        }
+        .frame(width: size, height: size)
+        .animation(.easeInOut(duration: 0.6), value: palette)
     }
 
     /// Black vinyl flecked with the cover's colours, the same for the same song every time.
@@ -637,7 +787,7 @@ struct KhyloCyberpunkPlayer: View {
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
     @ObservedObject private var network = KhyloNetwork.shared
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.khyloLandscape) private var isLandscape
 
     static let magenta = Color(hex: "#FF2BD6")
     static let cyan = Color(hex: "#00F0FF")
@@ -656,7 +806,7 @@ struct KhyloCyberpunkPlayer: View {
                 )
                 .padding(.top, 8)
 
-                if verticalSizeClass == .compact {
+                if isLandscape {
                     HStack(spacing: 12) {
                         art
                             .padding(.leading, 28)

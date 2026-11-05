@@ -141,7 +141,7 @@ struct KhyloNowPlayingScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isShowingQueue = false
     @State private var isShowingSettings = false
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var isLandscape = false
     @State private var isSavingQueue = false
     @AppStorage(KhyloPlayerTheme.storageKey) private var theme: KhyloPlayerTheme = .khylo
     @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var vinylDark = false
@@ -186,6 +186,8 @@ struct KhyloNowPlayingScreen: View {
                 standardPlayer
             }
         }
+        .environment(\.khyloLandscape, isLandscape)
+        .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isLandscape = $0 }
         .offset(y: dragOffset)
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(activeTheme == .vinyl && !vinylDark ? .light : .dark)
@@ -225,7 +227,7 @@ struct KhyloNowPlayingScreen: View {
             case .aurora: KhyloAuroraBackground(tint: tint, isPlaying: player.isPlaying)
             case .mono: Color.black.ignoresSafeArea()
             case .glass: glassBackground
-            case .poster: verticalSizeClass == .compact ? AnyView(background) : AnyView(posterBackground)
+            case .poster: isLandscape ? AnyView(background) : AnyView(posterBackground)
             default: background
             }
 
@@ -233,7 +235,7 @@ struct KhyloNowPlayingScreen: View {
                 topBar
                     .padding(.top, 8)
 
-                if verticalSizeClass == .compact {
+                if isLandscape {
                     // Sideways: the cover on the left at full height, the song and controls on the right.
                     HStack(spacing: 20) {
                         standardCover
