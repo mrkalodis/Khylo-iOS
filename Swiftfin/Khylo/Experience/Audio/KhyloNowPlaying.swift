@@ -180,7 +180,7 @@ struct KhyloNowPlayingScreen: View {
                 KhyloVinylPlayer(actions: actions, tint: tint)
             case .cyberpunk:
                 KhyloCyberpunkPlayer(actions: actions)
-            case .khylo, .aurora, .mono:
+            case .khylo, .aurora, .mono, .glass, .poster:
                 standardPlayer
             }
         }
@@ -222,6 +222,8 @@ struct KhyloNowPlayingScreen: View {
             switch activeTheme {
             case .aurora: KhyloAuroraBackground(tint: tint, isPlaying: player.isPlaying)
             case .mono: Color.black.ignoresSafeArea()
+            case .glass: glassBackground
+            case .poster: posterBackground
             default: background
             }
 
@@ -233,15 +235,26 @@ struct KhyloNowPlayingScreen: View {
                 // the top bar and the song details.
                 Spacer(minLength: 12)
 
+                if activeTheme == .poster {
+                    // The cover is the background; leave the room it takes up.
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .padding(.horizontal, 24)
+                } else {
                 KhyloImage(url: artwork, placeholderSymbol: player.kind == .audiobook ? "headphones" : "music.note")
                     .aspectRatio(1, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: activeTheme == .mono ? 2 : 12, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: activeTheme == .mono ? 2 : (activeTheme == .glass ? 24 : 12), style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .strokeBorder(Color.white.opacity(activeTheme == .glass ? 0.22 : 0), lineWidth: 1)
+                    )
                     .shadow(color: activeTheme == .mono ? .clear : (activeTheme == .aurora ? (tint ?? .black) : .black).opacity(0.5), radius: 30, y: 18)
                     .scaleEffect(player.isPlaying ? 1 : 0.88)
                     .animation(.spring(response: 0.45, dampingFraction: 0.75), value: player.isPlaying)
                     .padding(.horizontal, 24)
                     .id(player.current?.id)
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
 
                 Spacer(minLength: 12)
 
@@ -288,6 +301,46 @@ struct KhyloNowPlayingScreen: View {
         .ignoresSafeArea()
     }
 
+    /// Glass: the cover blurred into a calm, frosted field.
+    private var glassBackground: some View {
+        ZStack {
+            Color.black
+            KhyloImage(url: artwork, showsPlaceholder: false)
+                .scaleEffect(2.2)
+                .blur(radius: 70)
+                .saturation(1.15)
+                .opacity(0.8)
+            Rectangle().fill(.ultraThinMaterial).opacity(0.55)
+            LinearGradient(colors: [.clear, Color.black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
+        }
+        .ignoresSafeArea()
+    }
+
+    /// Poster: the cover across the top of the screen, fading into black below.
+    private var posterBackground: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                Color.black
+                KhyloImage(url: artwork, placeholderSymbol: "music.note")
+                    .frame(width: proxy.size.width, height: proxy.size.width * 1.25)
+                    .clipped()
+                    .overlay(
+                        LinearGradient(
+                            stops: [
+                                .init(color: Color.black.opacity(0.35), location: 0),
+                                .init(color: .clear, location: 0.22),
+                                .init(color: .clear, location: 0.5),
+                                .init(color: Color.black, location: 1),
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            }
+        }
+        .ignoresSafeArea()
+    }
+
     private var topBar: some View {
         HStack {
             Button {
@@ -299,6 +352,7 @@ struct KhyloNowPlayingScreen: View {
                     .frame(width: 44, height: 44)
             }
             .accessibilityLabel("Close")
+            .frame(width: 88, alignment: .leading)
 
             Spacer()
 
@@ -315,15 +369,19 @@ struct KhyloNowPlayingScreen: View {
 
             Spacer()
 
-            Button {
-                isShowingSettings = true
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(width: 44, height: 44)
+            HStack(spacing: 0) {
+                KhyloHandoffButton(color: .white)
+                Button {
+                    isShowingSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Player settings")
             }
-            .accessibilityLabel("Player settings")
+            .frame(width: 88, alignment: .trailing)
         }
         .padding(.horizontal, 14)
     }
@@ -332,7 +390,9 @@ struct KhyloNowPlayingScreen: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(activeTheme == .mono ? player.displayTitle.uppercased() : player.displayTitle)
-                    .font(.system(size: activeTheme == .mono ? 22 : 24, weight: activeTheme == .mono ? .black : .bold))
+                    .font(activeTheme == .poster
+                        ? .system(size: 28, weight: .bold, design: .serif)
+                        : .system(size: activeTheme == .mono ? 22 : 24, weight: activeTheme == .mono ? .black : .bold))
                     .tracking(activeTheme == .mono ? 0.6 : 0)
                     .foregroundColor(.white)
                     .lineLimit(1)
@@ -447,8 +507,6 @@ struct KhyloNowPlayingScreen: View {
             KhyloRoutePicker()
                 .frame(width: 44, height: 44)
 
-            KhyloHandoffButton(color: .white.opacity(0.85))
-
             Spacer()
 
             if player.kind == .audiobook {
@@ -537,13 +595,15 @@ struct KhyloNowPlayingScreen: View {
                 let upcoming = Array(player.queue.enumerated()).filter { $0.offset > player.index }
                 if !upcoming.isEmpty {
                     Section(player.kind == .audiobook ? "Next Parts" : "Next Up") {
-                        ForEach(upcoming, id: \.offset) { offset, item in
+                        ForEach(upcoming, id: \.element.id) { entry in
                             Button {
-                                player.jump(to: offset)
+                                player.jump(to: entry.offset)
                             } label: {
-                                queueRow(item, isCurrent: false)
+                                queueRow(entry.element, isCurrent: false)
                             }
                         }
+                        .onMove { player.moveUpcoming(from: $0, to: $1) }
+                        .onDelete { player.removeUpcoming(at: $0) }
                     }
                 }
             }
@@ -552,6 +612,11 @@ struct KhyloNowPlayingScreen: View {
             .navigationTitle(player.kind == .audiobook ? "Parts" : "Queue")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if player.kind == .music, player.queue.count > player.index + 2 {
+                        EditButton()
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { isShowingQueue = false }
                 }

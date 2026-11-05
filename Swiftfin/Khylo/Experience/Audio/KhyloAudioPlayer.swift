@@ -407,6 +407,28 @@ final class KhyloAudioPlayer: ObservableObject {
         prepareCache()
     }
 
+    /// Reorders what's coming up. Positions count from the first song after the current one.
+    func moveUpcoming(from source: IndexSet, to destination: Int) {
+        let start = index + 1
+        guard start <= queue.count else { return }
+        var upcoming = Array(queue[start...])
+        upcoming.move(fromOffsets: source, toOffset: destination)
+        queue = Array(queue[..<start]) + upcoming
+        discardPreload()
+        prepareCache()
+    }
+
+    /// Takes songs out of what's coming up.
+    func removeUpcoming(at offsets: IndexSet) {
+        let start = index + 1
+        guard start <= queue.count else { return }
+        var upcoming = Array(queue[start...])
+        upcoming.remove(atOffsets: offsets)
+        queue = Array(queue[..<start]) + upcoming
+        discardPreload()
+        prepareCache()
+    }
+
     func addToQueue(_ item: BaseItemDto) {
         guard isActive else {
             play([item], kind: .music, startTicks: 0)

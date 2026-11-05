@@ -21,6 +21,9 @@ struct KhyloMusicLibraryScreen: View {
     /// Artists and categories; albums and songs are found through them, or with search.
     enum Section: String, CaseIterable {
         case artists = "Artists"
+        case albums = "Albums"
+        case songs = "Songs"
+        case playlists = "Playlists"
         case categories = "Categories"
     }
 
@@ -41,6 +44,15 @@ struct KhyloMusicLibraryScreen: View {
                     case .artists:
                         KhyloArtistGrid(libraryID: library.id, searchTerm: searchTerm, width: contentWidth)
                             .id("artists-\(searchTerm)")
+                    case .albums:
+                        KhyloAlbumGrid(libraryID: library.id, searchTerm: searchTerm, width: contentWidth)
+                            .id("albums-\(searchTerm)")
+                    case .songs:
+                        KhyloSongList(libraryID: library.id, searchTerm: searchTerm)
+                            .id("songs-\(searchTerm)")
+                    case .playlists:
+                        KhyloPlaylistGrid(searchTerm: searchTerm, width: contentWidth)
+                            .id("playlists-\(searchTerm)")
                     case .categories:
                         // Each genre, fronted by its most played album.
                         KhyloCategoryGrid(scope: .music, limit: nil, onSeeAll: nil, showsTitle: false)
@@ -92,8 +104,8 @@ struct KhyloMusicLibraryScreen: View {
             }
             .padding(.horizontal, KhyloStyle.gutter)
 
-            if section == .artists {
-                KhyloLibrarySearchField(placeholder: "Search artists", text: $query)
+            if section != .categories {
+                KhyloLibrarySearchField(placeholder: "Search \(section.rawValue.lowercased())", text: $query)
             }
         }
     }
@@ -175,6 +187,130 @@ private struct KhyloArtistGrid: View {
         .padding(.horizontal, KhyloStyle.gutter)
         .frame(maxWidth: .infinity, minHeight: 400, alignment: .top)
         .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "artists") }
+        .task { await pager.loadFirst() }
+    }
+}
+
+private struct KhyloAlbumGrid: View {
+    @StateObject private var pager: KhyloPager
+    @Router private var router
+    let width: CGFloat
+
+    init(libraryID: String?, searchTerm: String, width: CGFloat) {
+        self.width = width
+        let term = searchTerm.isEmpty ? nil : searchTerm
+        _pager = StateObject(wrappedValue: KhyloPager { start, limit in
+            try await KhyloAPI.items(
+                parentID: libraryID,
+                types: [.musicAlbum],
+                sortBy: [.sortName],
+                searchTerm: term,
+                startIndex: start,
+                limit: limit
+            )
+        })
+    }
+
+    var body: some View {
+        let size = max(100, (width - KhyloStyle.gutter * 2 - 16) / 2)
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(size), spacing: 16), count: 2), spacing: 22) {
+            ForEach(pager.items, id: \.id) { album in
+                Button {
+                    router.route(to: .khyloItem(album))
+                } label: {
+                    KhyloAlbumCard(album: album, width: size)
+                }
+                .buttonStyle(KhyloScaleButtonStyle())
+                .task { await pager.loadMore(after: album) }
+            }
+        }
+        .padding(.horizontal, KhyloStyle.gutter)
+        .frame(maxWidth: .infinity, minHeight: 400, alignment: .top)
+        .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "albums") }
+        .task { await pager.loadFirst() }
+    }
+}
+
+private struct KhyloSongList: View {
+    @StateObject private var pager: KhyloPager
+
+    init(libraryID: String?, searchTerm: String) {
+        let term = searchTerm.isEmpty ? nil : searchTerm
+        _pager = StateObject(wrappedValue: KhyloPager { start, limit in
+            try await KhyloAPI.items(
+                parentID: libraryID,
+                types: [.audio],
+                sortBy: [.sortName],
+                searchTerm: term,
+                startIndex: start,
+                limit: limit
+            )
+        })
+    }
+
+    var body: some View {
+        LazyVStack(spacing: 4) {
+            ForEach(Array(pager.items.enumerated()), id: \.element.id) { index, song in
+                KhyloTrackRow(track: song, style: .artwork) {
+                    // Plays from this song onward through the list as loaded so far.
+                    KhyloAudioPlayer.shared.play(pager.items, startAt: index, kind: .music, startTicks: 0)
+                }
+                .task { await pager.loadMore(after: song) }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 400, alignment: .top)
+        .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "songs") }
+        .task { await pager.loadFirst() }
+    }
+}
+
+private struct KhyloPlaylistGrid: View {
+    @StateObject private var pager: KhyloPager
+    @Router private var router
+    let width: CGFloat
+
+    init(searchTerm: String, width: CGFloat) {
+        self.width = width
+        let term = searchTerm.isEmpty ? nil : searchTerm
+        _pager = StateObject(wrappedValue: KhyloPager { start, limit in
+            // Playlists live outside the music library; keep the ones made of songs.
+            let page = try await KhyloAPI.items(
+                types: [.playlist],
+                sortBy: [.sortName],
+                searchTerm: term,
+                startIndex: start,
+                limit: limit
+            )
+            return KhyloAPI.Page(items: page.items.filter { $0.mediaType == .audio }, total: page.total)
+        })
+    }
+
+    var body: some View {
+        let size = max(100, (width - KhyloStyle.gutter * 2 - 16) / 2)
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(size), spacing: 16), count: 2), spacing: 22) {
+            ForEach(pager.items, id: \.id) { playlist in
+                Button {
+                    router.route(to: .khyloItem(playlist))
+                } label: {
+                    VStack(alignment: .leading, spacing: 7) {
+                        KhyloImage(url: KhyloArtwork.url(for: playlist, style: .square, width: size), placeholderSymbol: "music.note.list")
+                            .frame(width: size, height: size)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .shadow(color: .black.opacity(0.4), radius: 8, y: 4)
+                        Text(playlist.name ?? "")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .frame(width: size, alignment: .leading)
+                    }
+                }
+                .buttonStyle(KhyloScaleButtonStyle())
+                .task { await pager.loadMore(after: playlist) }
+            }
+        }
+        .padding(.horizontal, KhyloStyle.gutter)
+        .frame(maxWidth: .infinity, minHeight: 400, alignment: .top)
+        .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "playlists") }
         .task { await pager.loadFirst() }
     }
 }
