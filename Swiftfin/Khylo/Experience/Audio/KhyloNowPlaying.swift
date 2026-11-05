@@ -186,6 +186,8 @@ struct KhyloNowPlayingScreen: View {
                 standardPlayer
             }
         }
+        .onAppear { KhyloOrientationState.shared.setNowPlayingOpen(true) }
+        .onDisappear { KhyloOrientationState.shared.setNowPlayingOpen(false) }
         .environment(\.khyloLandscape, isLandscape)
         .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { isLandscape = $0 }
         .offset(y: dragOffset)
@@ -863,4 +865,41 @@ struct KhyloRoutePicker: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}
+
+
+// MARK: - Turning the phone
+
+/// Phones stay upright everywhere except video and the Now Playing screen, which
+/// turns sideways when the phone does.
+@MainActor
+final class KhyloOrientationState: ObservableObject {
+
+    static let shared = KhyloOrientationState()
+
+    @Published private(set) var allowsLandscape = false
+
+    func setNowPlayingOpen(_ isOpen: Bool) {
+        guard allowsLandscape != isOpen else { return }
+        allowsLandscape = isOpen
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        // Let the new list of orientations take hold, then apply it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            scene?.windows.first { $0.isKeyWindow }?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+            if !isOpen, !UIDevice.isPad {
+                scene?.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+            }
+        }
+    }
+}
+
+struct KhyloOrientationGate<Content: View>: View {
+
+    @ObservedObject private var state = KhyloOrientationState.shared
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .supportedOrientations(UIDevice.isPad ? .allButUpsideDown : (state.allowsLandscape ? .allButUpsideDown : .portrait))
+    }
 }
