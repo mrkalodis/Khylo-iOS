@@ -1155,17 +1155,20 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     private func startCrossfade(_ seconds: Double) {
-        guard let oldItem = player.currentItem, let next = nextIndex else { return }
+        guard let oldItem = player.currentItem, let next = nextIndex,
+              let oldURL = (oldItem.asset as? AVURLAsset)?.url
+        else { return }
         let position = player.currentTime()
         failedInARow = 0
         report(force: true)
         reportStopped()
         handledItem = oldItem
 
-        // The ending song moves to its own player, at the same spot, and plays out there.
+        // The ending song plays out on its own player, from the same spot. (An item
+        // can't be handed from one player to another, so it is opened again.)
         player.removeAllItems()
         fader.volume = 1
-        fader.replaceCurrentItem(with: oldItem)
+        fader.replaceCurrentItem(with: makePlayerItem(oldURL))
         fader.seek(to: position, toleranceBefore: .zero, toleranceAfter: .zero)
         fader.play()
 
