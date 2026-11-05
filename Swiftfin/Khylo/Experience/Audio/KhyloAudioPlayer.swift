@@ -90,7 +90,7 @@ final class KhyloAudioPlayer: ObservableObject {
     @Published var isNowPlayingRequested = false
 
     /// A queue player so the next track is already buffering when this one ends.
-    private let player = AVQueuePlayer()
+    private var player = AVQueuePlayer()
     /// The next track, loaded into the player ahead of time.
     private var preloaded: (item: AVPlayerItem, index: Int)?
     /// The item playing the current track (other players post end notifications too).
@@ -152,49 +152,21 @@ final class KhyloAudioPlayer: ObservableObject {
     /// How many seconds one song fades into the next; 0 is off.
     static let crossfadeKey = "khylo.player.crossfade"
     /// Holds the song that is fading out while the next one fades in.
-    private let fader = AVPlayer()
+    /// The other of the two players. While one song fades into the next, the old
+    /// song keeps playing here, untouched, and the two swap roles afterwards.
+    private var fader = AVQueuePlayer()
     private var fadeTimer: Timer?
     private var isHandingOver = false
     private var artworkTask: Task<Void, Never>?
 
     private init() {
-        player.automaticallyWaitsToMinimizeStalling = true
-        // The player never moves on by itself: when a song ends, Khylo checks it really
-        // finished (and didn't just lose its connection) before starting the next one.
-        player.actionAtItemEnd = .pause
-        timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
-            queue: .main
-        ) { [weak self] time in
-            MainActor.assumeIsolated {
-                self?.tick(time.seconds)
-            }
+        for audioPlayer in [player, fader] {
+            audioPlayer.automaticallyWaitsToMinimizeStalling = true
+            // The player never moves on by itself: when a song ends, Khylo checks it really
+            // finished (and didn't just lose its connection) before starting the next one.
+            audioPlayer.actionAtItemEnd = .pause
         }
-        statusCancellable = player.publisher(for: \.timeControlStatus)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] status in
-                let buffering = status == .waitingToPlayAtSpecifiedRate
-                if self?.isBuffering != buffering { self?.isBuffering = buffering }
-                if status == .playing {
-                    self?.playingItem = self?.player.currentItem
-                    self?.releaseAppAwake()
-                }
-            }
-        itemCancellable = player.publisher(for: \.currentItem)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] item in
-                self?.currentItemChanged(item)
-            }
-        itemStatusCancellable = player.publisher(for: \.currentItem?.status)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] status in
-                guard let self else { return }
-                switch status {
-                case .readyToPlay: self.streamDidOpen(self.player.currentItem)
-                case .failed: self.recoverFromFailure(self.player.currentItem)
-                default: break
-                }
-            }
+        bindPlayer()
         // A dropped connection mid-song (common in the car) ends the item early.
         failureObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemFailedToPlayToEndTime,
@@ -1136,6 +1108,44 @@ final class KhyloAudioPlayer: ObservableObject {
         maybeCrossfade()
     }
 
+    /// Listens to whichever player is the main one.
+    private func bindPlayer() {
+        if let timeObserver { fader.removeTimeObserver(timeObserver) }
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
+            queue: .main
+        ) { [weak self] time in
+            MainActor.assumeIsolated {
+                self?.tick(time.seconds)
+            }
+        }
+        statusCancellable = player.publisher(for: \.timeControlStatus)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                let buffering = status == .waitingToPlayAtSpecifiedRate
+                if self?.isBuffering != buffering { self?.isBuffering = buffering }
+                if status == .playing {
+                    self?.playingItem = self?.player.currentItem
+                    self?.releaseAppAwake()
+                }
+            }
+        itemCancellable = player.publisher(for: \.currentItem)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] item in
+                self?.currentItemChanged(item)
+            }
+        itemStatusCancellable = player.publisher(for: \.currentItem?.status)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                guard let self else { return }
+                switch status {
+                case .readyToPlay: self.streamDidOpen(self.player.currentItem)
+                case .failed: self.recoverFromFailure(self.player.currentItem)
+                default: break
+                }
+            }
+    }
+
     // MARK: - Crossfade
 
     private var crossfadeSeconds: Double {
@@ -1155,40 +1165,43 @@ final class KhyloAudioPlayer: ObservableObject {
     }
 
     private func startCrossfade(_ seconds: Double) {
-        guard let oldItem = player.currentItem, let next = nextIndex,
-              let oldURL = (oldItem.asset as? AVURLAsset)?.url
-        else { return }
-        let position = player.currentTime()
+        guard player.currentItem != nil, let next = nextIndex else { return }
         failedInARow = 0
         report(force: true)
         reportStopped()
-        handledItem = oldItem
+        handledItem = player.currentItem
 
-        // The ending song plays out on its own player, from the same spot. (An item
-        // can't be handed from one player to another, so it is opened again.)
+        // The ending song stays exactly where it is, playing on its own player. The
+        // other player becomes the main one and starts the next song, silent.
+        let ending = player
+        player = fader
+        fader = ending
         player.removeAllItems()
-        fader.volume = 1
-        fader.replaceCurrentItem(with: makePlayerItem(oldURL))
-        fader.seek(to: position, toleranceBefore: .zero, toleranceAfter: .zero)
-        fader.play()
-
-        // The next song starts on the main player, silent, and comes up.
         player.volume = 0
+        fader.volume = 1
+        bindPlayer()
+
         isHandingOver = true
         load(index: next, startTicks: 0)
         isHandingOver = false
 
         let started = Date()
         let outLength = seconds + 1
-        let inDelay = 0.8
+        var comingIn: Date?
         fadeTimer?.invalidate()
         fadeTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] timer in
             MainActor.assumeIsolated {
                 guard let self else { timer.invalidate(); return }
-                let elapsed = Date().timeIntervalSince(started)
-                self.fader.volume = Float(max(0, 1 - elapsed / outLength))
-                self.player.volume = Float(min(1, max(0, (elapsed - inDelay) / seconds)))
-                if elapsed >= outLength + 0.2 {
+                let now = Date()
+                let out = max(0, 1 - now.timeIntervalSince(started) / outLength)
+                self.fader.volume = Float(out)
+                // The new song comes up once it is really playing.
+                if comingIn == nil, self.player.timeControlStatus == .playing { comingIn = now }
+                if let comingIn {
+                    self.player.volume = Float(min(1, now.timeIntervalSince(comingIn) / seconds))
+                }
+                let faded = out <= 0 || self.fader.currentItem == nil
+                if faded, (comingIn.map { now.timeIntervalSince($0) >= seconds } ?? false) || now.timeIntervalSince(started) > outLength + 8 {
                     self.cancelCrossfade()
                 }
             }
@@ -1199,7 +1212,7 @@ final class KhyloAudioPlayer: ObservableObject {
         fadeTimer?.invalidate()
         fadeTimer = nil
         fader.pause()
-        fader.replaceCurrentItem(with: nil)
+        fader.removeAllItems()
         fader.volume = 1
         player.volume = 1
     }
