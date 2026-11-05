@@ -151,7 +151,7 @@ struct KhyloMusicHomeTab: View {
         }
     }
 
-    /// Big library name; with more than one music library it switches between them.
+    /// Just the profile button; with more than one music library, a switcher beside it.
     private func header(title: String) -> some View {
         HStack(alignment: .center) {
             if store.libraries.count > 1 {
@@ -168,16 +168,19 @@ struct KhyloMusicHomeTab: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 8) {
-                        titleText(title)
-                        Image(systemName: "chevron.down.circle.fill")
-                            .font(.system(size: 22))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(.white, Color.white.opacity(0.15))
+                    HStack(spacing: 6) {
+                        Text(title)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.white.opacity(0.7))
                     }
+                    .padding(.horizontal, 12)
+                    .frame(height: 32)
+                    .background(Capsule().fill(Color.white.opacity(0.12)))
                 }
-            } else {
-                titleText(title)
             }
 
             Spacer()

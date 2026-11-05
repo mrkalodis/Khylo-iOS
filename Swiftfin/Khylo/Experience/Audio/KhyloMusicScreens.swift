@@ -31,6 +31,7 @@ struct KhyloMusicLibraryScreen: View {
     @State private var query = ""
     @State private var searchTerm = ""
     @State private var contentWidth: CGFloat = UIScreen.main.bounds.width
+    @State private var playlistsVersion = 0
 
     var body: some View {
         ZStack {
@@ -52,7 +53,7 @@ struct KhyloMusicLibraryScreen: View {
                             .id("songs-\(searchTerm)")
                     case .playlists:
                         KhyloPlaylistGrid(searchTerm: searchTerm, width: contentWidth)
-                            .id("playlists-\(searchTerm)")
+                            .id("playlists-\(searchTerm)-\(playlistsVersion)")
                     case .categories:
                         // Each genre, fronted by its most played album.
                         KhyloCategoryGrid(scope: .music, limit: nil, onSeeAll: nil, showsTitle: false)
@@ -64,6 +65,9 @@ struct KhyloMusicLibraryScreen: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .onReceive(NotificationCenter.default.publisher(for: .khyloPlaylistsChanged)) { _ in
+            playlistsVersion += 1
+        }
         .task(id: query) {
             let trimmed = query.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty {
@@ -85,36 +89,14 @@ struct KhyloMusicLibraryScreen: View {
                     .padding(.horizontal, KhyloStyle.gutter)
             }
 
-            HStack(spacing: 8) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    KhyloSegmentTabs(tabs: Section.allCases.map { ($0, $0.rawValue) }, selection: $section)
-                }
-                .scrollClipDisabled()
-                Button {
-                    shuffleAll()
-                } label: {
-                    Image(systemName: "shuffle")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.black)
-                        .frame(width: 38, height: 38)
-                        .background(Circle().fill(KhyloStyle.accent))
-                }
-                .buttonStyle(KhyloScaleButtonStyle())
-                .accessibilityLabel("Shuffle all music")
+            ScrollView(.horizontal, showsIndicators: false) {
+                KhyloSegmentTabs(tabs: Section.allCases.map { ($0, $0.rawValue) }, selection: $section)
             }
+            .scrollClipDisabled()
             .padding(.horizontal, KhyloStyle.gutter)
 
             if section != .categories {
                 KhyloLibrarySearchField(placeholder: "Search \(section.rawValue.lowercased())", text: $query)
-            }
-        }
-    }
-
-    private func shuffleAll() {
-        Task {
-            let songs = try? await KhyloAPI.items(parentID: library.id, types: [.audio], sortBy: [.random], limit: 200).items
-            if let songs, !songs.isEmpty {
-                KhyloAudioPlayer.shared.play(songs, kind: .music, startTicks: 0)
             }
         }
     }
@@ -269,6 +251,10 @@ private struct KhyloPlaylistGrid: View {
     @Router private var router
     let width: CGFloat
 
+    @State private var isNaming = false
+    @State private var newName = ""
+    @State private var pendingDelete: BaseItemDto?
+
     init(searchTerm: String, width: CGFloat) {
         self.width = width
         let term = searchTerm.isEmpty ? nil : searchTerm
@@ -287,6 +273,21 @@ private struct KhyloPlaylistGrid: View {
 
     var body: some View {
         let size = max(100, (width - KhyloStyle.gutter * 2 - 16) / 2)
+        VStack(alignment: .leading, spacing: 20) {
+        Button {
+            newName = ""
+            isNaming = true
+        } label: {
+            Label("New Playlist", systemImage: "plus")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(KhyloStyle.accent)
+                .padding(.horizontal, 16)
+                .frame(height: 40)
+                .background(Capsule().fill(Color.white.opacity(0.1)))
+        }
+        .buttonStyle(KhyloScaleButtonStyle())
+        .padding(.horizontal, KhyloStyle.gutter)
+
         LazyVGrid(columns: Array(repeating: GridItem(.fixed(size), spacing: 16), count: 2), spacing: 22) {
             ForEach(pager.items, id: \.id) { playlist in
                 Button {
@@ -305,13 +306,48 @@ private struct KhyloPlaylistGrid: View {
                     }
                 }
                 .buttonStyle(KhyloScaleButtonStyle())
+                .contextMenu {
+                    Button(role: .destructive) {
+                        pendingDelete = playlist
+                    } label: {
+                        Label("Delete Playlist", systemImage: "trash")
+                    }
+                }
                 .task { await pager.loadMore(after: playlist) }
             }
         }
         .padding(.horizontal, KhyloStyle.gutter)
+        }
         .frame(maxWidth: .infinity, minHeight: 400, alignment: .top)
-        .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: pager.items.isEmpty, noun: "playlists") }
+        .overlay { loadingOverlay(isLoading: pager.isLoading, isEmpty: false, noun: "playlists") }
         .task { await pager.loadFirst() }
+        .alert("New Playlist", isPresented: $isNaming) {
+            TextField("Name", text: $newName)
+            Button("Create") {
+                let name = newName.trimmingCharacters(in: .whitespaces)
+                guard !name.isEmpty else { return }
+                Task {
+                    _ = try? await KhyloAPI.createPlaylist(name: name, songIDs: [])
+                    NotificationCenter.default.post(name: .khyloPlaylistsChanged, object: nil)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Delete \(pendingDelete?.name ?? "this playlist")?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Playlist", role: .destructive) {
+                guard let id = pendingDelete?.id else { return }
+                Task {
+                    try? await KhyloAPI.deletePlaylist(id)
+                    NotificationCenter.default.post(name: .khyloPlaylistsChanged, object: nil)
+                }
+            }
+        } message: {
+            Text("The songs stay in your library.")
+        }
     }
 }
 
@@ -457,11 +493,14 @@ struct KhyloTrackRow: View {
     var style: Style = .artwork
     /// Hide the artist line when it repeats the album artist.
     var hidesArtist = false
+    /// Set on a playlist's own page, to offer taking the song out of it.
+    var onRemoveFromPlaylist: (() -> Void)?
     let action: () -> Void
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
     @ObservedObject private var downloads = KhyloDownloads.shared
     @Router private var router
+    @State private var isAddingToPlaylist = false
 
     private var isCurrent: Bool { player.current?.id == track.id }
 
@@ -516,6 +555,7 @@ struct KhyloTrackRow: View {
         }
         .buttonStyle(.plain)
         .contextMenu { menuItems }
+        .sheet(isPresented: $isAddingToPlaylist) { KhyloAddToPlaylistSheet(songs: [track]) }
     }
 
     @ViewBuilder
@@ -573,6 +613,16 @@ struct KhyloTrackRow: View {
             player.addToQueue(track)
         } label: {
             Label("Add to Queue", systemImage: "text.badge.plus")
+        }
+        Button {
+            isAddingToPlaylist = true
+        } label: {
+            Label("Add to Playlist", systemImage: "music.note.list")
+        }
+        if let onRemoveFromPlaylist {
+            Button(role: .destructive, action: onRemoveFromPlaylist) {
+                Label("Remove from This Playlist", systemImage: "minus.circle")
+            }
         }
         if let albumID = track.albumID {
             Button {
@@ -646,8 +696,14 @@ struct KhyloAlbumScreen: View {
     @State private var tint: Color?
     @State private var isLoading = true
     @State private var pageWidth: CGFloat = UIScreen.main.bounds.width
+    @State private var isRenaming = false
+    @State private var isConfirmingDelete = false
+    @State private var renameText = ""
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var player = KhyloAudioPlayer.shared
     @Router private var router
+
+    private var isPlaylist: Bool { album.type == .playlist }
 
     init(album: BaseItemDto) {
         _album = State(initialValue: album)
@@ -689,7 +745,65 @@ struct KhyloAlbumScreen: View {
         .background(KhyloTintedBackdrop(color: tint, height: 620))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            if isPlaylist {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            renameText = album.name ?? ""
+                            isRenaming = true
+                        } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            isConfirmingDelete = true
+                        } label: {
+                            Label("Delete Playlist", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                }
+            }
+        }
+        .alert("Rename Playlist", isPresented: $isRenaming) {
+            TextField("Name", text: $renameText)
+            Button("Save") { rename() }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog("Delete this playlist?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
+            Button("Delete Playlist", role: .destructive) { deletePlaylist() }
+        } message: {
+            Text("The songs stay in your library.")
+        }
         .task { await load() }
+        .onReceive(NotificationCenter.default.publisher(for: .khyloPlaylistsChanged)) { _ in
+            guard isPlaylist, let id = album.id else { return }
+            Task { tracks = (try? await KhyloAPI.playlistTracks(playlistID: id)) ?? tracks }
+        }
+    }
+
+    private func rename() {
+        let name = renameText.trimmingCharacters(in: .whitespaces)
+        guard isPlaylist, let id = album.id, !name.isEmpty else { return }
+        Task {
+            try? await KhyloAPI.renamePlaylist(id, to: name)
+            album.name = name
+            NotificationCenter.default.post(name: .khyloPlaylistsChanged, object: nil)
+        }
+    }
+
+    private func deletePlaylist() {
+        guard isPlaylist, let id = album.id else { return }
+        Task {
+            do {
+                try await KhyloAPI.deletePlaylist(id)
+                NotificationCenter.default.post(name: .khyloPlaylistsChanged, object: nil)
+                dismiss()
+            } catch {
+                // Leaves the page as it was.
+            }
+        }
     }
 
     /// The album's own cover, enlarged and softly blurred behind the top of the
@@ -828,8 +942,9 @@ struct KhyloAlbumScreen: View {
                 ForEach(discTracks, id: \.id) { track in
                     KhyloTrackRow(
                         track: track,
-                        style: .numbered(track.indexNumber ?? ((tracks.firstIndex { $0.id == track.id } ?? 0) + 1)),
-                        hidesArtist: track.khyloArtistLine == albumArtist
+                        style: isPlaylist ? .artwork : .numbered(track.indexNumber ?? ((tracks.firstIndex { $0.id == track.id } ?? 0) + 1)),
+                        hidesArtist: !isPlaylist && track.khyloArtistLine == albumArtist,
+                        onRemoveFromPlaylist: isPlaylist ? { removeFromPlaylist(track) } : nil
                     ) {
                         let index = tracks.firstIndex { $0.id == track.id } ?? 0
                         player.play(tracks, startAt: index, kind: .music, startTicks: 0)
@@ -868,7 +983,9 @@ struct KhyloAlbumScreen: View {
     private func load() async {
         guard let id = album.id else { return }
         async let fullAlbum = try? KhyloAPI.item(id)
-        tracks = (try? await KhyloAPI.tracks(albumID: id)) ?? []
+        tracks = isPlaylist
+            ? ((try? await KhyloAPI.playlistTracks(playlistID: id)) ?? [])
+            : ((try? await KhyloAPI.tracks(albumID: id)) ?? [])
         isLoading = false
         if let fresh = await fullAlbum { album = fresh }
         tint = await KhyloArtColor.color(for: KhyloArtwork.url(for: album, style: .square, width: 120))
@@ -879,6 +996,15 @@ struct KhyloAlbumScreen: View {
                 albumArtistIDs: [artistID], limit: 20
             ))?.items ?? []
             moreByArtist = others.filter { $0.id != id }
+        }
+    }
+
+    private func removeFromPlaylist(_ track: BaseItemDto) {
+        guard let playlistID = album.id, let entry = track.playlistItemID else { return }
+        tracks.removeAll { $0.playlistItemID == entry }
+        Task {
+            try? await KhyloAPI.removeFromPlaylist(playlistID, entryIDs: [entry])
+            NotificationCenter.default.post(name: .khyloPlaylistsChanged, object: nil)
         }
     }
 

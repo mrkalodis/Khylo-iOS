@@ -261,6 +261,56 @@ enum KhyloAPI {
         return Page(items: result.items ?? [], total: result.totalRecordCount ?? 0)
     }
 
+    // MARK: - Playlists
+
+    /// A playlist's songs in the order the person set, each with the id that
+    /// identifies its place in the playlist (needed to take it out again).
+    static func playlistTracks(playlistID: String) async throws -> [BaseItemDto] {
+        let session = try requireSession()
+        var parameters = Paths.GetPlaylistItemsParameters()
+        parameters.userID = session.user.id
+        parameters.fields = cardFields + [.mediaStreams]
+        parameters.enableUserData = true
+        parameters.enableImages = true
+        parameters.imageTypeLimit = 1
+        let result = try await send(session, Paths.getPlaylistItems(playlistID: playlistID, parameters: parameters))
+        return result.items ?? []
+    }
+
+    /// The person's playlists made of songs.
+    static func musicPlaylists() async throws -> [BaseItemDto] {
+        try await items(types: [.playlist], sortBy: [.sortName], limit: 300).items.filter { $0.mediaType == .audio }
+    }
+
+    @discardableResult
+    static func createPlaylist(name: String, songIDs: [String]) async throws -> String? {
+        let session = try requireSession()
+        let body = CreatePlaylistDto(ids: songIDs, mediaType: .audio, name: name, userID: session.user.id)
+        let result = try await send(session, Paths.createPlaylist(body))
+        return result.id
+    }
+
+    static func addToPlaylist(_ playlistID: String, songIDs: [String]) async throws {
+        let session = try requireSession()
+        let parameters = Paths.AddItemToPlaylistParameters(ids: songIDs, userID: session.user.id)
+        _ = try await session.client.send(Paths.addItemToPlaylist(playlistID: playlistID, parameters: parameters))
+    }
+
+    static func removeFromPlaylist(_ playlistID: String, entryIDs: [String]) async throws {
+        let session = try requireSession()
+        _ = try await session.client.send(Paths.removeItemFromPlaylist(playlistID: playlistID, entryIDs: entryIDs))
+    }
+
+    static func renamePlaylist(_ playlistID: String, to name: String) async throws {
+        let session = try requireSession()
+        _ = try await session.client.send(Paths.updatePlaylist(playlistID: playlistID, UpdatePlaylistDto(name: name)))
+    }
+
+    static func deletePlaylist(_ playlistID: String) async throws {
+        let session = try requireSession()
+        _ = try await session.client.send(Paths.deleteItem(itemID: playlistID))
+    }
+
     static func tracks(albumID: String) async throws -> [BaseItemDto] {
         try await items(
             parentID: albumID,

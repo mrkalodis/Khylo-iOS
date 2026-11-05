@@ -68,6 +68,8 @@ enum KhyloVinylStyle: String, CaseIterable, Identifiable {
     static let storageKey = "khylo.player.vinylStyle"
     /// Keeps the record still even while music plays.
     static let stillKey = "khylo.player.vinylStill"
+    /// A colour the person chose for the Colour record, as hex; empty uses the cover's.
+    static let colorKey = "khylo.player.vinylColor"
 
     var id: String { rawValue }
 
@@ -77,7 +79,7 @@ enum KhyloVinylStyle: String, CaseIterable, Identifiable {
         case .classic: "Classic Black"
         case .picture: "Picture Disc"
         case .splatter: "Splatter"
-        case .solid: "Solid Colour"
+        case .solid: "Colour"
         }
     }
 }
@@ -126,6 +128,13 @@ struct KhyloAuroraBackground: View {
 }
 
 extension Color {
+    /// "#RRGGBB"
+    var khyloHex: String {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(self).getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "#%02X%02X%02X", Int(round(r * 255)), Int(round(g * 255)), Int(round(b * 255)))
+    }
+
     /// The same colour with its hue turned and its brightness scaled.
     func khyloShifted(hue shift: Double, brightness scale: Double) -> Color {
         var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
@@ -150,6 +159,7 @@ struct KhyloVinylPlayer: View {
     @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var isDark = false
     @AppStorage(KhyloVinylStyle.storageKey) private var style: KhyloVinylStyle = .marbled
     @AppStorage(KhyloVinylStyle.stillKey) private var keepStill = false
+    @AppStorage(KhyloVinylStyle.colorKey) private var chosenColor = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spinBase: Double = 0
     @State private var spinStart: Date?
@@ -315,15 +325,22 @@ struct KhyloVinylPlayer: View {
                 .overlay(Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.5)], center: .center, startRadius: size * 0.3, endRadius: size / 2)))
                 .frame(width: size, height: size)
         case .picture:
-            KhyloImage(url: player.displayArtworkURL(width: 700), placeholderSymbol: "music.note")
-                .frame(width: size, height: size)
-                .clipShape(Circle())
-                .overlay(Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.4)], center: .center, startRadius: size * 0.3, endRadius: size / 2)))
+            ZStack {
+                Circle().fill(Color(hex: "#111113"))
+                KhyloImage(url: player.displayArtworkURL(width: 700), placeholderSymbol: "music.note")
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+                    .saturation(0.7)
+                    .opacity(0.72)
+                Circle().fill(Color.black.opacity(0.18))
+                Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.5)], center: .center, startRadius: size * 0.25, endRadius: size / 2))
+            }
+            .frame(width: size, height: size)
         case .splatter:
             splatter(size: size)
         case .solid:
             let colors = palette.isEmpty ? [Color(hex: "#3A3B40")] : palette
-            let base = colors[0]
+            let base = chosenColor.isEmpty ? colors[0] : Color(hex: chosenColor)
             Circle()
                 .fill(RadialGradient(colors: [base.khyloShifted(hue: 0, brightness: 1.1), base.khyloShifted(hue: 0, brightness: 0.62)], center: .center, startRadius: 0, endRadius: size / 2))
                 .overlay(Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.4)], center: .center, startRadius: size * 0.3, endRadius: size / 2)))
@@ -335,14 +352,16 @@ struct KhyloVinylPlayer: View {
     private func splatter(size: CGFloat) -> some View {
         let colors = palette.isEmpty ? [Color(hex: "#8A8F99")] : palette
         var random = KhyloSeededRandom(seed: (player.current?.id ?? "") + "splatter")
-        let dots: [(color: Color, x: CGFloat, y: CGFloat, radius: CGFloat)] = (0 ..< 46).map { index in
+        // Big blots, then a fine spray of flecks between them.
+        let dots: [(color: Color, x: CGFloat, y: CGFloat, radius: CGFloat)] = (0 ..< 190).map { index in
             let angle = random.next() * .pi * 2
-            let distance = CGFloat(random.next().squareRoot()) * 0.46
+            let distance = CGFloat(random.next().squareRoot()) * 0.47
+            let isBlot = index < 38
             return (
                 colors[index % colors.count],
                 CGFloat(cos(angle)) * distance,
                 CGFloat(sin(angle)) * distance,
-                CGFloat(0.008 + random.next() * random.next() * 0.05)
+                isBlot ? CGFloat(0.014 + random.next() * random.next() * 0.06) : CGFloat(0.004 + random.next() * 0.012)
             )
         }
         return ZStack {
@@ -1019,6 +1038,38 @@ struct KhyloThemedTransport: View {
     }
 }
 
+/// A moon in the player's bottom row: tap for the timer choices; the time left shows beside it.
+struct KhyloSleepTimerButton: View {
+    let color: Color
+    var activeColor: Color = KhyloStyle.accent
+
+    @ObservedObject private var player = KhyloAudioPlayer.shared
+
+    var body: some View {
+        Menu {
+            Button("Off") { player.setSleepTimer(minutes: nil) }
+            Button("End of Song") { player.setSleepTimer(minutes: 0) }
+            ForEach([5, 15, 30, 45, 60], id: \.self) { minutes in
+                Button("\(minutes) Minutes") { player.setSleepTimer(minutes: minutes) }
+            }
+        } label: {
+            Image(systemName: player.sleepTimerEnd == nil ? "moon.zzz" : "moon.zzz.fill")
+                .font(.system(size: 19, weight: .regular))
+                .foregroundColor(player.sleepTimerEnd == nil ? color : activeColor)
+                .frame(width: 44, height: 44)
+                .overlay(alignment: .bottom) {
+                    if let end = player.sleepTimerEnd {
+                        Text(end, style: .timer)
+                            .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                            .foregroundColor(activeColor)
+                            .offset(y: 8)
+                    }
+                }
+        }
+        .accessibilityLabel("Sleep timer")
+    }
+}
+
 /// AirPlay, download, favorite and the queue.
 struct KhyloThemedBottomRow: View {
     let actions: KhyloPlayerActions
@@ -1045,6 +1096,8 @@ struct KhyloThemedBottomRow: View {
             }
             .buttonStyle(KhyloScaleButtonStyle())
             .accessibilityLabel(actions.isFavorite ? "Remove from favorites" : "Add to favorites")
+            Spacer()
+            KhyloSleepTimerButton(color: color)
             Spacer()
             Button(action: actions.showQueue) {
                 Image(systemName: "list.bullet")
@@ -1143,7 +1196,8 @@ struct KhyloPlayerSettingsSheet: View {
     @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var vinylDark = false
     @AppStorage(KhyloVinylStyle.storageKey) private var vinylStyle: KhyloVinylStyle = .marbled
     @AppStorage(KhyloVinylStyle.stillKey) private var vinylStill = false
-    @ObservedObject private var sleepPlayer = KhyloAudioPlayer.shared
+    @AppStorage(KhyloVinylStyle.colorKey) private var vinylColor = ""
+    @AppStorage(KhyloAudioPlayer.crossfadeKey) private var crossfade = 0.0
     @AppStorage(KhyloSongCache.enabledKey) private var cacheAhead = true
     @ObservedObject private var equalizer = KhyloEqualizer.shared
     @Environment(\.dismiss) private var dismiss
@@ -1222,6 +1276,15 @@ struct KhyloPlayerSettingsSheet: View {
                 Picker("Record", selection: $vinylStyle) {
                     ForEach(KhyloVinylStyle.allCases) { Text($0.title).tag($0) }
                 }
+                if vinylStyle == .solid {
+                    ColorPicker("Record Colour", selection: Binding(
+                        get: { vinylColor.isEmpty ? KhyloStyle.accent : Color(hex: vinylColor) },
+                        set: { vinylColor = $0.khyloHex }
+                    ), supportsOpacity: false)
+                    if !vinylColor.isEmpty {
+                        Button("Use the Cover's Colour") { vinylColor = "" }
+                    }
+                }
                 Toggle("Keep the Record Still", isOn: $vinylStill)
                     .tint(KhyloStyle.accent)
             }
@@ -1229,26 +1292,6 @@ struct KhyloPlayerSettingsSheet: View {
             Text("Player Theme")
         } footer: {
             Text("Vinyl and Cyberpunk change the whole player. The others restyle it.")
-        }
-
-        Section("Sleep Timer") {
-            Menu {
-                Button("Off") { sleepPlayer.setSleepTimer(minutes: nil) }
-                Button("End of Song") { sleepPlayer.setSleepTimer(minutes: 0) }
-                ForEach([5, 15, 30, 45, 60], id: \.self) { minutes in
-                    Button("\(minutes) Minutes") { sleepPlayer.setSleepTimer(minutes: minutes) }
-                }
-            } label: {
-                HStack {
-                    Label("Stop Playing After", systemImage: "moon.zzz")
-                    Spacer()
-                    if let end = sleepPlayer.sleepTimerEnd {
-                        Text(end, style: .timer).monospacedDigit().foregroundStyle(KhyloStyle.accent)
-                    } else {
-                        Text("Off").foregroundStyle(.secondary)
-                    }
-                }
-            }
         }
 
         Section("Sound") {
@@ -1262,6 +1305,17 @@ struct KhyloPlayerSettingsSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+
+        Section {
+            Picker("Crossfade", selection: $crossfade) {
+                Text("Off").tag(0.0)
+                ForEach([2.0, 4.0, 6.0, 8.0, 10.0, 12.0], id: \.self) { Text("\(Int($0)) seconds").tag($0) }
+            }
+        } header: {
+            Text("Transitions")
+        } footer: {
+            Text("One song fades out as the next fades in. Skipping a song never fades.")
         }
 
         Section {

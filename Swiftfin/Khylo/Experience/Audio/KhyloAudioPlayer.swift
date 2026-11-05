@@ -149,6 +149,12 @@ final class KhyloAudioPlayer: ObservableObject {
     private var resignObserver: NSObjectProtocol?
     private var lastReport = Date.distantPast
     private var sleepTask: Task<Void, Never>?
+    /// How many seconds one song fades into the next; 0 is off.
+    static let crossfadeKey = "khylo.player.crossfade"
+    /// Holds the song that is fading out while the next one fades in.
+    private let fader = AVPlayer()
+    private var fadeTimer: Timer?
+    private var isHandingOver = false
     private var artworkTask: Task<Void, Never>?
 
     private init() {
@@ -352,6 +358,7 @@ final class KhyloAudioPlayer: ObservableObject {
     func pause() {
         resumeAfterInterruption = false
         stopWaitingForNetwork()
+        cancelCrossfade()
         player.pause()
         isPlaying = false
         isBuffering = false
@@ -506,6 +513,7 @@ final class KhyloAudioPlayer: ObservableObject {
         loadGeneration = nil
         reportStopped()
         preloaded = nil
+        cancelCrossfade()
         player.removeAllItems()
         isPlaying = false
         queue = []
@@ -542,6 +550,7 @@ final class KhyloAudioPlayer: ObservableObject {
             usePlainStream = false
         }
         index = newIndex
+        if !isHandingOver { cancelCrossfade() }
         tokenWaitTask?.cancel()
         stopWaitingForNetwork()
         guard let item = current else { return }
@@ -1124,6 +1133,72 @@ final class KhyloAudioPlayer: ObservableObject {
         }
         report(force: false)
         saveSession(force: false)
+        maybeCrossfade()
+    }
+
+    // MARK: - Crossfade
+
+    private var crossfadeSeconds: Double {
+        UserDefaults.standard.double(forKey: Self.crossfadeKey)
+    }
+
+    /// Near the end of a song, lets it fade out while the next one fades in.
+    private func maybeCrossfade() {
+        let seconds = crossfadeSeconds
+        guard seconds > 0, kind == .music, isPlaying, fadeTimer == nil, !isHandingOver,
+              repeatMode != .one, nextIndex != nil,
+              duration > seconds * 3 + 5,
+              let item = player.currentItem, item === activeItem, item.status == .readyToPlay,
+              duration - currentTime <= seconds + 1.5
+        else { return }
+        startCrossfade(seconds)
+    }
+
+    private func startCrossfade(_ seconds: Double) {
+        guard let oldItem = player.currentItem, let next = nextIndex else { return }
+        let position = player.currentTime()
+        failedInARow = 0
+        report(force: true)
+        reportStopped()
+        handledItem = oldItem
+
+        // The ending song moves to its own player, at the same spot, and plays out there.
+        player.removeAllItems()
+        fader.volume = 1
+        fader.replaceCurrentItem(with: oldItem)
+        fader.seek(to: position, toleranceBefore: .zero, toleranceAfter: .zero)
+        fader.play()
+
+        // The next song starts on the main player, silent, and comes up.
+        player.volume = 0
+        isHandingOver = true
+        load(index: next, startTicks: 0)
+        isHandingOver = false
+
+        let started = Date()
+        let outLength = seconds + 1
+        let inDelay = 0.8
+        fadeTimer?.invalidate()
+        fadeTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) { [weak self] timer in
+            MainActor.assumeIsolated {
+                guard let self else { timer.invalidate(); return }
+                let elapsed = Date().timeIntervalSince(started)
+                self.fader.volume = Float(max(0, 1 - elapsed / outLength))
+                self.player.volume = Float(min(1, max(0, (elapsed - inDelay) / seconds)))
+                if elapsed >= outLength + 0.2 {
+                    self.cancelCrossfade()
+                }
+            }
+        }
+    }
+
+    private func cancelCrossfade() {
+        fadeTimer?.invalidate()
+        fadeTimer = nil
+        fader.pause()
+        fader.replaceCurrentItem(with: nil)
+        fader.volume = 1
+        player.volume = 1
     }
 
     // MARK: - Server reporting

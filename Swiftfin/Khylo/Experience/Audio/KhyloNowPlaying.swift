@@ -141,6 +141,7 @@ struct KhyloNowPlayingScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isShowingQueue = false
     @State private var isShowingSettings = false
+    @State private var isSavingQueue = false
     @AppStorage(KhyloPlayerTheme.storageKey) private var theme: KhyloPlayerTheme = .khylo
     @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var vinylDark = false
     @State private var tint: Color?
@@ -566,6 +567,8 @@ struct KhyloNowPlayingScreen: View {
                 }
                 .buttonStyle(KhyloScaleButtonStyle())
                 .accessibilityLabel(isFavorite ? "Remove from favorites" : "Add to favorites")
+                Spacer()
+                KhyloSleepTimerButton(color: .white.opacity(0.85), activeColor: activeTheme == .mono ? .white : KhyloStyle.accent)
             }
 
             Spacer()
@@ -617,11 +620,21 @@ struct KhyloNowPlayingScreen: View {
                         EditButton()
                     }
                 }
+                ToolbarItem(placement: .bottomBar) {
+                    if player.kind == .music, !player.queue.isEmpty {
+                        Button {
+                            isSavingQueue = true
+                        } label: {
+                            Label("Save Queue as Playlist", systemImage: "music.note.list")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { isShowingQueue = false }
                 }
             }
         }
+        .sheet(isPresented: $isSavingQueue) { KhyloAddToPlaylistSheet(songs: player.queue) }
         .preferredColorScheme(.dark)
         .presentationDetents([.medium, .large])
     }
