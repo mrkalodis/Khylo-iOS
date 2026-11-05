@@ -32,6 +32,7 @@ public struct KhyloStartupView: View {
     @FocusState private var focusedLoginField: LoginField?
     @StateObject private var signInModel = KhyloSignInModel()
     @State private var isScanningToSignIn = false
+    @State private var isAutoSigningIn = false
 
     @Environment(\.localUserAuthenticationAction)
     private var authenticationAction
@@ -121,6 +122,21 @@ public struct KhyloStartupView: View {
             }
         }
         .animation(.easeInOut(duration: 0.28), value: currentStep)
+        .overlay {
+            if isAutoSigningIn {
+                ZStack {
+                    KhyloColors.background.ignoresSafeArea()
+                    VStack(spacing: 16) {
+                        ProgressView().tint(KhyloColors.accent).scaleEffect(1.2)
+                        Text("Signing in with your Khylo account")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .task { await signInFromAnotherKhyloApp() }
         .sheet(isPresented: $isScanningToSignIn) {
             KhyloCodeScannerSheet(
                 prompt: "Point your camera at the code on a device that's signed in.",
@@ -312,6 +328,33 @@ public struct KhyloStartupView: View {
                 onAuthenticated()
             }
         }
+    }
+
+    /// If another Khylo app on this iPhone is signed in, sign in with that account.
+    private func signInFromAnotherKhyloApp() async {
+        guard KhyloSharedSignIn.read() != nil else { return }
+        isAutoSigningIn = true
+        defer { withAnimation { isAutoSigningIn = false } }
+
+        guard let bootstrap = await KhyloSharedSignIn.bootstrap() else { return }
+        let server = DiscoveredServer(
+            id: bootstrap.serverID,
+            name: bootstrap.serverName,
+            address: bootstrap.address,
+            version: "",
+            isKhyloServer: true,
+            isOnline: true
+        )
+        signInModel.signIn(scanned: bootstrap.code, server: server, authenticationAction: authenticationAction)
+
+        // Wait for it to finish; if it didn't work, the usual sign-in screen is still there.
+        try? await Task.sleep(for: .milliseconds(300))
+        var waited = 0
+        while signInModel.isSigningIn, waited < 100 {
+            try? await Task.sleep(for: .milliseconds(200))
+            waited += 1
+        }
+        signInModel.errorMessage = nil
     }
 
     private func authenticateManually(server: DiscoveredServer) {

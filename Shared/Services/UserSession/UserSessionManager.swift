@@ -121,6 +121,11 @@ final class UserSessionManager: ObservableObject {
     func signOut(reason: SignOutReason) async {
         guard currentSession != nil else { return }
 
+        // Signing out yourself means this app stays signed out, even if another Khylo app is signed in.
+        if reason == .explicit {
+            KhyloSharedSignIn.userSignedOutHere(token: currentSession?.user.accessToken)
+        }
+
         Defaults[.lastSignedInUserID] = .signedOut
         await refreshCurrentSession()
 

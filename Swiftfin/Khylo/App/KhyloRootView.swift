@@ -144,6 +144,15 @@ public struct KhyloRootView: View {
                 userId: session.user.id,
                 accessToken: session.user.accessToken
             )
+            // Other Khylo apps on this iPhone can sign in with this account.
+            KhyloSharedSignIn.publish(
+                serverID: session.server.id,
+                serverName: session.server.name,
+                addresses: [session.server.effectiveServerURL] + session.server.serverConnections.map(\.url),
+                token: session.user.accessToken,
+                userName: session.user.username,
+                isAdministrator: session.user.data.policy?.isAdministrator == true
+            )
         }
     }
 }

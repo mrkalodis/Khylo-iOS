@@ -11,6 +11,32 @@ import Get
 import JellyfinAPI
 import UIKit
 
+/// How this app introduces itself to the server. Khylo Music has its own name and
+/// device id, so each Khylo app shows up as its own device with its own sign-in.
+enum KhyloDeviceIdentity {
+
+    static var client: String {
+        KhyloVariant.isMusic ? "Khylo Music \(UIDevice.platform)" : "Khylo \(UIDevice.platform)"
+    }
+
+    static var deviceName: String {
+        UIDevice.current.name
+            .folding(options: .diacriticInsensitive, locale: .current)
+            .unicodeScalars
+            .filter { CharacterSet.urlQueryAllowed.contains($0) }
+            .description
+    }
+
+    static var deviceID: String {
+        let base = "\(UIDevice.platform)_\(UIDevice.vendorUUIDString)"
+        return KhyloVariant.isMusic ? base + "-music" : base
+    }
+
+    static var version: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0.1"
+    }
+}
+
 extension JellyfinClient.Configuration {
 
     static func swiftfinConfiguration(
@@ -18,14 +44,10 @@ extension JellyfinClient.Configuration {
         accessToken: String? = nil
     ) -> Self {
 
-        let client = "Khylo \(UIDevice.platform)"
-        let deviceName = UIDevice.current.name
-            .folding(options: .diacriticInsensitive, locale: .current)
-            .unicodeScalars
-            .filter { CharacterSet.urlQueryAllowed.contains($0) }
-            .description
-        let deviceID = "\(UIDevice.platform)_\(UIDevice.vendorUUIDString)"
-        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0.1"
+        let client = KhyloDeviceIdentity.client
+        let deviceName = KhyloDeviceIdentity.deviceName
+        let deviceID = KhyloDeviceIdentity.deviceID
+        let version = KhyloDeviceIdentity.version
 
         return .init(
             url: url,
