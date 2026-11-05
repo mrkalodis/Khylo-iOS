@@ -53,6 +53,75 @@ enum KhyloArtColor {
     }
 }
 
+extension KhyloArtColor {
+
+    private static var paletteCache: [URL: [Color]] = [:]
+
+    /// Up to three of the cover's strongest colours, bright enough to colour a record with.
+    /// Grey covers get a silver-and-smoke pair.
+    static func palette(for url: URL?) async -> [Color] {
+        guard let url else { return [] }
+        if let cached = paletteCache[url] { return cached }
+        guard let image = try? await ImagePipeline.shared.image(for: url), let cg = image.cgImage else { return [] }
+
+        let n = 32
+        var data = [UInt8](repeating: 0, count: n * n * 4)
+        guard let context = CGContext(
+            data: &data, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return [] }
+        context.interpolationQuality = .medium
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: n, height: n))
+
+        // Twelve hues; each pixel counts by how colourful and bright it is.
+        let bins = 12
+        var weight = [Double](repeating: 0, count: bins)
+        var saturationSum = [Double](repeating: 0, count: bins)
+        var brightnessSum = [Double](repeating: 0, count: bins)
+        var counts = [Double](repeating: 0, count: bins)
+        for index in 0 ..< n * n {
+            let r = Double(data[index * 4]) / 255, g = Double(data[index * 4 + 1]) / 255, b = Double(data[index * 4 + 2]) / 255
+            let high = max(r, g, b), low = min(r, g, b)
+            let delta = high - low
+            guard high > 0.15, delta > 0.12 else { continue }
+            let saturation = delta / high
+            guard saturation > 0.18 else { continue }
+            var hue: Double
+            if high == r { hue = ((g - b) / delta).truncatingRemainder(dividingBy: 6) }
+            else if high == g { hue = (b - r) / delta + 2 }
+            else { hue = (r - g) / delta + 4 }
+            hue = (hue < 0 ? hue + 6 : hue) / 6
+            let bin = min(bins - 1, Int(hue * Double(bins)))
+            weight[bin] += saturation * (0.3 + high)
+            saturationSum[bin] += saturation
+            brightnessSum[bin] += high
+            counts[bin] += 1
+        }
+
+        let ranked = weight.indices.sorted { weight[$0] > weight[$1] }
+        guard let top = ranked.first, weight[top] > 2 else {
+            let grey = [Color(red: 0.56, green: 0.58, blue: 0.62), Color(red: 0.23, green: 0.24, blue: 0.27)]
+            paletteCache[url] = grey
+            return grey
+        }
+        var chosen: [Int] = [top]
+        for bin in ranked.dropFirst() where chosen.count < 3 && weight[bin] > weight[top] * 0.12 {
+            let apart = chosen.allSatisfy { other in
+                let distance = abs(bin - other)
+                return min(distance, bins - distance) >= 2
+            }
+            if apart { chosen.append(bin) }
+        }
+        let colors = chosen.map { bin -> Color in
+            let saturation = min(0.95, max(0.5, saturationSum[bin] / counts[bin] * 1.1))
+            let brightness = min(0.95, max(0.6, brightnessSum[bin] / counts[bin] * 1.05))
+            return Color(hue: (Double(bin) + 0.5) / Double(bins), saturation: saturation, brightness: brightness)
+        }
+        paletteCache[url] = colors
+        return colors
+    }
+}
+
 /// A colour wash from the top of the screen into the canvas.
 struct KhyloTintedBackdrop: View {
     let color: Color?

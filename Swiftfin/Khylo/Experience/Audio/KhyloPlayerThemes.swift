@@ -119,6 +119,7 @@ struct KhyloVinylPlayer: View {
     @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var isDark = false
     @State private var spinBase: Double = 0
     @State private var spinStart: Date?
+    @State private var palette: [Color] = []
 
     private var ink: Color { isDark ? Color(hex: "#F2F3F5") : Color(hex: "#1D1F24") }
     private var soft: Color { isDark ? Color(hex: "#8E939C") : Color(hex: "#8A8F99") }
@@ -171,6 +172,9 @@ struct KhyloVinylPlayer: View {
                     .padding(.bottom, 12)
             }
         }
+        .task(id: player.current?.id) {
+            palette = await KhyloArtColor.palette(for: player.displayArtworkURL(width: 120))
+        }
         .onAppear { if player.isPlaying { spinStart = Date() } }
         .onChange(of: player.isPlaying) { _, playing in
             if playing {
@@ -199,12 +203,23 @@ struct KhyloVinylPlayer: View {
                         .rotationEffect(.degrees(angle(at: context.date)))
                 }
                 .overlay(
-                    // The light on the record stays put while it turns.
+                    // The light on the record stays put while it turns, so it sweeps across the grooves.
                     Circle()
                         .fill(AngularGradient(
-                            colors: [.clear, .white.opacity(0.12), .clear, .clear, .white.opacity(0.08), .clear, .clear],
-                            center: .center
+                            stops: [
+                                .init(color: .clear, location: 0.00),
+                                .init(color: .clear, location: 0.07),
+                                .init(color: .white.opacity(0.34), location: 0.105),
+                                .init(color: .clear, location: 0.15),
+                                .init(color: .clear, location: 0.52),
+                                .init(color: .white.opacity(0.20), location: 0.585),
+                                .init(color: .clear, location: 0.65),
+                                .init(color: .clear, location: 1.00),
+                            ],
+                            center: .center,
+                            angle: .degrees(-30)
                         ))
+                        .blendMode(.plusLighter)
                         .allowsHitTesting(false)
                 )
                 .frame(width: disc, height: disc)
@@ -229,25 +244,102 @@ struct KhyloVinylPlayer: View {
         spinBase + (spinStart.map { date.timeIntervalSince($0) * 200 } ?? 0)
     }
 
+    /// The record: pressed in colours taken from the cover, fine grooves and gaps between
+    /// tracks, and the cover itself as the centre label.
     private func discView(size: CGFloat) -> some View {
         ZStack {
-            Circle().fill(RadialGradient(colors: [Color(hex: "#202124"), Color(hex: "#0B0B0C")], center: .center, startRadius: 0, endRadius: size / 2))
-            Canvas { context, canvasSize in
-                let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
-                let outer = canvasSize.width / 2
-                for radius in stride(from: outer * 0.4, to: outer * 0.97, by: 2.4) {
-                    let ring = Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
-                    context.stroke(ring, with: .color(.white.opacity(0.035)), lineWidth: 0.6)
-                }
-            }
+            marbled(size: size)
+            grooves(size: size)
+
+            // Centre label: the cover, with a paper rim and the spindle hole.
             KhyloImage(url: player.displayArtworkURL(width: 300), placeholderSymbol: "music.note")
                 .frame(width: size * 0.34, height: size * 0.34)
                 .clipShape(Circle())
+                .overlay(Circle().strokeBorder(Color.black.opacity(0.55), lineWidth: max(2, size * 0.008)))
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1).padding(size * 0.008))
             Circle()
                 .fill(isDark ? Color(hex: "#0C0D0F") : Color(hex: "#ECEEF3"))
-                .frame(width: size * 0.03, height: size * 0.03)
+                .frame(width: size * 0.034, height: size * 0.034)
+                .overlay(Circle().strokeBorder(Color.black.opacity(0.35), lineWidth: 1))
         }
         .frame(width: size, height: size)
+    }
+
+    /// Streaks and swirls of the cover's colours, the same for the same song every time.
+    private func marbled(size: CGFloat) -> some View {
+        let colors = palette.isEmpty ? [Color(hex: "#26272B"), Color(hex: "#151618")] : palette
+        let base = colors[0]
+        var random = KhyloSeededRandom(seed: player.current?.id ?? "")
+        let streaks: [(color: Color, angle: Double, x: CGFloat, y: CGFloat, length: CGFloat, thickness: CGFloat)] =
+            (0 ..< 9).map { index in
+                (
+                    colors[index % colors.count],
+                    random.next() * 180,
+                    CGFloat(random.next() - 0.5) * 0.7,
+                    CGFloat(random.next() - 0.5) * 0.7,
+                    CGFloat(0.7 + random.next() * 0.6),
+                    CGFloat(0.10 + random.next() * 0.2)
+                )
+            }
+        let veins: [(angle: Double, x: CGFloat, y: CGFloat, length: CGFloat)] = (0 ..< 6).map { _ in
+            (random.next() * 180, CGFloat(random.next() - 0.5) * 0.8, CGFloat(random.next() - 0.5) * 0.8, CGFloat(0.5 + random.next() * 0.7))
+        }
+
+        return ZStack {
+            Circle().fill(RadialGradient(colors: [base.opacity(0.85), base.opacity(0.45)], center: .center, startRadius: 0, endRadius: size / 2))
+            ForEach(0 ..< streaks.count, id: \.self) { index in
+                let streak = streaks[index]
+                Capsule()
+                    .fill(streak.color.opacity(0.85))
+                    .frame(width: size * streak.length, height: size * streak.thickness)
+                    .rotationEffect(.degrees(streak.angle))
+                    .offset(x: size * streak.x, y: size * streak.y)
+            }
+            .blur(radius: size * 0.05)
+            ForEach(0 ..< veins.count, id: \.self) { index in
+                let vein = veins[index]
+                Capsule()
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: size * vein.length, height: size * 0.014)
+                    .rotationEffect(.degrees(vein.angle))
+                    .offset(x: size * vein.x, y: size * vein.y)
+            }
+            .blur(radius: size * 0.012)
+            // Depth: the edge of the record falls away into shadow.
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.45)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .drawingGroup()
+        .animation(.easeInOut(duration: 0.6), value: palette)
+    }
+
+    /// Fine grooves, darker gaps between tracks, a smooth run-out ring by the label and
+    /// a clean rim.
+    private func grooves(size: CGFloat) -> some View {
+        Canvas { context, canvasSize in
+            let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+            let outer = canvasSize.width / 2
+            func ring(_ radius: CGFloat) -> Path {
+                Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2))
+            }
+            var step = 0
+            for radius in stride(from: outer * 0.40, to: outer * 0.965, by: 2.2) {
+                context.stroke(
+                    ring(radius),
+                    with: .color(step.isMultiple(of: 2) ? Color.black.opacity(0.13) : Color.white.opacity(0.045)),
+                    lineWidth: 0.7
+                )
+                step += 1
+            }
+            for fraction in [0.50, 0.63, 0.74, 0.86] {
+                context.stroke(ring(outer * fraction), with: .color(Color.black.opacity(0.32)), lineWidth: 2.4)
+            }
+            context.stroke(ring(outer * 0.375), with: .color(Color.white.opacity(0.14)), lineWidth: 1)
+            context.stroke(ring(outer * 0.985), with: .color(Color.white.opacity(0.14)), lineWidth: 1)
+        }
+        .frame(width: size, height: size)
+        .drawingGroup()
     }
 
     private var transport: some View {
@@ -306,6 +398,28 @@ struct KhyloVinylPlayer: View {
                 .frame(width: 44, height: 44)
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// A small random-number maker that gives the same numbers for the same song, so a
+/// record always has the same marbling.
+struct KhyloSeededRandom {
+
+    private var state: UInt64
+
+    init(seed: String) {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in seed.utf8 {
+            hash ^= UInt64(byte)
+            hash = hash &* 1_099_511_628_211
+        }
+        state = hash == 0 ? 1 : hash
+    }
+
+    /// A number from 0 up to 1.
+    mutating func next() -> Double {
+        state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+        return Double(state >> 11) / Double(1 << 53)
     }
 }
 
