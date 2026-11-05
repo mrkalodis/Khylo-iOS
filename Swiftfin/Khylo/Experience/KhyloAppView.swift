@@ -238,7 +238,7 @@ final class KhyloPageRelay {
 }
 
 /// Sits in each tab's stack and pushes relayed pages onto the tab that's showing.
-private struct KhyloRouteRelay: View {
+struct KhyloRouteRelay: View {
     let isActive: Bool
     @Router private var router
 

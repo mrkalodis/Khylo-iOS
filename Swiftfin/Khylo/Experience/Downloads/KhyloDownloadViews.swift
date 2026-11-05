@@ -229,7 +229,9 @@ struct KhyloDownloadsScreen<Header: View>: View {
                     KhyloEmptyState(
                         systemImage: "arrow.down.circle",
                         title: "No downloads yet",
-                        message: "Tap the download button on a movie, show, album, playlist, audiobook or book to keep it on your iPhone and play it anywhere, even without a connection."
+                        message: KhyloVariant.isMusic
+                            ? "Tap the download button on an album, playlist or song to keep it on your iPhone and play it anywhere, even without a connection."
+                            : "Tap the download button on a movie, show, album, playlist, audiobook or book to keep it on your iPhone and play it anywhere, even without a connection."
                     )
                     .frame(height: 320)
                 } else {
@@ -265,7 +267,7 @@ struct KhyloDownloadsScreen<Header: View>: View {
             }
         }
 
-        if !movies.isEmpty {
+        if !KhyloVariant.isMusic, !movies.isEmpty {
             section("Movies") {
                 ForEach(movies) { download in
                     KhyloDownloadRow(
@@ -283,7 +285,7 @@ struct KhyloDownloadsScreen<Header: View>: View {
         }
 
         let shows = groups(.video)
-        if !shows.isEmpty {
+        if !KhyloVariant.isMusic, !shows.isEmpty {
             section("TV Shows") {
                 ForEach(shows) { group in
                     let count = downloads.members(of: group.id).filter { $0.state == .done }.count
@@ -340,7 +342,7 @@ struct KhyloDownloadsScreen<Header: View>: View {
 
         let audiobooks = groups(.audiobook)
         let singleAudiobooks = loose(.audiobook)
-        if !audiobooks.isEmpty || !singleAudiobooks.isEmpty {
+        if !KhyloVariant.isMusic, !audiobooks.isEmpty || !singleAudiobooks.isEmpty {
             section("Audiobooks") {
                 ForEach(audiobooks) { group in
                     KhyloDownloadRow(
@@ -373,7 +375,7 @@ struct KhyloDownloadsScreen<Header: View>: View {
         }
 
         let books = loose(.book)
-        if !books.isEmpty {
+        if !KhyloVariant.isMusic, !books.isEmpty {
             section("Books") {
                 ForEach(books) { download in
                     KhyloDownloadRow(

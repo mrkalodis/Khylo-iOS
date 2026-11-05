@@ -38,7 +38,10 @@ final class KhyloLibraryStore: ObservableObject {
     func load() async {
         do {
             // Live TV has its own tab.
-            libraries = try await KhyloAPI.libraries().filter { $0.collectionType != .livetv }
+            libraries = try await KhyloAPI.libraries().filter { library in
+                // Khylo Music only has the music libraries.
+                KhyloVariant.isMusic ? library.collectionType == .music : library.collectionType != .livetv
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

@@ -74,8 +74,13 @@ public struct KhyloRootView: View {
                 .transition(.opacity)
 
             case .ready:
-                KhyloAppView()
-                    .transition(.opacity)
+                if KhyloVariant.isMusic {
+                    KhyloMusicAppView()
+                        .transition(.opacity)
+                } else {
+                    KhyloAppView()
+                        .transition(.opacity)
+                }
             }
         }
         .background(KhyloColors.background)

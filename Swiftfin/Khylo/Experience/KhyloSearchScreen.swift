@@ -40,7 +40,7 @@ struct KhyloSearchScreen: View {
     }
 
     @State private var query = ""
-    @State private var scope: Scope = .all
+    @State private var scope: Scope = KhyloVariant.isMusic ? .music : .all
     @State private var results: [BaseItemDto] = []
     @State private var isSearching = false
     @AppStorage("khylo.search.recent") private var recentStorage = ""
@@ -56,6 +56,7 @@ struct KhyloSearchScreen: View {
 
     /// Only offer scopes the server has libraries for.
     private var scopes: [Scope] {
+        if KhyloVariant.isMusic { return [.music] }
         let types = Set(libraryStore.libraries.compactMap(\.collectionType))
         let hasBooks = types.contains(.books)
             || libraryStore.libraries.contains { KhyloAPI.extendedCollectionType(for: $0) == .audiobooks }
