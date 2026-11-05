@@ -161,6 +161,7 @@ struct KhyloVinylPlayer: View {
     @AppStorage(KhyloVinylStyle.stillKey) private var keepStill = false
     @AppStorage(KhyloVinylStyle.colorKey) private var chosenColor = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var spinBase: Double = 0
     @State private var spinStart: Date?
     @State private var palette: [Color] = []
@@ -182,38 +183,30 @@ struct KhyloVinylPlayer: View {
                 KhyloThemedTopBar(actions: actions, foreground: ink, labelFont: .system(size: 10, weight: .semibold))
                     .padding(.top, 8)
 
-                Spacer(minLength: 10)
+                if verticalSizeClass == .compact {
+                    // Sideways: the record on the left, the song and controls on the right.
+                    HStack(spacing: 12) {
+                        record
+                            .padding(.leading, 28)
+                            .frame(maxWidth: .infinity)
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            controls
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.trailing, 20)
+                    }
+                } else {
+                    Spacer(minLength: 10)
 
-                record
-                    .padding(.horizontal, 20)
+                    record
+                        .padding(.horizontal, 8)
 
-                Spacer(minLength: 22)
+                    Spacer(minLength: 22)
 
-                VStack(spacing: 6) {
-                    Text(player.current?.name ?? "")
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                    KhyloThemedArtistLine(actions: actions, color: soft, font: .system(size: 16, weight: .medium))
+                    controls
                 }
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-
-                KhyloWaveScrubber(clock: player.clock, seed: player.current?.id ?? "", played: KhyloStyle.accent, rest: ink.opacity(isDark ? 0.18 : 0.14), text: soft) {
-                    player.seek(to: $0)
-                }
-                .padding(.horizontal, 28)
-                .padding(.top, 24)
-
-                transport
-                    .padding(.horizontal, 26)
-                    .padding(.top, 18)
-
-                KhyloThemedBottomRow(actions: actions, color: soft)
-                    .padding(.horizontal, 30)
-                    .padding(.top, 22)
-                    .padding(.bottom, 12)
             }
         }
         .task(id: player.current?.id) {
@@ -230,17 +223,48 @@ struct KhyloVinylPlayer: View {
         }
     }
 
+    /// The song, its wave scrubber, the transport and the bottom row.
+    private var controls: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 6) {
+                Text(player.current?.name ?? "")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                KhyloThemedArtistLine(actions: actions, color: soft, font: .system(size: 16, weight: .medium))
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+
+            KhyloWaveScrubber(clock: player.clock, seed: player.current?.id ?? "", played: KhyloStyle.accent, rest: ink.opacity(isDark ? 0.18 : 0.14), text: soft) {
+                player.seek(to: $0)
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 24)
+
+            transport
+                .padding(.horizontal, 26)
+                .padding(.top, 18)
+
+            KhyloThemedBottomRow(actions: actions, color: soft)
+                .padding(.horizontal, 30)
+                .padding(.top, 22)
+                .padding(.bottom, 12)
+        }
+    }
+
     /// Cover and record, centred as a pair. Paused, the record is tucked behind
     /// the cover; playing, it slides out to the right while the cover moves
     /// left by the same amount, so the two stay in the middle.
     private var record: some View {
         GeometryReader { proxy in
             let width = proxy.size.width
-            let cover = width * 0.8
+            let cover = width * 0.88
             let playing = player.isPlaying
-            let shown = playing ? cover * 0.84 : cover
+            let shown = playing ? cover * 0.82 : cover
             let disc = shown * 0.96
-            let slide = playing ? width * 0.15 : 0
+            let slide = playing ? width * 0.13 : 0
             ZStack {
                 TimelineView(.animation(paused: !playing || keepStill || reduceMotion)) { context in
                     discView(size: disc)
@@ -281,7 +305,7 @@ struct KhyloVinylPlayer: View {
             .frame(width: width, height: proxy.size.height)
             .animation(.spring(response: 0.75, dampingFraction: 0.86), value: playing)
         }
-        .aspectRatio(1 / 0.8, contentMode: .fit)
+        .aspectRatio(1 / 0.88, contentMode: .fit)
     }
 
     private func angle(at date: Date) -> Double {
@@ -613,6 +637,7 @@ struct KhyloCyberpunkPlayer: View {
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
     @ObservedObject private var network = KhyloNetwork.shared
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     static let magenta = Color(hex: "#FF2BD6")
     static let cyan = Color(hex: "#00F0FF")
@@ -631,49 +656,70 @@ struct KhyloCyberpunkPlayer: View {
                 )
                 .padding(.top, 8)
 
-                Spacer(minLength: 6)
-
-                art
-                    .padding(.horizontal, 36)
-
-                Spacer(minLength: 12)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text((player.current?.name ?? "").uppercased())
-                        .font(.system(size: 24, weight: .black, design: .monospaced))
-                        .foregroundColor(.white)
-                        .shadow(color: Self.magenta.opacity(0.9), radius: 8)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    KhyloThemedArtistLine(actions: actions, color: Self.cyan, font: .system(size: 15, weight: .semibold, design: .monospaced))
-                    HStack(spacing: 14) {
-                        Text("SRC ▸ \(player.quality?.short.uppercased() ?? "STREAM")")
-                        Text("SIG ▸ \(network.isOnline ? "ONLINE" : "OFFLINE")")
+                if verticalSizeClass == .compact {
+                    HStack(spacing: 12) {
+                        art
+                            .padding(.leading, 28)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity)
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            controls
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(Self.yellow)
+                } else {
+                    Spacer(minLength: 6)
+
+                    art
+                        .padding(.horizontal, 20)
+
+                    Spacer(minLength: 12)
+
+                    controls
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
-
-                KhyloNeonVisualizer(isPlaying: player.isPlaying)
-                    .frame(height: 34)
-                    .padding(.horizontal, 28)
-                    .padding(.top, 14)
-
-                KhyloSegmentedScrubber(clock: player.clock) { player.seek(to: $0) }
-                    .padding(.horizontal, 28)
-                    .padding(.top, 12)
-
-                transport
-                    .padding(.horizontal, 24)
-                    .padding(.top, 14)
-
-                KhyloThemedBottomRow(actions: actions, color: Self.cyan)
-                    .padding(.horizontal, 28)
-                    .padding(.top, 20)
-                    .padding(.bottom, 12)
             }
+        }
+    }
+
+    private var controls: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text((player.current?.name ?? "").uppercased())
+                    .font(.system(size: 24, weight: .black, design: .monospaced))
+                    .foregroundColor(.white)
+                    .shadow(color: Self.magenta.opacity(0.9), radius: 8)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                KhyloThemedArtistLine(actions: actions, color: Self.cyan, font: .system(size: 15, weight: .semibold, design: .monospaced))
+                HStack(spacing: 14) {
+                    Text("SRC ▸ \(player.quality?.short.uppercased() ?? "STREAM")")
+                    Text("SIG ▸ \(network.isOnline ? "ONLINE" : "OFFLINE")")
+                }
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(Self.yellow)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 28)
+
+            KhyloNeonVisualizer(isPlaying: player.isPlaying)
+                .frame(height: 34)
+                .padding(.horizontal, 28)
+                .padding(.top, 14)
+
+            KhyloSegmentedScrubber(clock: player.clock) { player.seek(to: $0) }
+                .padding(.horizontal, 28)
+                .padding(.top, 12)
+
+            transport
+                .padding(.horizontal, 24)
+                .padding(.top, 14)
+
+            KhyloThemedBottomRow(actions: actions, color: Self.cyan)
+                .padding(.horizontal, 28)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
         }
     }
 

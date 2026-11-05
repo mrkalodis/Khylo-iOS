@@ -82,8 +82,13 @@ final class KhyloAudioPlayer: ObservableObject {
     /// The queue's order before shuffling, so shuffle can be turned back off.
     private var unshuffledQueue: [BaseItemDto] = []
 
-    var current: BaseItemDto? { queue.indices.contains(index) ? queue[index] : nil }
-    var isActive: Bool { current != nil }
+    /// The song that is really playing.
+    private var playingTrack: BaseItemDto? { queue.indices.contains(index) ? queue[index] : nil }
+    /// The song the screens show. During a crossfade it stays on the ending song
+    /// until the two are about equally loud, then moves to the new one.
+    @Published private(set) var heldTrack: BaseItemDto?
+    var current: BaseItemDto? { heldTrack ?? playingTrack }
+    var isActive: Bool { playingTrack != nil }
 
     /// Set to open the full Now Playing screen. It lives above the tabs, so it
     /// opens from anywhere: tapping the mini player, or starting an audiobook.
@@ -352,18 +357,18 @@ final class KhyloAudioPlayer: ObservableObject {
 
     /// Shuffles everything after the current track, or restores the original order.
     func toggleShuffle() {
-        guard let current else { return }
+        guard let playingTrack else { return }
         if isShuffled {
             let original = unshuffledQueue
             queue = original
-            index = original.firstIndex { $0.id == current.id } ?? 0
+            index = original.firstIndex { $0.id == playingTrack.id } ?? 0
             unshuffledQueue = []
             isShuffled = false
         } else {
             unshuffledQueue = queue
             var rest = queue
             rest.remove(at: index)
-            queue = [current] + rest.shuffled()
+            queue = [playingTrack] + rest.shuffled()
             index = 0
             isShuffled = true
         }
@@ -378,7 +383,7 @@ final class KhyloAudioPlayer: ObservableObject {
             play([item], kind: .music, startTicks: 0)
             return
         }
-        let currentID = current?.id
+        let currentID = playingTrack?.id
         queue.removeAll { $0.id == item.id && $0.id != currentID }
         index = queue.firstIndex { $0.id == currentID } ?? index
         queue.insert(item, at: min(index + 1, queue.count))
@@ -517,7 +522,7 @@ final class KhyloAudioPlayer: ObservableObject {
 
     private func load(index newIndex: Int, startTicks: Int?) {
         // A different song starts fresh; reloading the same one keeps its retry count.
-        if newIndex != index || current?.id != queue[safe: newIndex]?.id {
+        if newIndex != index || playingTrack?.id != queue[safe: newIndex]?.id {
             retries = 0
             usePlainStream = false
         }
@@ -525,7 +530,7 @@ final class KhyloAudioPlayer: ObservableObject {
         if !isHandingOver { cancelCrossfade() }
         tokenWaitTask?.cancel()
         stopWaitingForNetwork()
-        guard let item = current else { return }
+        guard let item = playingTrack else { return }
         holdAppAwake()
         // Never open a stream without the sign-in token: the server refuses it.
         guard let url = streamURL(for: item) else {
@@ -534,8 +539,10 @@ final class KhyloAudioPlayer: ObservableObject {
         }
 
         let start = Double(startTicks ?? KhyloDownloads.shared.resumeTicks(for: item) ?? 0) / 10_000_000
-        duration = Double(item.runTimeTicks ?? 0) / 10_000_000
-        currentTime = start
+        if heldTrack == nil {
+            duration = Double(item.runTimeTicks ?? 0) / 10_000_000
+            currentTime = start
+        }
         playSessionID = UUID().uuidString
 
         preloaded = nil
@@ -757,12 +764,12 @@ final class KhyloAudioPlayer: ObservableObject {
     /// Swaps a broken stream for the copy kept on the phone, at the same second.
     private func switchToCachedCopy(at position: Double, from item: AVPlayerItem) -> Bool {
         guard kind == .music,
-              let cached = KhyloSongCache.shared.file(for: current?.id),
+              let cached = KhyloSongCache.shared.file(for: playingTrack?.id),
               (item.asset as? AVURLAsset)?.url != cached
         else { return false }
         logger.info("Music: carrying on from the copy on the phone")
         retries = 0
-        attach(cached, start: position, name: current?.name ?? "", note: "copy on the phone")
+        attach(cached, start: position, name: playingTrack?.name ?? "", note: "copy on the phone")
         return true
     }
 
@@ -930,7 +937,7 @@ final class KhyloAudioPlayer: ObservableObject {
         self.preloaded = nil
         activeItem = item
         index = preloaded.index
-        duration = Double(current?.runTimeTicks ?? 0) / 10_000_000
+        duration = Double(playingTrack?.runTimeTicks ?? 0) / 10_000_000
         currentTime = 0
         playSessionID = UUID().uuidString
         retries = 0
@@ -953,7 +960,7 @@ final class KhyloAudioPlayer: ObservableObject {
 
         // Ended well before its real length: the stream was cut off, not finished.
         // Carry on from the same spot instead of moving to the next song.
-        let expected = Double(current?.runTimeTicks ?? 0) / 10_000_000
+        let expected = Double(playingTrack?.runTimeTicks ?? 0) / 10_000_000
         let reached = currentTime
         if expected > 30, reached < expected - 10 {
             holdAppAwake()
@@ -1007,7 +1014,7 @@ final class KhyloAudioPlayer: ObservableObject {
     /// its artist), falling back to more by the same artist.
     private func extendQueueIfNeeded() {
         guard kind == .music, repeatMode == .off, !isExtendingQueue,
-              index >= queue.count - 1, let seed = current,
+              index >= queue.count - 1, let seed = playingTrack,
               KhyloNetwork.shared.isOnline
         else { return }
         isExtendingQueue = true
@@ -1088,11 +1095,13 @@ final class KhyloAudioPlayer: ObservableObject {
         // Time from a song that isn't the one playing (just skipped, or the next one
         // waiting) would make the bar jump; only the playing song moves it.
         if let item = player.currentItem, let active = activeItem, item !== active { return }
+        // While the ending song is still on screen, the bar stays with it.
+        if heldTrack != nil { return }
         currentTime = seconds
         // The song's real length comes from the library. A stream the server converts
         // on the fly only knows how much has arrived so far, which made the length
         // wrong and kept changing.
-        let known = Double(current?.runTimeTicks ?? 0) / 10_000_000
+        let known = Double(playingTrack?.runTimeTicks ?? 0) / 10_000_000
         if known > 0 {
             duration = max(known, seconds)
         } else if let itemDuration = player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0 {
@@ -1170,6 +1179,7 @@ final class KhyloAudioPlayer: ObservableObject {
         report(force: true)
         reportStopped()
         handledItem = player.currentItem
+        heldTrack = playingTrack
 
         // The ending song stays exactly where it is, playing on its own player. The
         // other player becomes the main one and starts the next song, silent.
@@ -1199,7 +1209,11 @@ final class KhyloAudioPlayer: ObservableObject {
                 if comingIn == nil, self.player.timeControlStatus == .playing { comingIn = now }
                 if let comingIn {
                     self.player.volume = Float(min(1, now.timeIntervalSince(comingIn) / seconds))
+                    // Halfway through, the screen moves to the new song.
+                    if now.timeIntervalSince(comingIn) >= seconds / 2 { self.showNewSong() }
                 }
+                // If the new song never gets going, don't leave the old one on screen.
+                if now.timeIntervalSince(started) > outLength + 4 { self.showNewSong() }
                 let faded = out <= 0 || self.fader.currentItem == nil
                 if faded, (comingIn.map { now.timeIntervalSince($0) >= seconds } ?? false) || now.timeIntervalSince(started) > outLength + 8 {
                     self.cancelCrossfade()
@@ -1208,7 +1222,17 @@ final class KhyloAudioPlayer: ObservableObject {
         }
     }
 
+    /// The screens move on to the song that is really playing.
+    private func showNewSong() {
+        guard heldTrack != nil else { return }
+        heldTrack = nil
+        duration = Double(playingTrack?.runTimeTicks ?? 0) / 10_000_000
+        currentTime = max(0, player.currentTime().seconds.isFinite ? player.currentTime().seconds : 0)
+        updateNowPlaying()
+    }
+
     private func cancelCrossfade() {
+        showNewSong()
         fadeTimer?.invalidate()
         fadeTimer = nil
         fader.pause()
@@ -1220,7 +1244,7 @@ final class KhyloAudioPlayer: ObservableObject {
     // MARK: - Server reporting
 
     private func stateInfo() -> PlaybackStateInfo? {
-        guard let item = current else { return nil }
+        guard let item = playingTrack else { return nil }
         var info = PlaybackStateInfo()
         info.itemID = item.id
         info.canSeek = true
@@ -1234,7 +1258,7 @@ final class KhyloAudioPlayer: ObservableObject {
     /// Downloaded songs and audiobooks keep their progress on the phone too, so
     /// it's saved without a connection and sent to the server later.
     private func recordOffline(isFinal: Bool) {
-        guard let id = current?.id, KhyloDownloads.shared.isDownloaded(id) else { return }
+        guard let id = playingTrack?.id, KhyloDownloads.shared.isDownloaded(id) else { return }
         KhyloDownloads.shared.record(itemID: id, ticks: Int(currentTime * 10_000_000), isFinal: isFinal)
     }
 
@@ -1260,7 +1284,7 @@ final class KhyloAudioPlayer: ObservableObject {
         guard startedItem != nil, startedItem === activeItem else { return }
         startedItem = nil
         recordOffline(isFinal: true)
-        guard let item = current, let client = KhyloAPI.session?.client else { return }
+        guard let item = playingTrack, let client = KhyloAPI.session?.client else { return }
         var info = PlaybackStopInfo()
         info.itemID = item.id
         info.playSessionID = playSessionID
@@ -1272,13 +1296,13 @@ final class KhyloAudioPlayer: ObservableObject {
 
     /// The song that's streaming and the next two, kept on the phone as you listen.
     private func prepareCache() {
-        guard kind == .music, let current else {
+        guard kind == .music, let playingTrack else {
             KhyloSongCache.shared.cancel()
             return
         }
         var items: [BaseItemDto] = []
-        if !KhyloDownloads.shared.isDownloaded(current.id), KhyloSongCache.shared.file(for: current.id) == nil {
-            items.append(current)
+        if !KhyloDownloads.shared.isDownloaded(playingTrack.id), KhyloSongCache.shared.file(for: playingTrack.id) == nil {
+            items.append(playingTrack)
         }
         var position = index
         for _ in 0 ..< 2 {
@@ -1312,7 +1336,7 @@ final class KhyloAudioPlayer: ObservableObject {
 
     /// Saves the queue and position so the app opens on the same song.
     private func saveSession(force: Bool) {
-        guard current != nil, force || Date().timeIntervalSince(lastSessionSave) > 5 else { return }
+        guard playingTrack != nil, force || Date().timeIntervalSince(lastSessionSave) > 5 else { return }
         lastSessionSave = Date()
         let first = max(0, index - 50)
         let last = min(queue.count, index + 150)
@@ -1444,7 +1468,7 @@ final class KhyloAudioPlayer: ObservableObject {
     private func loadQuality() {
         qualityTask?.cancel()
         quality = nil
-        guard kind == .music, let id = current?.id else { return }
+        guard kind == .music, let id = playingTrack?.id else { return }
         qualityTask = Task { [weak self] in
             guard let item = try? await KhyloAPI.item(id), !Task.isCancelled else { return }
             self?.quality = KhyloAudioQuality(item)

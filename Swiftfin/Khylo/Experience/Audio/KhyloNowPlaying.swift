@@ -141,6 +141,7 @@ struct KhyloNowPlayingScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isShowingQueue = false
     @State private var isShowingSettings = false
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var isSavingQueue = false
     @AppStorage(KhyloPlayerTheme.storageKey) private var theme: KhyloPlayerTheme = .khylo
     @AppStorage(KhyloPlayerTheme.vinylDarkKey) private var vinylDark = false
@@ -224,7 +225,7 @@ struct KhyloNowPlayingScreen: View {
             case .aurora: KhyloAuroraBackground(tint: tint, isPlaying: player.isPlaying)
             case .mono: Color.black.ignoresSafeArea()
             case .glass: glassBackground
-            case .poster: posterBackground
+            case .poster: verticalSizeClass == .compact ? AnyView(background) : AnyView(posterBackground)
             default: background
             }
 
@@ -232,55 +233,82 @@ struct KhyloNowPlayingScreen: View {
                 topBar
                     .padding(.top, 8)
 
-                // Equal space above and below: the cover sits centred between
-                // the top bar and the song details.
-                Spacer(minLength: 12)
-
-                if activeTheme == .poster {
-                    // The cover is the background; leave the room it takes up.
-                    Color.clear
-                        .aspectRatio(1, contentMode: .fit)
-                        .padding(.horizontal, 24)
+                if verticalSizeClass == .compact {
+                    // Sideways: the cover on the left at full height, the song and controls on the right.
+                    HStack(spacing: 20) {
+                        standardCover
+                            .padding(.leading, 28)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity)
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            standardControls
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.trailing, 12)
+                    }
                 } else {
-                KhyloImage(url: artwork, placeholderSymbol: player.kind == .audiobook ? "headphones" : "music.note")
-                    .aspectRatio(1, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: activeTheme == .mono ? 2 : (activeTheme == .glass ? 24 : 12), style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .strokeBorder(Color.white.opacity(activeTheme == .glass ? 0.22 : 0), lineWidth: 1)
-                    )
-                    .shadow(color: activeTheme == .mono ? .clear : (activeTheme == .aurora ? (tint ?? .black) : .black).opacity(0.5), radius: 30, y: 18)
-                    .scaleEffect(player.isPlaying ? 1 : 0.88)
-                    .animation(.spring(response: 0.45, dampingFraction: 0.75), value: player.isPlaying)
-                    .padding(.horizontal, 24)
-                    .id(player.current?.id)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    // Equal space above and below: the cover sits centred between
+                    // the top bar and the song details.
+                    Spacer(minLength: 12)
+
+                    if activeTheme == .poster {
+                        // The cover is the background; leave the room it takes up.
+                        Color.clear
+                            .aspectRatio(1, contentMode: .fit)
+                            .padding(.horizontal, 12)
+                    } else {
+                        standardCover
+                            .padding(.horizontal, 12)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    standardControls
                 }
-
-                Spacer(minLength: 12)
-
-                titleRow
-                    .padding(.horizontal, 28)
-
-                KhyloClockScrubber(clock: player.clock) { player.seek(to: $0) }
-                    .padding(.horizontal, 28)
-                    .padding(.top, 22)
-
-                if let quality = player.quality {
-                    KhyloQualityLabel(quality: quality)
-                        .padding(.top, 4)
-                        .transition(.opacity)
-                }
-
-                transport
-                    .padding(.horizontal, 22)
-                    .padding(.top, 18)
-
-                bottomRow
-                    .padding(.horizontal, 28)
-                    .padding(.top, 22)
-                    .padding(.bottom, 12)
             }
+        }
+    }
+
+    private var standardCover: some View {
+        KhyloImage(url: artwork, placeholderSymbol: player.kind == .audiobook ? "headphones" : "music.note")
+            .aspectRatio(1, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: activeTheme == .mono ? 2 : (activeTheme == .glass ? 24 : 12), style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(Color.white.opacity(activeTheme == .glass ? 0.22 : 0), lineWidth: 1)
+            )
+            .shadow(color: activeTheme == .mono ? .clear : (activeTheme == .aurora ? (tint ?? .black) : .black).opacity(0.5), radius: 30, y: 18)
+            .scaleEffect(player.isPlaying ? 1 : 0.88)
+            .animation(.spring(response: 0.45, dampingFraction: 0.75), value: player.isPlaying)
+            .id(player.current?.id)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+    }
+
+    private var standardControls: some View {
+        VStack(spacing: 0) {
+            titleRow
+                .padding(.horizontal, 28)
+
+            KhyloClockScrubber(clock: player.clock) { player.seek(to: $0) }
+                .padding(.horizontal, 28)
+                .padding(.top, 22)
+
+            if let quality = player.quality {
+                KhyloQualityLabel(quality: quality)
+                    .padding(.top, 4)
+                    .transition(.opacity)
+            }
+
+            transport
+                .padding(.horizontal, 22)
+                .padding(.top, 18)
+
+            bottomRow
+                .padding(.horizontal, 28)
+                .padding(.top, 22)
+                .padding(.bottom, 12)
         }
     }
 
