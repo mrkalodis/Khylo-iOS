@@ -27,10 +27,16 @@ struct KhyloStatsScreen: View {
 
     @State private var section: Section = .week
     @State private var isShowingPrivacy = false
+    @State private var tint: Color?
 
     var body: some View {
         ZStack {
-            KhyloStyle.canvas.ignoresSafeArea()
+            KhyloStatsBackdrop(tint: tint)
+                .overlay(
+                    LinearGradient(colors: [Color.black.opacity(0.1), Color.black.opacity(0.75)], startPoint: .top, endPoint: .bottom)
+                        .ignoresSafeArea()
+                )
+                .animation(.easeInOut(duration: 1.0), value: tint)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -55,7 +61,7 @@ struct KhyloStatsScreen: View {
                     .padding(.horizontal, KhyloStyle.gutter)
 
                     switch section {
-                    case .week: KhyloWeekStats()
+                    case .week: KhyloWeekStats(tint: $tint)
                     case .quarters: KhyloQuarterList()
                     case .year: KhyloYearStats()
                     case .history: KhyloStatsHistory()
@@ -105,10 +111,21 @@ private struct KhyloStatCard<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(KhyloStyle.raised))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(KhyloStyle.hairline, lineWidth: 1))
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    LinearGradient(colors: [Color.white.opacity(0.07), Color.white.opacity(0.01)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [Color.white.opacity(0.22), Color.white.opacity(0.04)], startPoint: .top, endPoint: .bottom), lineWidth: 1)
+        )
         .padding(.horizontal, KhyloStyle.gutter)
+        .khyloReveal()
     }
 }
 
@@ -171,30 +188,43 @@ private struct KhyloLoaded<Value, Content: View>: View {
     }
 }
 
-private struct KhyloBars: View {
+struct KhyloBars: View {
     let values: [Double]
     let labels: [String]
     var highlight: Int?
     var height: CGFloat = 90
+    var onDark = false
+
+    @State private var grown = false
 
     var body: some View {
         let peak = max(values.max() ?? 0, 1)
         HStack(alignment: .bottom, spacing: values.count > 14 ? 3 : 8) {
             ForEach(values.indices, id: \.self) { index in
                 VStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                        .fill(index == highlight ? KhyloStyle.accent : KhyloStyle.accent.opacity(0.55))
-                        .frame(height: max(3, height * CGFloat(values[index] / peak)))
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(
+                            onDark
+                                ? AnyShapeStyle(index == highlight ? Color.white : Color.white.opacity(0.4))
+                                : AnyShapeStyle(LinearGradient(
+                                    colors: [index == highlight ? KhyloStyle.accent : KhyloStyle.accent.opacity(0.55), KhyloStyle.accent.opacity(index == highlight ? 0.7 : 0.25)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ))
+                        )
+                        .frame(height: max(4, height * CGFloat(values[index] / peak) * (grown ? 1 : 0.02)))
                         .frame(maxHeight: height, alignment: .bottom)
+                        .animation(.spring(response: 0.8, dampingFraction: 0.78).delay(Double(index) * 0.04), value: grown)
                     if labels.indices.contains(index) {
                         Text(labels[index])
                             .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(KhyloStyle.tertiaryText)
+                            .foregroundColor(onDark ? .white.opacity(0.7) : KhyloStyle.tertiaryText)
                     }
                 }
                 .frame(maxWidth: .infinity)
             }
         }
+        .onAppear { grown = true }
     }
 }
 
@@ -244,7 +274,7 @@ private struct KhyloSongList: View {
                         .foregroundColor(KhyloStyle.tertiaryText)
                         .frame(width: 18)
                     KhyloImage(
-                        url: song.itemId.flatMap { $0.isEmpty ? nil : KhyloArtwork.url(for: BaseItemDto(id: $0), style: .square, width: 90) },
+                        url: statArtwork(song.itemId, width: 90),
                         placeholderSymbol: "music.note"
                     )
                     .frame(width: 40, height: 40)
@@ -278,7 +308,7 @@ private struct KhyloAlbumRow: View {
                 ForEach(albums) { album in
                     VStack(alignment: .leading, spacing: 6) {
                         KhyloImage(
-                            url: album.albumId.flatMap { $0.isEmpty ? nil : KhyloArtwork.url(for: BaseItemDto(id: $0), style: .square, width: 220) },
+                            url: statArtwork(album.albumId, width: 220),
                             placeholderSymbol: "music.note"
                         )
                         .frame(width: 110, height: 110)
@@ -348,6 +378,7 @@ private func bigNumber(_ value: String, _ caption: String) -> some View {
 
 private struct KhyloWeekStats: View {
 
+    @Binding var tint: Color?
     @State private var weekStart = KhyloWeekStats.monday(of: Date())
 
     private static func monday(of date: Date) -> Date {
@@ -399,6 +430,10 @@ private struct KhyloWeekStats: View {
                 try await KhyloStatsAPI.summary(from: KhyloStatsAPI.dayString(weekStart), to: KhyloStatsAPI.dayString(weekEnd))
             }) { summary in
                 KhyloSummaryBody(summary: summary)
+                    .task {
+                        let id = summary.topAlbums?.first?.albumId ?? summary.topArtists?.first?.artistId
+                        tint = await KhyloArtColor.color(for: statArtwork(id, width: 120))
+                    }
             }
             .id(weekStart)
         }
@@ -422,19 +457,46 @@ private struct KhyloSummaryBody: View {
             KhyloStatMessage(symbol: "waveform", title: "Nothing played this week", text: "Songs you listen to are added here as you play them.")
         } else {
             VStack(alignment: .leading, spacing: 14) {
-                KhyloStatCard {
-                    HStack(alignment: .top, spacing: 16) {
-                        bigNumber(KhyloStatsAPI.duration(summary.totalSeconds), "listened")
-                        bigNumber("\(summary.plays ?? 0)", "plays")
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        KhyloCountUp(target: (summary.totalSeconds ?? 0) / 60, duration: 1.5) { value in
+                            let minutes = Int(value)
+                            return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
+                        }
+                        .font(.system(size: 64, weight: .black, design: .rounded))
+                        .foregroundColor(.white)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
                     }
-                    HStack(alignment: .top, spacing: 16) {
-                        bigNumber("\(summary.distinctSongs ?? 0)", "songs")
-                        bigNumber("\(summary.distinctArtists ?? 0)", "artists")
-                    }
+                    Text("of music · \(summary.plays ?? 0) plays · \(summary.distinctSongs ?? 0) songs · \(summary.distinctArtists ?? 0) artists")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.75))
                     if let change {
                         Text(change)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(KhyloStyle.accent)
+                            .padding(.top, 4)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, KhyloStyle.gutter)
+                .khyloReveal()
+
+                if let top = summary.topArtists?.first {
+                    KhyloStatCard("Top artist this week") {
+                        HStack(spacing: 16) {
+                            KhyloArtistAvatar(artist: artistStub(top), size: 92)
+                                .shadow(color: .black.opacity(0.4), radius: 14, y: 6)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(top.name ?? "")
+                                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
+                                    .lineLimit(2)
+                                Text("\(KhyloStatsAPI.duration(top.seconds)) · \(top.plays ?? 0) plays")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                        }
                     }
                 }
 
@@ -484,9 +546,22 @@ private struct KhyloSummaryBody: View {
 
 // MARK: - Quarters and year
 
+/// Something to show as a story, with the means to show its full breakdown too.
+private struct KhyloStoryItem: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let review: KhyloStatReview
+    let comparesToLast: Bool
+    let load: () async throws -> KhyloStatReview
+}
+
 private struct KhyloQuarterList: View {
 
-    @Router private var router
+    @State private var story: KhyloStoryItem?
+    @State private var breakdown: KhyloStoryItem?
+    @State private var opening: String?
+    @State private var message: String?
 
     var body: some View {
         KhyloLoaded(load: { try await KhyloStatsAPI.quarters() }) { quarters in
@@ -494,25 +569,67 @@ private struct KhyloQuarterList: View {
                 KhyloStatMessage(symbol: "calendar", title: "No quarters yet", text: "Your first quarterly review appears once you've listened to something.")
             } else {
                 VStack(spacing: 12) {
-                    ForEach(quarters) { quarter in
-                        NavigationLink {
-                            KhyloReviewScreen(title: quarter.title, subtitle: quarter.months, load: {
-                                try await KhyloStatsAPI.quarter(year: quarter.year, quarter: quarter.quarter)
-                            }, showsComparison: true)
+                    ForEach(Array(quarters.enumerated()), id: \.element.id) { index, quarter in
+                        Button {
+                            open(quarter)
                         } label: {
-                            KhyloQuarterRow(quarter: quarter)
+                            KhyloQuarterRow(quarter: quarter, isOpening: opening == quarter.id)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(KhyloScaleButtonStyle())
+                        .khyloReveal(delay: Double(index) * 0.08)
+                    }
+                    if let message {
+                        Text(message)
+                            .font(.system(size: 14))
+                            .foregroundColor(KhyloStyle.secondaryText)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 6)
                     }
                 }
                 .padding(.horizontal, KhyloStyle.gutter)
             }
+        }
+        .fullScreenCover(item: $story) { item in
+            KhyloStoryView(title: item.title, subtitle: item.subtitle, review: item.review, comparesToLast: item.comparesToLast) {
+                story = nil
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    breakdown = item
+                }
+            }
+        }
+        .sheet(item: $breakdown) { item in
+            NavigationStack {
+                KhyloReviewScreen(title: item.title, subtitle: item.subtitle, load: item.load, showsComparison: item.comparesToLast)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { breakdown = nil } } }
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+
+    private func open(_ quarter: KhyloStatQuarter) {
+        message = nil
+        opening = quarter.id
+        Task {
+            defer { opening = nil }
+            let load = { try await KhyloStatsAPI.quarter(year: quarter.year, quarter: quarter.quarter) }
+            guard let review = try? await load() else {
+                message = "That review couldn't be loaded. Check your connection."
+                return
+            }
+            if review.available == false {
+                let day = KhyloStatsAPI.day(review.availableFrom ?? quarter.availableFrom)
+                message = day.map { "\(quarter.title) opens on \($0.formatted(.dateTime.weekday(.wide).month(.wide).day()))." } ?? "This review isn't open yet."
+                return
+            }
+            story = KhyloStoryItem(title: quarter.title, subtitle: quarter.months, review: review, comparesToLast: true, load: load)
         }
     }
 }
 
 private struct KhyloQuarterRow: View {
     let quarter: KhyloStatQuarter
+    var isOpening = false
 
     private var isOpen: Bool { quarter.available == true || KhyloStatsAPI.opensReviewsEarly }
 
@@ -520,70 +637,115 @@ private struct KhyloQuarterRow: View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(quarter.title)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: 24, weight: .black, design: .rounded))
                     .foregroundColor(.white)
                 Text(quarter.months)
                     .font(.system(size: 14))
-                    .foregroundColor(KhyloStyle.secondaryText)
+                    .foregroundColor(.white.opacity(0.7))
             }
             Spacer()
-            if isOpen {
-                Image(systemName: "chevron.right")
-                    .foregroundColor(KhyloStyle.tertiaryText)
+            if isOpening {
+                ProgressView().tint(.white)
+            } else if isOpen {
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.white, Color.white.opacity(0.2))
             } else if let opens = KhyloStatsAPI.day(quarter.availableFrom) {
                 VStack(alignment: .trailing, spacing: 2) {
-                    Image(systemName: "lock.fill").foregroundColor(KhyloStyle.tertiaryText)
+                    Image(systemName: "lock.fill").foregroundColor(.white.opacity(0.6))
                     Text("Opens \(opens.formatted(.dateTime.month(.abbreviated).day()))")
                         .font(.system(size: 12))
-                        .foregroundColor(KhyloStyle.tertiaryText)
+                        .foregroundColor(.white.opacity(0.6))
                 }
             }
         }
-        .padding(16)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(KhyloStyle.raised))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(KhyloStyle.hairline, lineWidth: 1))
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(LinearGradient(
+                    colors: [KhyloStyle.accent.opacity(isOpen ? 0.45 : 0.12), Color.white.opacity(0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+        )
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
     }
 }
 
 private struct KhyloYearStats: View {
+
+    @State private var story: KhyloStoryItem?
+    @State private var breakdown: KhyloStoryItem?
 
     private var year: Int { Calendar.current.component(.year, from: Date()) }
 
     var body: some View {
         KhyloLoaded(load: { try await KhyloStatsAPI.wrapped(year: year) }) { review in
             if review.available == false {
-                VStack(spacing: 16) {
-                    KhyloStatMessage(
-                        symbol: "gift",
-                        title: "Your \(year) Wrapped",
-                        text: opensText(review.availableFrom)
-                    )
-                }
+                KhyloStatMessage(
+                    symbol: "gift",
+                    title: "Your \(year) Wrapped",
+                    text: opensText(review.availableFrom)
+                )
             } else {
-                NavigationLink {
-                    KhyloReviewScreen(title: "Your \(year) Wrapped", subtitle: "Your year in music", load: {
-                        try await KhyloStatsAPI.wrapped(year: year)
-                    }, showsComparison: false)
+                Button {
+                    story = KhyloStoryItem(
+                        title: "Your \(year) Wrapped",
+                        subtitle: "Your year in music",
+                        review: review,
+                        comparesToLast: false,
+                        load: { try await KhyloStatsAPI.wrapped(year: year) }
+                    )
                 } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("WRAPPED")
-                            .font(.system(size: 12, weight: .heavy))
-                            .tracking(1.4)
-                            .foregroundColor(.black.opacity(0.6))
-                        Text("Your \(year) in music")
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.black)
-                        Text(KhyloStatsAPI.duration(review.totalSeconds) + " · tap to open")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(.black.opacity(0.7))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Spacer(minLength: 90)
+                        Text("WRAPPED \(String(year))")
+                            .font(.system(size: 13, weight: .heavy))
+                            .tracking(1.8)
+                            .foregroundColor(.white.opacity(0.8))
+                        Text("Your year\nin music")
+                            .font(.system(size: 44, weight: .black, design: .rounded))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.leading)
+                        HStack(spacing: 8) {
+                            Image(systemName: "play.fill")
+                            Text("\(KhyloStatsAPI.duration(review.totalSeconds)) · tap to play")
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.top, 4)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(22)
-                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(KhyloStyle.accent))
+                    .padding(24)
+                    .background(
+                        ZStack {
+                            KhyloAuroraBackground(tint: KhyloStyle.accent, isPlaying: true)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    )
+                    .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Color.white.opacity(0.22), lineWidth: 1))
+                    .shadow(color: KhyloStyle.accent.opacity(0.35), radius: 30, y: 14)
                     .padding(.horizontal, KhyloStyle.gutter)
+                    .khyloReveal()
                 }
                 .buttonStyle(KhyloScaleButtonStyle())
             }
+        }
+        .fullScreenCover(item: $story) { item in
+            KhyloStoryView(title: item.title, subtitle: item.subtitle, review: item.review) {
+                story = nil
+                Task {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    breakdown = item
+                }
+            }
+        }
+        .sheet(item: $breakdown) { item in
+            NavigationStack {
+                KhyloReviewScreen(title: item.title, subtitle: item.subtitle, load: item.load, showsComparison: false)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done") { breakdown = nil } } }
+            }
+            .preferredColorScheme(.dark)
         }
     }
 
@@ -806,7 +968,7 @@ private struct KhyloStatsHistory: View {
     private func historyRow(_ row: KhyloStatHistoryRow) -> some View {
         HStack(spacing: 12) {
             KhyloImage(
-                url: (row.albumId ?? row.itemId).flatMap { $0.isEmpty ? nil : KhyloArtwork.url(for: BaseItemDto(id: $0), style: .square, width: 90) },
+                url: statArtwork(row.albumId, width: 90) ?? statArtwork(row.itemId, width: 90),
                 placeholderSymbol: "music.note"
             )
             .frame(width: 44, height: 44)
