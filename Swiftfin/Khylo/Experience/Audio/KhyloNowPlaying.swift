@@ -180,8 +180,8 @@ struct KhyloNowPlayingScreen: View {
             switch activeTheme {
             case .vinyl:
                 KhyloVinylPlayer(actions: actions, tint: tint)
-            case .cyberpunk:
-                KhyloCyberpunkPlayer(actions: actions)
+            case .hifi:
+                KhyloHiFiPlayer(actions: actions)
             case .khylo, .aurora, .mono, .glass, .poster:
                 standardPlayer
             }

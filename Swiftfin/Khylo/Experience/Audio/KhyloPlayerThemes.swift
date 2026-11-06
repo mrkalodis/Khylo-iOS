@@ -11,13 +11,13 @@ import SwiftUI
 // MARK: - Themes
 
 /// How the music player looks. Three restyle the standard player; Vinyl and
-/// Cyberpunk each have a layout of their own.
+/// Hi-Fi each have a layout of their own.
 enum KhyloPlayerTheme: String, CaseIterable, Identifiable {
     case khylo
     case aurora
     case mono
     case vinyl
-    case cyberpunk
+    case hifi
     case glass
     case poster
 
@@ -33,7 +33,7 @@ enum KhyloPlayerTheme: String, CaseIterable, Identifiable {
         case .aurora: "Aurora"
         case .mono: "Mono"
         case .vinyl: "Vinyl"
-        case .cyberpunk: "Cyberpunk"
+        case .hifi: "Hi-Fi"
         case .glass: "Glass"
         case .poster: "Poster"
         }
@@ -45,7 +45,7 @@ enum KhyloPlayerTheme: String, CaseIterable, Identifiable {
         case .aurora: "Slow light from the cover"
         case .mono: "Black, white, nothing else"
         case .vinyl: "Light, with a spinning record"
-        case .cyberpunk: "Neon, grids and glitches"
+        case .hifi: "Amber VU meters, like a vintage amp"
         case .glass: "Frosted, quiet, cover first"
         case .poster: "The cover, full width, like a record sleeve"
         }
@@ -53,7 +53,7 @@ enum KhyloPlayerTheme: String, CaseIterable, Identifiable {
 
     /// A layout of its own, rather than a restyle of the standard player.
     var hasOwnLayout: Bool {
-        self == .vinyl || self == .cyberpunk
+        self == .vinyl || self == .hifi
     }
 }
 
@@ -76,10 +76,11 @@ enum KhyloVinylStyle: String, CaseIterable, Identifiable {
     case picture
     case splatter
     case galaxy
-    case swirl
-    case halves
-    case bullseye
-    case clear
+    case amber
+    case smoke
+    case gold
+    case ink
+    case halo
     case solid
 
     static let storageKey = "khylo.player.vinylStyle"
@@ -97,10 +98,11 @@ enum KhyloVinylStyle: String, CaseIterable, Identifiable {
         case .picture: "Picture Disc"
         case .splatter: "Splatter"
         case .galaxy: "Galaxy"
-        case .swirl: "Swirl"
-        case .halves: "Half & Half"
-        case .bullseye: "Bullseye"
-        case .clear: "Clear"
+        case .amber: "Amber"
+        case .smoke: "Smoke"
+        case .gold: "Gold"
+        case .ink: "Ink Drop"
+        case .halo: "Halo"
         case .solid: "Colour"
         }
     }
@@ -386,14 +388,16 @@ struct KhyloVinylPlayer: View {
             splatter(size: size)
         case .galaxy:
             galaxy(size: size)
-        case .swirl:
-            swirl(size: size)
-        case .halves:
-            halves(size: size)
-        case .bullseye:
-            bullseye(size: size)
-        case .clear:
-            clearDisc(size: size)
+        case .amber:
+            amber(size: size)
+        case .smoke:
+            smoke(size: size)
+        case .gold:
+            gold(size: size)
+        case .ink:
+            inkDrop(size: size)
+        case .halo:
+            halo(size: size)
         case .solid:
             let colors = palette.isEmpty ? [Color(hex: "#3A3B40")] : palette
             let base = chosenColor.isEmpty ? colors[0] : Color(hex: chosenColor)
@@ -445,80 +449,141 @@ struct KhyloVinylPlayer: View {
         .animation(.easeInOut(duration: 0.6), value: palette)
     }
 
-    /// Colours wound around the record like a tie-dye spiral.
-    private func swirl(size: CGFloat) -> some View {
-        let colors = coverColors
-        let ring = colors + [colors[0]]
-        return ZStack {
-            Circle().fill(AngularGradient(colors: ring + ring, center: .center))
-                .rotationEffect(.degrees(20))
-            // Twisting the arms: the same wheel again, turned and softened toward the middle.
-            Circle().fill(AngularGradient(colors: ring.reversed() + ring.reversed(), center: .center))
-                .rotationEffect(.degrees(-35))
-                .mask(Circle().fill(RadialGradient(colors: [.white, .clear], center: .center, startRadius: size * 0.05, endRadius: size * 0.5)))
-                .opacity(0.8)
-            Circle().fill(Color.black.opacity(0.22))
-            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.45)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+    /// Warm, see-through resin, speckled with dark.
+    private func amber(size: CGFloat) -> some View {
+        var random = KhyloSeededRandom(seed: (player.current?.id ?? "") + "amber")
+        let flecks: [(x: CGFloat, y: CGFloat, length: CGFloat, thickness: CGFloat, angle: Double)] = (0 ..< 46).map { _ in
+            let angle = random.next() * .pi * 2
+            let distance = CGFloat(random.next().squareRoot()) * 0.46
+            return (CGFloat(cos(angle)) * distance, CGFloat(sin(angle)) * distance, CGFloat(0.02 + random.next() * 0.07), CGFloat(0.006 + random.next() * 0.014), random.next() * 180)
         }
-        .frame(width: size, height: size)
-        .blur(radius: size * 0.012)
-        .clipShape(Circle())
-        .drawingGroup()
-        .animation(.easeInOut(duration: 0.6), value: palette)
-    }
-
-    /// Two colours from the cover, split down a slanted line.
-    private func halves(size: CGFloat) -> some View {
-        let colors = coverColors
-        let first = colors[0]
-        let second = colors.count > 1 ? colors[1] : colors[0].khyloShifted(hue: 0.5, brightness: 0.8)
-        var random = KhyloSeededRandom(seed: (player.current?.id ?? "") + "halves")
-        let tilt = random.next() * 60 - 30
         return ZStack {
-            Circle().fill(first)
-            Rectangle().fill(second)
-                .frame(width: size, height: size * 2)
-                .offset(x: size / 2)
-                .rotationEffect(.degrees(tilt))
-            Circle().fill(Color.black.opacity(0.2))
-            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.45)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
-        }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-        .drawingGroup()
-        .animation(.easeInOut(duration: 0.6), value: palette)
-    }
-
-    /// Rings of the cover's colours, out from the label.
-    private func bullseye(size: CGFloat) -> some View {
-        let colors = coverColors
-        return ZStack {
-            Circle().fill(Color(hex: "#0B0B0C"))
-            ForEach(0 ..< 7, id: \.self) { index in
-                let outer = 0.98 - CGFloat(index) * 0.095
-                Circle()
-                    .fill(colors[index % colors.count].opacity(0.85))
-                    .frame(width: size * outer, height: size * outer)
+            Circle().fill(RadialGradient(colors: [Color(hex: "#F2B04A"), Color(hex: "#C57A1E"), Color(hex: "#7A3F0E")], center: .center, startRadius: 0, endRadius: size / 2))
+            ForEach(0 ..< flecks.count, id: \.self) { index in
+                let fleck = flecks[index]
+                Capsule()
+                    .fill(Color(hex: "#2B1403").opacity(0.55))
+                    .frame(width: size * fleck.length, height: size * fleck.thickness)
+                    .rotationEffect(.degrees(fleck.angle))
+                    .offset(x: size * fleck.x, y: size * fleck.y)
             }
-            Circle().fill(Color.black.opacity(0.2))
+            .blur(radius: size * 0.004)
+            Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: max(1, size * 0.008))
             Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.4)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
         }
         .frame(width: size, height: size)
         .clipShape(Circle())
         .drawingGroup()
+    }
+
+    /// Black with pale wisps curling through it, in no colour at all.
+    private func smoke(size: CGFloat) -> some View {
+        var random = KhyloSeededRandom(seed: (player.current?.id ?? "") + "smoke")
+        let wisps: [(x: CGFloat, y: CGFloat, length: CGFloat, thickness: CGFloat, angle: Double, alpha: Double)] = (0 ..< 9).map { _ in
+            (CGFloat(random.next() - 0.5) * 0.7, CGFloat(random.next() - 0.5) * 0.7, CGFloat(0.55 + random.next() * 0.5), CGFloat(0.03 + random.next() * 0.05), random.next() * 180, 0.16 + random.next() * 0.26)
+        }
+        let clouds: [(x: CGFloat, y: CGFloat, radius: CGFloat)] = (0 ..< 4).map { _ in
+            (CGFloat(random.next() - 0.5) * 0.6, CGFloat(random.next() - 0.5) * 0.6, CGFloat(0.16 + random.next() * 0.16))
+        }
+        return ZStack {
+            Circle().fill(Color(hex: "#0C0C0E"))
+            ForEach(0 ..< clouds.count, id: \.self) { index in
+                let cloud = clouds[index]
+                Circle()
+                    .fill(Color.white.opacity(0.13))
+                    .frame(width: size * cloud.radius * 2, height: size * cloud.radius * 2)
+                    .offset(x: size * cloud.x, y: size * cloud.y)
+            }
+            .blur(radius: size * 0.09)
+            ForEach(0 ..< wisps.count, id: \.self) { index in
+                let wisp = wisps[index]
+                Capsule()
+                    .fill(Color.white.opacity(wisp.alpha))
+                    .frame(width: size * wisp.length, height: size * wisp.thickness)
+                    .rotationEffect(.degrees(wisp.angle))
+                    .offset(x: size * wisp.x, y: size * wisp.y)
+            }
+            .blur(radius: size * 0.03)
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.5)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .drawingGroup()
+    }
+
+    /// Brushed gold foil, bright and dark in turn around the record.
+    private func gold(size: CGFloat) -> some View {
+        ZStack {
+            Circle().fill(AngularGradient(
+                colors: ["#B88A2E", "#F7E29A", "#B88A2E", "#6F4A12", "#E9C566", "#B88A2E", "#F7E29A", "#80561A", "#B88A2E"].map { Color(hex: $0) },
+                center: .center,
+                angle: .degrees(-20)
+            ))
+            Circle().fill(RadialGradient(colors: [Color.white.opacity(0.16), .clear], center: .center, startRadius: 0, endRadius: size * 0.3))
+            Circle().strokeBorder(Color(hex: "#FFF3C4").opacity(0.5), lineWidth: max(1, size * 0.008))
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.42)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .drawingGroup()
+    }
+
+    /// Black vinyl with one big drop of the cover's colour bleeding in from the edge.
+    private func inkDrop(size: CGFloat) -> some View {
+        let colors = coverColors
+        var random = KhyloSeededRandom(seed: (player.current?.id ?? "") + "ink")
+        let angle = random.next() * .pi * 2
+        let centre = CGPoint(x: CGFloat(cos(angle)) * 0.32, y: CGFloat(sin(angle)) * 0.32)
+        let main = colors[0]
+        let second = colors.count > 1 ? colors[1] : main.khyloShifted(hue: 0.08, brightness: 0.9)
+        return ZStack {
+            Circle().fill(Color(hex: "#0B0B0D"))
+            Circle()
+                .fill(main.opacity(0.95))
+                .frame(width: size * 0.78, height: size * 0.78)
+                .offset(x: size * centre.x, y: size * centre.y)
+                .blur(radius: size * 0.11)
+            Circle()
+                .fill(second.opacity(0.8))
+                .frame(width: size * 0.4, height: size * 0.4)
+                .offset(x: size * centre.x * 1.25, y: size * centre.y * 1.25)
+                .blur(radius: size * 0.08)
+            ForEach(0 ..< 7, id: \.self) { index in
+                let drift = CGFloat(index) * 0.1 + 0.05
+                Circle()
+                    .fill(main.opacity(0.7))
+                    .frame(width: size * (0.014 + CGFloat(index % 3) * 0.008), height: size * (0.014 + CGFloat(index % 3) * 0.008))
+                    .offset(x: size * (centre.x * 1.5 + CGFloat(sin(Double(index) * 1.9)) * drift), y: size * (centre.y * 1.5 + CGFloat(cos(Double(index) * 2.3)) * drift))
+            }
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.45)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .drawingGroup()
         .animation(.easeInOut(duration: 0.6), value: palette)
     }
 
-    /// See-through vinyl: a pale, tinted disc with a bright rim.
-    private func clearDisc(size: CGFloat) -> some View {
-        let tint = coverColors[0]
+    /// Plain black with a glowing ring of the cover's colour just outside the label.
+    private func halo(size: CGFloat) -> some View {
+        let colors = coverColors
+        let glow = colors[0]
         return ZStack {
-            Circle().fill(tint.opacity(0.22))
-            Circle().fill(RadialGradient(colors: [Color.white.opacity(0.10), tint.opacity(0.30)], center: .center, startRadius: size * 0.1, endRadius: size / 2))
-            Circle().strokeBorder(Color.white.opacity(0.35), lineWidth: max(1, size * 0.006))
-            Circle().strokeBorder(tint.opacity(0.5), lineWidth: size * 0.03).padding(size * 0.012)
+            Circle().fill(RadialGradient(colors: [Color(hex: "#1E1E21"), Color(hex: "#09090A")], center: .center, startRadius: 0, endRadius: size / 2))
+            Circle()
+                .stroke(glow.opacity(0.55), lineWidth: size * 0.05)
+                .frame(width: size * 0.56, height: size * 0.56)
+                .blur(radius: size * 0.03)
+            Circle()
+                .stroke(glow, lineWidth: max(2, size * 0.01))
+                .frame(width: size * 0.56, height: size * 0.56)
+            Circle()
+                .stroke(glow.opacity(0.35), lineWidth: max(1, size * 0.004))
+                .frame(width: size * 0.9, height: size * 0.9)
+            Circle().fill(RadialGradient(colors: [.clear, Color.black.opacity(0.4)], center: .center, startRadius: size * 0.3, endRadius: size / 2))
         }
         .frame(width: size, height: size)
+        .clipShape(Circle())
+        .drawingGroup()
         .animation(.easeInOut(duration: 0.6), value: palette)
     }
 
@@ -777,21 +842,21 @@ private struct KhyloWaveScrubber: View {
     }
 }
 
-// MARK: - Cyberpunk
+// MARK: - Hi-Fi
 
-/// A neon heads-up display: grid floor, scanlines, a glitching cover, a
-/// visualizer and a segmented time bar.
-struct KhyloCyberpunkPlayer: View {
+/// A vintage amplifier: brushed dark metal, two amber-lit VU meters whose needles
+/// swing with the music, the cover in a recessed frame, and warm lettering.
+struct KhyloHiFiPlayer: View {
 
     let actions: KhyloPlayerActions
 
     @ObservedObject private var player = KhyloAudioPlayer.shared
-    @ObservedObject private var network = KhyloNetwork.shared
     @Environment(\.khyloLandscape) private var isLandscape
+    @State private var gain: Double = 0
 
-    static let magenta = Color(hex: "#FF2BD6")
-    static let cyan = Color(hex: "#00F0FF")
-    static let yellow = Color(hex: "#F5FF3B")
+    static let amber = Color(hex: "#F2C77A")
+    static let amberSoft = Color(hex: "#C9A468")
+    static let metal = Color(hex: "#15120F")
 
     var body: some View {
         ZStack {
@@ -800,292 +865,201 @@ struct KhyloCyberpunkPlayer: View {
             VStack(spacing: 0) {
                 KhyloThemedTopBar(
                     actions: actions,
-                    foreground: Self.cyan,
-                    labelFont: .system(size: 11, weight: .bold, design: .monospaced),
-                    labelPrefix: "// "
+                    foreground: Self.amber,
+                    labelFont: .system(size: 10, weight: .semibold, design: .serif),
+                    labelPrefix: ""
                 )
                 .padding(.top, 8)
 
                 if isLandscape {
-                    HStack(spacing: 12) {
-                        art
+                    HStack(spacing: 18) {
+                        cover
                             .padding(.leading, 28)
                             .padding(.vertical, 6)
                             .frame(maxWidth: .infinity)
                         VStack(spacing: 0) {
                             Spacer(minLength: 0)
+                            meters
                             controls
                             Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity)
+                        .padding(.trailing, 16)
                     }
                 } else {
-                    Spacer(minLength: 6)
-
-                    art
-                        .padding(.horizontal, 20)
-
-                    Spacer(minLength: 12)
-
+                    Spacer(minLength: 8)
+                    cover
+                        .padding(.horizontal, 54)
+                    Spacer(minLength: 14)
+                    meters
+                    Spacer(minLength: 10)
                     controls
                 }
             }
         }
-    }
-
-    private var controls: some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text((player.current?.name ?? "").uppercased())
-                    .font(.system(size: 24, weight: .black, design: .monospaced))
-                    .foregroundColor(.white)
-                    .shadow(color: Self.magenta.opacity(0.9), radius: 8)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                KhyloThemedArtistLine(actions: actions, color: Self.cyan, font: .system(size: 15, weight: .semibold, design: .monospaced))
-                HStack(spacing: 14) {
-                    Text("SRC ▸ \(player.quality?.short.uppercased() ?? "STREAM")")
-                    Text("SIG ▸ \(network.isOnline ? "ONLINE" : "OFFLINE")")
-                }
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundColor(Self.yellow)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 28)
-
-            KhyloNeonVisualizer(isPlaying: player.isPlaying)
-                .frame(height: 34)
-                .padding(.horizontal, 28)
-                .padding(.top, 14)
-
-            KhyloSegmentedScrubber(clock: player.clock) { player.seek(to: $0) }
-                .padding(.horizontal, 28)
-                .padding(.top, 12)
-
-            transport
-                .padding(.horizontal, 24)
-                .padding(.top, 14)
-
-            KhyloThemedBottomRow(actions: actions, color: Self.cyan)
-                .padding(.horizontal, 28)
-                .padding(.top, 20)
-                .padding(.bottom, 12)
+        .onAppear { gain = player.isPlaying ? 1 : 0 }
+        .onChange(of: player.isPlaying) { _, playing in
+            withAnimation(.easeOut(duration: playing ? 0.5 : 1.1)) { gain = playing ? 1 : 0 }
         }
     }
 
     private var background: some View {
         ZStack {
-            Color(hex: "#06050A")
-            RadialGradient(colors: [Self.magenta.opacity(0.28), .clear], center: .top, startRadius: 10, endRadius: 420)
-            // Perspective grid floor.
+            LinearGradient(colors: [Color(hex: "#221B14"), Color(hex: "#0C0A08")], startPoint: .top, endPoint: .bottom)
+            // Fine brushing across the metal.
             Canvas { context, size in
-                let horizon = size.height * 0.62
-                let vanish = CGPoint(x: size.width / 2, y: horizon)
-                for i in -10 ... 10 {
-                    var line = Path()
-                    line.move(to: vanish)
-                    line.addLine(to: CGPoint(x: size.width / 2 + CGFloat(i) * size.width * 0.18, y: size.height))
-                    context.stroke(line, with: .color(Self.magenta.opacity(0.22)), lineWidth: 1)
-                }
-                var depth: CGFloat = 4
-                while horizon + depth < size.height {
-                    var line = Path()
-                    line.move(to: CGPoint(x: 0, y: horizon + depth))
-                    line.addLine(to: CGPoint(x: size.width, y: horizon + depth))
-                    context.stroke(line, with: .color(Self.cyan.opacity(0.14)), lineWidth: 1)
-                    depth *= 1.35
+                var random = KhyloSeededRandom(seed: "brushed")
+                for _ in 0 ..< 220 {
+                    let y = CGFloat(random.next()) * size.height
+                    let x = CGFloat(random.next()) * size.width
+                    let length = 60 + CGFloat(random.next()) * 220
+                    context.fill(
+                        Path(CGRect(x: x, y: y, width: length, height: 0.6)),
+                        with: .color(Color.white.opacity(0.012 + random.next() * 0.025))
+                    )
                 }
             }
-            // Scanlines.
-            Canvas { context, size in
-                for y in stride(from: 0, to: size.height, by: 3) {
-                    context.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)), with: .color(.black.opacity(0.22)))
-                }
-            }
-            .allowsHitTesting(false)
+            RadialGradient(colors: [Self.amber.opacity(0.10), .clear], center: .top, startRadius: 10, endRadius: 460)
         }
         .ignoresSafeArea()
     }
 
-    private var art: some View {
-        let shape = KhyloCutCornerShape(cut: 22)
-        return TimelineView(.periodic(from: .now, by: 0.12)) { context in
-            let tick = Int(context.date.timeIntervalSinceReferenceDate * 8)
-            // Every few seconds the cover glitches for a moment.
-            let glitch = player.isPlaying && (tick % 41 == 0 || tick % 41 == 1)
-            let url = player.displayArtworkURL(width: 700)
-            ZStack {
-                KhyloImage(url: url, placeholderSymbol: "music.note")
-                if glitch {
-                    KhyloImage(url: url, showsPlaceholder: false)
-                        .colorMultiply(.red)
-                        .blendMode(.screen)
-                        .offset(x: 6)
-                        .opacity(0.7)
-                    KhyloImage(url: url, showsPlaceholder: false)
-                        .colorMultiply(Self.cyan)
-                        .blendMode(.screen)
-                        .offset(x: -6, y: 2)
-                        .opacity(0.7)
-                }
-            }
+    private var cover: some View {
+        KhyloImage(url: player.displayArtworkURL(width: 700), placeholderSymbol: "music.note")
             .aspectRatio(1, contentMode: .fit)
-            .clipShape(shape)
-            .overlay(shape.stroke(Self.cyan, lineWidth: 2))
-            .shadow(color: Self.cyan.opacity(0.7), radius: 12)
-            .shadow(color: Self.magenta.opacity(0.4), radius: 28)
-        }
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .padding(8)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(LinearGradient(colors: [Color(hex: "#050403"), Color(hex: "#1B1611")], startPoint: .top, endPoint: .bottom))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [Self.amberSoft.opacity(0.7), Self.amberSoft.opacity(0.12)], startPoint: .top, endPoint: .bottom), lineWidth: 1.5)
+            )
+            .shadow(color: Self.amber.opacity(0.18), radius: 28, y: 8)
+            .shadow(color: .black.opacity(0.6), radius: 18, y: 12)
     }
 
-    private var transport: some View {
-        HStack(spacing: 0) {
-            neonToggle(symbol: "shuffle", isOn: player.isShuffled) { player.toggleShuffle() }
-            Spacer()
-            neonButton(symbol: "backward.end.fill", size: 54) { player.previous() }
-            Spacer()
-            Button {
-                player.togglePlayPause()
-            } label: {
-                ZStack {
-                    KhyloCutCornerShape(cut: 14).fill(Self.magenta)
-                    KhyloCutCornerShape(cut: 14).stroke(.white.opacity(0.8), lineWidth: 1.5)
-                    if player.isBuffering && player.isPlaying {
-                        ProgressView().tint(.black)
-                    } else {
-                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 28, weight: .black))
-                            .foregroundColor(.black)
-                    }
-                }
-                .frame(width: 76, height: 76)
-                .shadow(color: Self.magenta.opacity(0.9), radius: 16)
+    private var meters: some View {
+        HStack(spacing: 14) {
+            KhyloVUMeter(label: "L", phase: 0, gain: gain)
+            KhyloVUMeter(label: "R", phase: 1.7, gain: gain)
+        }
+        .padding(.horizontal, 28)
+    }
+
+    private var controls: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 4) {
+                Text(player.current?.name ?? "")
+                    .font(.system(size: 24, weight: .bold, design: .serif))
+                    .foregroundColor(Self.amber)
+                    .shadow(color: Self.amber.opacity(0.45), radius: 10)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                KhyloThemedArtistLine(actions: actions, color: Self.amberSoft, font: .system(size: 15, weight: .medium, design: .serif))
             }
-            .buttonStyle(KhyloScaleButtonStyle())
-            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
-            Spacer()
-            neonButton(symbol: "forward.end.fill", size: 54) { player.next() }
-            Spacer()
-            neonToggle(symbol: player.repeatMode == .one ? "repeat.1" : "repeat", isOn: player.repeatMode != .off) {
-                player.repeatMode = player.repeatMode.next
-            }
-        }
-    }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 30)
+            .padding(.top, 14)
 
-    private func neonButton(symbol: String, size: CGFloat, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(Self.cyan)
-                .frame(width: size, height: size)
-                .overlay(KhyloCutCornerShape(cut: 10).stroke(Self.cyan.opacity(0.8), lineWidth: 1.5))
-                .shadow(color: Self.cyan.opacity(0.6), radius: 8)
-        }
-        .buttonStyle(KhyloScaleButtonStyle())
-    }
+            KhyloWaveScrubber(
+                clock: player.clock,
+                seed: player.current?.id ?? "",
+                played: Self.amber,
+                rest: Self.amberSoft.opacity(0.22),
+                text: Self.amberSoft
+            ) { player.seek(to: $0) }
+                .padding(.horizontal, 28)
+                .padding(.top, 16)
 
-    private func neonToggle(symbol: String, isOn: Bool, action: @escaping () -> Void) -> some View {
-        Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            action()
-        } label: {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundColor(isOn ? Self.yellow : .white.opacity(0.5))
-                .shadow(color: isOn ? Self.yellow.opacity(0.8) : .clear, radius: 6)
-                .frame(width: 40, height: 44)
-        }
-        .buttonStyle(.plain)
-    }
-}
+            KhyloThemedTransport(fill: Self.amber, glyph: Color(hex: "#1A1208"), secondary: Self.amber)
+                .padding(.horizontal, 26)
+                .padding(.top, 12)
 
-/// A rectangle with its corners clipped off at an angle.
-struct KhyloCutCornerShape: Shape {
-    let cut: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        Path { path in
-            path.move(to: CGPoint(x: rect.minX + cut, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cut))
-            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-            path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + cut))
-            path.closeSubpath()
+            KhyloThemedBottomRow(actions: actions, color: Self.amberSoft)
+                .padding(.horizontal, 30)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
         }
     }
 }
 
-/// Bars that bounce while music plays (a light show, not a measurement).
-private struct KhyloNeonVisualizer: View {
-    let isPlaying: Bool
+/// One analogue VU meter: a backlit face, a printed scale with a red end, and a needle
+/// that swings while music plays and settles when it stops.
+struct KhyloVUMeter: View, Animatable {
+
+    let label: String
+    let phase: Double
+    var gain: Double
+
+    var animatableData: Double {
+        get { gain }
+        set { gain = newValue }
+    }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !isPlaying)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            GeometryReader { proxy in
-                let count = 32
-                let gap: CGFloat = 3
-                let width = (proxy.size.width - gap * CGFloat(count - 1)) / CGFloat(count)
-                HStack(alignment: .bottom, spacing: gap) {
-                    ForEach(0 ..< count, id: \.self) { i in
-                        let wave = abs(sin(t * 2.6 + Double(i) * 0.55) * cos(t * 1.3 + Double(i) * 0.21))
-                        let level = isPlaying ? 0.15 + 0.85 * wave : 0.08
-                        Rectangle()
-                            .fill(LinearGradient(colors: [KhyloCyberpunkPlayer.cyan, KhyloCyberpunkPlayer.magenta], startPoint: .bottom, endPoint: .top))
-                            .frame(width: width, height: max(2, proxy.size.height * level))
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate + phase
+            // Two slow waves and a quick one, so the needle never settles into a pattern.
+            let swing = (sin(t * 2.9) * 0.5 + sin(t * 1.7 + 1.3) * 0.35 + sin(t * 6.1) * 0.15) * 0.5 + 0.5
+            let level = 0.06 + gain * (0.18 + 0.62 * swing)
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(RadialGradient(colors: [Color(hex: "#F7E0AE"), Color(hex: "#D39B4C"), Color(hex: "#8E5E22")], center: .center, startRadius: 0, endRadius: 120))
+                Canvas { context, size in
+                    let pivot = CGPoint(x: size.width / 2, y: size.height * 1.12)
+                    let radius = size.height * 0.92
+                    let sweep = 100.0
+                    for i in 0 ... 20 {
+                        let fraction = Double(i) / 20
+                        let angle = (-sweep / 2 + sweep * fraction - 90) * .pi / 180
+                        let major = i % 4 == 0
+                        let inner = radius - (major ? 11 : 6)
+                        var tick = Path()
+                        tick.move(to: CGPoint(x: pivot.x + CGFloat(cos(angle)) * inner, y: pivot.y + CGFloat(sin(angle)) * inner))
+                        tick.addLine(to: CGPoint(x: pivot.x + CGFloat(cos(angle)) * radius, y: pivot.y + CGFloat(sin(angle)) * radius))
+                        let red = fraction > 0.72
+                        context.stroke(tick, with: .color(red ? Color(hex: "#B0301F") : Color(hex: "#3A2610")), lineWidth: major ? 1.6 : 0.9)
                     }
+                    var arc = Path()
+                    arc.addArc(center: pivot, radius: radius - 2, startAngle: .degrees(-90 - sweep / 2), endAngle: .degrees(-90 + sweep / 2), clockwise: false)
+                    context.stroke(arc, with: .color(Color(hex: "#3A2610").opacity(0.7)), lineWidth: 0.8)
+                    var redArc = Path()
+                    redArc.addArc(center: pivot, radius: radius - 2, startAngle: .degrees(-90 - sweep / 2 + sweep * 0.72), endAngle: .degrees(-90 + sweep / 2), clockwise: false)
+                    context.stroke(redArc, with: .color(Color(hex: "#B0301F")), lineWidth: 2.2)
                 }
-                .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-        }
-        .shadow(color: KhyloCyberpunkPlayer.magenta.opacity(0.5), radius: 6)
-        .accessibilityHidden(true)
-    }
-}
-
-/// Time as a row of lit segments; drag along it to move through the song.
-private struct KhyloSegmentedScrubber: View {
-    @ObservedObject var clock: KhyloPlaybackClock
-    let onSeek: (Double) -> Void
-
-    @State private var dragValue: Double?
-
-    var body: some View {
-        let value = dragValue ?? clock.currentTime
-        let fraction = clock.duration > 0 ? min(1, max(0, value / clock.duration)) : 0
-        VStack(spacing: 6) {
-            GeometryReader { proxy in
-                let count = 40
-                let gap: CGFloat = 2.5
-                let width = (proxy.size.width - gap * CGFloat(count - 1)) / CGFloat(count)
-                HStack(spacing: gap) {
-                    ForEach(0 ..< count, id: \.self) { i in
-                        let lit = Double(i) < fraction * Double(count)
-                        Rectangle()
-                            .fill(lit ? KhyloCyberpunkPlayer.cyan : Color.white.opacity(0.1))
-                            .frame(width: width)
-                            .shadow(color: lit ? KhyloCyberpunkPlayer.cyan.opacity(0.7) : .clear, radius: 4)
+                Text("VU")
+                    .font(.system(size: 13, weight: .bold, design: .serif))
+                    .foregroundColor(Color(hex: "#3A2610"))
+                    .offset(y: 14)
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold, design: .serif))
+                    .foregroundColor(Color(hex: "#3A2610").opacity(0.8))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(8)
+                // The needle, pivoting below the face.
+                GeometryReader { proxy in
+                    let pivot = CGPoint(x: proxy.size.width / 2, y: proxy.size.height * 1.12)
+                    let length = proxy.size.height * 0.88
+                    let angle = (-50 + 100 * level - 90) * .pi / 180
+                    Path { path in
+                        path.move(to: pivot)
+                        path.addLine(to: CGPoint(x: pivot.x + CGFloat(cos(angle)) * length, y: pivot.y + CGFloat(sin(angle)) * length))
                     }
+                    .stroke(Color(hex: "#24160A"), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+                    .shadow(color: .black.opacity(0.35), radius: 2, x: 2, y: 2)
                 }
-                .contentShape(Rectangle())
-                .highPriorityGesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { dragValue = min(1, max(0, $0.location.x / proxy.size.width)) * clock.duration }
-                        .onEnded { gesture in
-                            onSeek(min(1, max(0, gesture.location.x / proxy.size.width)) * clock.duration)
-                            dragValue = nil
-                        }
-                )
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                // Glass over the top.
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.22), .clear], startPoint: .topLeading, endPoint: .center))
             }
-            .frame(height: 12)
-
-            HStack {
-                Text(KhyloNowPlayingScreen.format(value))
-                Spacer()
-                Text("-" + KhyloNowPlayingScreen.format(max(0, clock.duration - value)))
-            }
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .foregroundColor(KhyloCyberpunkPlayer.cyan.opacity(0.8))
+            .frame(height: 96)
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(hex: "#050403"), lineWidth: 4))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(hex: "#6B5330").opacity(0.7), lineWidth: 1))
+            .shadow(color: Color(hex: "#F2C77A").opacity(0.18), radius: 14)
         }
     }
 }
@@ -1349,20 +1323,18 @@ struct KhyloThemePreview: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
-            case .cyberpunk:
-                Color(hex: "#06050A")
-                Canvas { context, size in
-                    for i in -4 ... 4 {
-                        var line = Path()
-                        line.move(to: CGPoint(x: size.width / 2, y: size.height * 0.55))
-                        line.addLine(to: CGPoint(x: size.width / 2 + CGFloat(i) * 22, y: size.height))
-                        context.stroke(line, with: .color(KhyloCyberpunkPlayer.magenta.opacity(0.5)), lineWidth: 1)
+            case .hifi:
+                LinearGradient(colors: [Color(hex: "#2A2118"), Color(hex: "#0D0B09")], startPoint: .top, endPoint: .bottom)
+                HStack(spacing: 8) {
+                    ForEach(0 ..< 2, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(RadialGradient(colors: [Color(hex: "#F6DDA8"), Color(hex: "#C58F3F")], center: .center, startRadius: 0, endRadius: 30))
+                            .frame(width: 34, height: 26)
+                            .overlay(Capsule().fill(Color(hex: "#2A1A0C")).frame(width: 1.5, height: 20).rotationEffect(.degrees(24)).offset(y: 2))
                     }
                 }
-                KhyloCutCornerShape(cut: 6).stroke(KhyloCyberpunkPlayer.cyan, lineWidth: 1.5)
-                    .frame(width: 34, height: 34)
-                    .shadow(color: KhyloCyberpunkPlayer.cyan, radius: 4)
-                    .offset(y: -8)
+                .offset(y: 16)
+                RoundedRectangle(cornerRadius: 4).fill(Color(hex: "#C9B79C")).frame(width: 30, height: 30).offset(y: -18)
             }
         }
         .frame(height: 84)
@@ -1487,7 +1459,7 @@ struct KhyloPlayerSettingsSheet: View {
         } header: {
             Text("Player Theme")
         } footer: {
-            Text("Vinyl and Cyberpunk change the whole player. The others restyle it.")
+            Text("Vinyl and Hi-Fi change the whole player. The others restyle it.")
         }
 
         Section("Sound") {
