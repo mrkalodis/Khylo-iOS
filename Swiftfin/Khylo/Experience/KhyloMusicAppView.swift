@@ -16,6 +16,7 @@ struct KhyloMusicAppView: View {
     enum TabID: Hashable {
         case music
         case search
+        case stats
         case downloads
     }
 
@@ -34,6 +35,12 @@ struct KhyloMusicAppView: View {
                 stack(.search) { KhyloSearchScreen() }
             } label: {
                 tabLabel("Search", "magnifyingglass")
+            }
+
+            Tab(value: TabID.stats) {
+                stack(.stats) { KhyloStatsScreen() }
+            } label: {
+                tabLabel("Stats", "chart.bar")
             }
 
             Tab(value: TabID.downloads) {
