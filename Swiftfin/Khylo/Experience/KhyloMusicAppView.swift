@@ -59,6 +59,7 @@ struct KhyloMusicAppView: View {
         }
         .task {
             _ = KhyloHandoff.shared
+            KhyloMirror.shared.start()
             await KhyloHandoff.shared.refresh()
         }
         .task {

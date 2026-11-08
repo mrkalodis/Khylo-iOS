@@ -25,7 +25,8 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
         }
     }
 
-    private let timer = PokeIntervalTimer()
+    // Every 2 seconds, so devices mirroring this one stay close.
+    private let timer = PokeIntervalTimer(defaultInterval: 2)
     private var hasSentStart = false
     private var item: MediaPlayerItem?
     private var lastPlaybackRequestStatus: MediaPlayerManager.PlaybackRequestStatus = .playing
@@ -96,6 +97,8 @@ class MediaProgressObserver: ViewModel, MediaPlayerObserver {
     private func playbackRequestStatusDidChange(_ newStatus: MediaPlayerManager.PlaybackRequestStatus) {
         timer.poke()
         lastPlaybackRequestStatus = newStatus
+        // Pause and resume reach other devices at once, not on the next beat.
+        if hasSentStart { sendReport() }
     }
 
     // TODO: respond to error

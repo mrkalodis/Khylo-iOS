@@ -148,10 +148,14 @@ enum KhyloPlayback {
     /// The player fetches the item again before it starts, so the live position
     /// and the missing chapters are applied to that fresh copy.
     static func playLive(_ item: BaseItemDto, airedAt: Date, router: Router.Wrapper) throws {
-        guard let provider = item.getPlaybackItemProvider(userSession: KhyloAPI.session) else {
-            throw PlaybackError.unavailable
-        }
-        let live = provider.modifyingItem { item in
+        guard let live = liveProvider(item, airedAt: airedAt) else { throw PlaybackError.unavailable }
+        router.route(to: .videoPlayer(provider: live, queue: nil))
+    }
+
+    /// A Khylo TV program, opened at the point the channel has reached.
+    static func liveProvider(_ item: BaseItemDto, airedAt: Date) -> MediaPlayerItemProvider? {
+        guard let provider = item.getPlaybackItemProvider(userSession: KhyloAPI.session) else { return nil }
+        return provider.modifyingItem { item in
             let ticks = Int(max(0, Date().timeIntervalSince(airedAt)) * 10_000_000)
             if item.userData == nil {
                 item.userData = UserItemDataDto(itemID: item.id, key: item.id ?? "")
@@ -163,7 +167,6 @@ enum KhyloPlayback {
             // Scheduled programs follow the broadcast, so they can't be handed to another device.
             item.tags = (item.tags ?? []) + [KhyloHandoff.scheduledMarker]
         }
-        router.route(to: .videoPlayer(provider: live, queue: nil))
     }
 
     /// Resolves what Play should actually start, with full media source info.

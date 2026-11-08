@@ -24,6 +24,8 @@ struct KhyloStatsScreen: View {
     }
 
     var header: AnyView?
+    /// Opened from another page (with its own back button and title).
+    var isPushed = false
 
     @State private var section: Section = .week
     @State private var isShowingPrivacy = false
@@ -44,9 +46,11 @@ struct KhyloStatsScreen: View {
                         header
                     } else {
                         HStack {
-                            Text("Stats")
-                                .font(.system(size: 34, weight: .bold))
-                                .foregroundColor(.white)
+                            if !isPushed {
+                                Text("Stats")
+                                    .font(.system(size: 34, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
                             Spacer()
                             privacyButton
                         }
@@ -70,7 +74,9 @@ struct KhyloStatsScreen: View {
                 .padding(.bottom, 40)
             }
         }
-        .toolbarVisibility(.hidden, for: .navigationBar)
+        .toolbarVisibility(isPushed ? .automatic : .hidden, for: .navigationBar)
+        .navigationTitle(isPushed ? "Listening Stats" : "")
+        .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $isShowingPrivacy) { KhyloStatsPrivacySheet() }
     }
 

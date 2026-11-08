@@ -114,6 +114,9 @@ final class KhyloHandoff: ObservableObject {
         let subtitleStreamIndex: Int?
     }
 
+    /// The video player, while one is open and not finished.
+    var activeVideoManager: MediaPlayerManager? { videoManager }
+
     private var videoManager: MediaPlayerManager? {
         guard let manager, manager.state != .stopped, manager.state != .error else { return nil }
         return manager
@@ -153,6 +156,29 @@ final class KhyloHandoff: ObservableObject {
         } else {
             _ = stopAudioIfPlaying()
         }
+    }
+
+    /// Pause, resume and seek from the server (a mirror) while music or an audiobook is playing here.
+    /// Returns true when it was handled here.
+    func handleAudioPlaystate(_ command: PlaystateRequest) -> Bool {
+        let player = KhyloAudioPlayer.shared
+        guard videoManager == nil, player.isActive else { return false }
+        switch command.command {
+        case .pause:
+            player.pause()
+        case .unpause:
+            player.resume()
+        case .seek:
+            guard let ticks = command.seekPositionTicks else { return true }
+            player.seek(to: Double(ticks) / 10_000_000)
+        case .nextTrack:
+            player.next()
+        case .previousTrack:
+            player.previous()
+        default:
+            return false
+        }
+        return true
     }
 
     /// A stop from the server while music or an audiobook is playing here.

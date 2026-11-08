@@ -79,6 +79,14 @@ extension VideoPlayer.PlaybackControls {
                 }
                 #endif
 
+                #if os(iOS)
+                if manager.item.type == .tvChannel, KhyloRecording.canRecord, let channelID = manager.item.id {
+                    KhyloRecordButton(channelID: channelID)
+                        .frame(width: Self.buttonSize, height: Self.buttonSize)
+                        .modifier(OverlayBarButtonStyleModifier())
+                }
+                #endif
+
                 ActionButtons()
                     .frame(height: Self.buttonSize)
                     .padding(.horizontal)

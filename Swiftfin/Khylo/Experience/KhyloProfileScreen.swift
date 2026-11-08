@@ -57,6 +57,16 @@ struct KhyloProfileScreen: View {
 
                 Section {
                     NavigationLink {
+                        KhyloStatsScreen(isPushed: true)
+                    } label: {
+                        Label("Listening Stats", systemImage: "chart.bar")
+                    }
+                } footer: {
+                    Text("Your weekly stats, quarterly reviews and year-end Wrapped. Private to you.")
+                }
+
+                Section {
+                    NavigationLink {
                         KhyloAddDeviceScreen()
                     } label: {
                         Label("Add a Device", systemImage: "qrcode.viewfinder")

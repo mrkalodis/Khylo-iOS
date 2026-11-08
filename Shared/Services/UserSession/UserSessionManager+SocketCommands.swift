@@ -77,6 +77,7 @@ extension UserSessionManager {
     private func onReceive(playstateCommand: PlaystateRequest) {
         // Music or an audiobook playing here lets go too.
         if playstateCommand.command == .stop, KhyloHandoff.shared.stopAudioIfPlaying() { return }
+        if KhyloHandoff.shared.handleAudioPlaystate(playstateCommand) { return }
         guard let mediaPlayerManager else { return }
 
         switch playstateCommand.command {
@@ -133,6 +134,11 @@ extension UserSessionManager {
         case .playTrailers:
             guard let itemID = generalCommand.arguments?["ItemId"] else { return }
             playTrailers(itemID: itemID, userSession: currentSession)
+        case .sendString:
+            // A mirror asking this device to tune to a Khylo TV channel.
+            if let text = generalCommand.arguments?["String"], text.hasPrefix(KhyloMirror.channelPrefix) {
+                KhyloMirror.shared.tuneChannel(String(text.dropFirst(KhyloMirror.channelPrefix.count)))
+            }
         case .displayMessage:
             // TODO: Implement via Toast
             return

@@ -221,15 +221,23 @@ struct KhyloHandoffList: View {
 
 struct KhyloHandoffSheet: View {
 
+    enum Mode: String, CaseIterable {
+        case handoff = "Handoff"
+        case mirror = "Mirror"
+    }
+
     var onSent: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
+    @State private var mode: Mode = .handoff
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Handoff")
-                    .font(.system(size: 22, weight: .bold))
-                    .foregroundColor(.white)
+                Picker("", selection: $mode) {
+                    ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 240)
                 Spacer()
                 Button {
                     dismiss()
@@ -246,7 +254,11 @@ struct KhyloHandoffSheet: View {
             .padding(.top, 22)
             .padding(.bottom, 10)
 
-            KhyloHandoffList(onSent: onSent, onFinished: { dismiss() })
+            if mode == .handoff {
+                KhyloHandoffList(onSent: onSent, onFinished: { dismiss() })
+            } else {
+                KhyloMirrorList()
+            }
         }
         .background(KhyloStyle.canvas.ignoresSafeArea())
         .presentationDetents([.medium, .large])
@@ -352,5 +364,117 @@ struct KhyloHandoffCard: View {
         var text = "\(title) from \(device.deviceName)"
         if let left = device.timeLeftText { text += ", \(left)" }
         return text
+    }
+}
+
+
+// MARK: - Mirror list
+
+/// Pick the devices that should play the same thing as this one, together.
+struct KhyloMirrorList: View {
+
+    @ObservedObject private var handoff = KhyloHandoff.shared
+    @ObservedObject private var mirror = KhyloMirror.shared
+    @State private var busyID: String?
+    @State private var hasLoaded = false
+
+    private var followers: Set<String> { Set(mirror.followers(knownDevices: handoff.devices)) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                if !hasLoaded {
+                    ProgressView().tint(.white.opacity(0.6)).frame(maxWidth: .infinity).padding(.top, 50)
+                } else if !handoff.canSend {
+                    message("Start something playing here, then pick the screens that should play it too.")
+                } else if handoff.devices.isEmpty {
+                    message("No other devices found. Open Khylo on your TV or tablet, signed in as you.")
+                } else {
+                    Text("Plays the same thing, together.")
+                        .font(.system(size: 14))
+                        .foregroundColor(KhyloStyle.tertiaryText)
+                        .padding(.horizontal, KhyloStyle.gutter)
+                    ForEach(handoff.devices) { device in
+                        row(device)
+                    }
+                    if let failure = mirror.failure {
+                        Text(failure)
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.8))
+                            .padding(.horizontal, KhyloStyle.gutter)
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.bottom, 30)
+        }
+        .task {
+            while !Task.isCancelled {
+                await handoff.refresh()
+                await mirror.refresh()
+                hasLoaded = true
+                try? await Task.sleep(for: .seconds(4))
+            }
+        }
+    }
+
+    private func message(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 15))
+            .foregroundColor(KhyloStyle.tertiaryText)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 50)
+            .padding(.horizontal, 30)
+    }
+
+    private func symbol(for device: KhyloHandoffDevice) -> String {
+        let client = (device.client ?? "").lowercased()
+        if client.contains("tv") { return "tv" }
+        if client.contains("web") { return "laptopcomputer" }
+        if client.contains("ipad") { return "ipad" }
+        return "iphone"
+    }
+
+    private func row(_ device: KhyloHandoffDevice) -> some View {
+        let isFollowing = followers.contains(device.sessionID)
+        return Button {
+            Task {
+                busyID = device.id
+                _ = await mirror.toggle(device, isFollowing: isFollowing)
+                busyID = nil
+            }
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: symbol(for: device))
+                    .font(.system(size: 22, weight: .light))
+                    .foregroundColor(isFollowing ? KhyloStyle.accent : .white.opacity(0.85))
+                    .frame(width: 34)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(device.deviceName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text(isFollowing ? "Following this screen · tap to stop" : "Plays the same thing, together")
+                        .font(.system(size: 13))
+                        .foregroundColor(isFollowing ? KhyloStyle.accent : KhyloStyle.tertiaryText)
+                }
+                Spacer(minLength: 8)
+                if busyID == device.id {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: isFollowing ? "checkmark.circle.fill" : "plus.circle")
+                        .font(.system(size: 20))
+                        .foregroundColor(isFollowing ? KhyloStyle.accent : .white.opacity(0.6))
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.07))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(isFollowing ? KhyloStyle.accent.opacity(0.5) : Color.white.opacity(0.06), lineWidth: 1))
+            .padding(.horizontal, KhyloStyle.gutter)
+        }
+        .buttonStyle(KhyloScaleButtonStyle())
+        .disabled(busyID != nil)
     }
 }

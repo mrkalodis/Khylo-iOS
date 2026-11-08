@@ -53,6 +53,15 @@ final class KhyloLiveTVModel: ObservableObject {
         !onNow.isEmpty || channels.contains { $0.currentProgram != nil }
     }
 
+    /// A program whose recording state changed.
+    func update(_ program: BaseItemDto) {
+        guard let channelID = program.channelID, var list = programs[channelID],
+              let index = list.firstIndex(where: { $0.id == program.id })
+        else { return }
+        list[index] = program
+        programs[channelID] = list
+    }
+
     func channel(for program: BaseItemDto) -> BaseItemDto? {
         channels.first { $0.id == program.channelID }
     }
@@ -69,6 +78,7 @@ struct KhyloLiveTVScreen: View {
     @StateObject private var model = KhyloLiveTVModel()
     @State private var section: Section = .onNow
     @State private var playError: String?
+    @State private var optionsFor: BaseItemDto?
     @Router private var router
 
     var body: some View {
@@ -102,6 +112,16 @@ struct KhyloLiveTVScreen: View {
         .toolbarVisibility(.hidden, for: .navigationBar)
         .task {
             if model.channels.isEmpty { await model.load() }
+        }
+        .sheet(isPresented: Binding(get: { optionsFor != nil }, set: { if !$0 { optionsFor = nil } })) {
+            if let program = optionsFor {
+                KhyloProgramOptions(
+                    program: program,
+                    channel: model.channel(for: program),
+                    onWatch: { if let channel = model.channel(for: program) { watch(channel) } },
+                    onChanged: { model.update($0) }
+                )
+            }
         }
         .alert("Can't Play", isPresented: .constant(playError != nil), presenting: playError) { _ in
             Button("OK") { playError = nil }
@@ -379,13 +399,19 @@ struct KhyloLiveTVScreen: View {
                 let isAiring = (show.startDate ?? .distantFuture) <= Date() && (show.endDate ?? .distantPast) > Date()
 
                 Button {
-                    if isAiring { watch(channel) }
+                    // Watch what is on now, or record it; a later program can be recorded.
+                    if isAiring && !KhyloRecording.canRecord { watch(channel) } else { optionsFor = show }
                 } label: {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(show.khyloProgramName)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white)
-                            .lineLimit(1)
+                        HStack(spacing: 5) {
+                            if show.timerID != nil || show.seriesTimerID != nil {
+                                Circle().fill(Color(hex: "#E5484D")).frame(width: 7, height: 7)
+                            }
+                            Text(show.khyloProgramName)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                        }
                         if let startDate = show.startDate, let endDate = show.endDate {
                             Text("\(startDate.formatted(date: .omitted, time: .shortened)) – \(endDate.formatted(date: .omitted, time: .shortened))")
                                 .font(.system(size: 11).monospacedDigit())

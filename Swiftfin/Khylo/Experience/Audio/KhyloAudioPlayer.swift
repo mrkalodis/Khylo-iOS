@@ -1270,7 +1270,7 @@ final class KhyloAudioPlayer: ObservableObject {
 
     private func report(force: Bool) {
         guard startedItem != nil, startedItem === activeItem,
-              force || Date().timeIntervalSince(lastReport) > 10,
+              force || Date().timeIntervalSince(lastReport) > 2,
               let info = stateInfo(),
               let client = KhyloAPI.session?.client
         else { return }

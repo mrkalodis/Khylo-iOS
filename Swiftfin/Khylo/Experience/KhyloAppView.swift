@@ -106,6 +106,7 @@ struct KhyloAppView: View {
         .task {
             // Ready to hand playback to another device and to take it from one.
             _ = KhyloHandoff.shared
+            KhyloMirror.shared.start()
             await KhyloHandoff.shared.refresh()
         }
         .task {
